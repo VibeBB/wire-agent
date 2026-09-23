@@ -63,6 +63,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "contract_path": {"type": "string"},
             "out_dir": {"type": "string"},
+            "png": {"type": "boolean"},
         },
         "required": ["contract_path", "out_dir"],
         "additionalProperties": False,
@@ -123,7 +124,9 @@ _DESCRIPTIONS: dict[str, str] = {
     "wire_standards": "Return reference wire spec or connector family tables.",
     "wire_validate_contract": "Validate a harness contract JSON against the schema.",
     "wire_intake": "Run the intake/provenance gate between contract and intake files.",
-    "wire_author": "Export projections, run all gates, write the design report.",
+    "wire_author": (
+        "Export projections (optionally the PNG raster), run all gates, write the design report."
+    ),
     "wire_gates": "Re-run all deterministic gates on existing artifacts.",
     "wire_import": "Merge a connectivity or envelope source file into a contract.",
 }
@@ -147,7 +150,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
             cmd_intake(_ns(contract=arguments["contract_path"], intake=arguments["intake_path"]))
         )
     if name == "wire_author":
-        return _text(cmd_author(_ns(contract=arguments["contract_path"], out=arguments["out_dir"])))
+        return _text(
+            cmd_author(
+                _ns(
+                    contract=arguments["contract_path"],
+                    out=arguments["out_dir"],
+                    png=arguments.get("png", False),
+                )
+            )
+        )
     if name == "wire_gates":
         return _text(
             cmd_gates(_ns(contract=arguments["contract_path"], out=arguments.get("out_dir")))

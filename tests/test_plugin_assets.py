@@ -109,6 +109,28 @@ def test_protect_generated_blocks_drawio(tmp_path: Path) -> None:
     assert proc.returncode == 2
 
 
+def test_protect_generated_blocks_png(tmp_path: Path) -> None:
+    script = PLUGIN_ROOT / "hooks" / "scripts" / "protect_generated.py"
+    payload = json.dumps(
+        {
+            "tool_name": "file_editor",
+            "tool_input": {
+                "command": "write",
+                "path": str(tmp_path / "harness-diagram.png"),
+            },
+        }
+    )
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=_hook_env(),
+        check=False,
+    )
+    assert proc.returncode == 2
+
+
 def test_protect_generated_allows_readonly(tmp_path: Path) -> None:
     script = PLUGIN_ROOT / "hooks" / "scripts" / "protect_generated.py"
     payload = json.dumps(

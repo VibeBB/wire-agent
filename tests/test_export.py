@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
+import pytest
 from pytest import TempPathFactory
 
 from helpers import example_contract_data
@@ -125,3 +127,23 @@ def test_harness_diagram_wire_labels_do_not_overlap(tmp_path: Path) -> None:
     )
     assert len(anchors) == len(data["wires"])
     assert len(set(anchors)) == len(anchors)
+
+
+def test_export_png_raster(tmp_path: Path, tmp_path_factory: TempPathFactory) -> None:
+    """--png adds a vision-review raster; librsvg/font versions may shift
+    its bytes across hosts, so the manifest records the actual hash."""
+    if shutil.which("rsvg-convert") is None:
+        pytest.skip("rsvg-convert (librsvg2-bin) not installed")
+    contract = HarnessContract.model_validate(example_contract_data())
+    manifest = export_design(contract, tmp_path, png=True)
+    png = tmp_path / "harness-diagram.png"
+    assert png.read_bytes().startswith(b"\x89PNG")
+    assert {f["path"] for f in manifest["files"]} == (
+        EXPECTED_ARTIFACTS - {"manifest.json"} | {"harness-diagram.png"}
+    )
+    entry = next(f for f in manifest["files"] if f["path"] == "harness-diagram.png")
+    assert entry["sha256"] == hashlib.sha256(png.read_bytes()).hexdigest()
+    # Same host, same librsvg: repeated exports stay byte-identical.
+    other = tmp_path_factory.mktemp("other")
+    export_design(contract, other, png=True)
+    assert (other / "harness-diagram.png").read_bytes() == png.read_bytes()

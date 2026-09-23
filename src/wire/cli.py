@@ -62,7 +62,10 @@ def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
         contract = _load(args.contract)
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
-    export_design(contract, out_dir)
+    try:
+        export_design(contract, out_dir, png=getattr(args, "png", False))
+    except RuntimeError as exc:
+        return {"verdict": "fail", "stage": "export", "detail": str(exc)}
     gate_report = run_gates(contract, out_dir)
     report_path = write_report(contract, gate_report, out_dir)
     result = gate_report.to_dict(contract)
@@ -76,7 +79,10 @@ def cmd_export(args: argparse.Namespace) -> dict[str, Any]:
         contract = _load(args.contract)
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
-    manifest = export_design(contract, out_dir)
+    try:
+        manifest = export_design(contract, out_dir, png=getattr(args, "png", False))
+    except RuntimeError as exc:
+        return {"verdict": "fail", "stage": "export", "detail": str(exc)}
     return {
         "verdict": "pass",
         "design": contract.name,
@@ -140,10 +146,20 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("author")
     p.add_argument("--contract", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument(
+        "--png",
+        action="store_true",
+        help="also write harness-diagram.png (raster of the diagram, for vision review)",
+    )
 
     p = sub.add_parser("export")
     p.add_argument("--contract", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument(
+        "--png",
+        action="store_true",
+        help="also write harness-diagram.png (raster of the diagram, for vision review)",
+    )
 
     p = sub.add_parser("gates")
     p.add_argument("--contract", required=True)

@@ -25,7 +25,9 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         ca-certificates \
         curl \
+        fonts-ipafont \
         git \
+        librsvg2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 RUN uv python install 3.12 \

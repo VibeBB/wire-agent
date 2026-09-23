@@ -24,17 +24,18 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
    (mating cycles, sealing vs ambient), are wire gauges and types coherent
    with currents and temperatures, do routes/protection match the declared
    environment, does keying prevent cross-mating?
-2. Topology review: read `harness-diagram.drawio.svg` (via vision if useful) —
-   sensible connector placement, no accidental star grounds, analog and
-   power routing consistent with segregation intent. Legend: wire stroke
-   follows the physical insulation `color` (`X/Y` draws a striped second
-   color), unused cavities are greyed, a filled dot is a splice node,
-   dashed grey bands link twisted-pair wires, and same-connector loops
-   bump off the channel-facing edge. The SDK's FileEditorTool only sends
-   raster images (png/jpg/webp/bmp) to vision-capable LLMs — for a true
-   vision pass rasterize the SVG to PNG first if a renderer is available;
-   otherwise decode the embedded drawio model (base64 → raw-DEFLATE →
-   URL-decode) and review the XML topology directly.
+2. Topology review: read `harness-diagram.drawio.svg` — or for a true
+   vision pass, run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
+   export --contract <file> --out <dir> --png` and open
+   `harness-diagram.png` (the FileEditorTool sends raster images to
+   vision-capable LLMs). Sensible connector placement, no accidental star
+   grounds, analog and power routing consistent with segregation intent.
+   Legend: wire stroke follows the physical insulation `color` (`X/Y`
+   draws a striped second color), unused cavities are greyed, a filled
+   dot is a splice node, dashed grey bands link twisted-pair wires, and
+   same-connector loops bump off the channel-facing edge. To inspect the
+   topology programmatically, decode the embedded drawio model
+   (base64 → raw-DEFLATE → URL-decode).
 3. Report observations only. Never edit the contract or artifacts; the
    orchestrator folds findings back through the contract and reruns
    `wire_author`. A failed gate is a fact, not a suggestion — quote it

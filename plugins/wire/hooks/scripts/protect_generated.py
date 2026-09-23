@@ -31,6 +31,7 @@ ARTIFACT_NAMES = (
     "bom.csv",
     "harness-diagram.svg",
     "harness-diagram.drawio.svg",
+    "harness-diagram.png",
     "kbl.xml",
     "vec.xml",
     "manifest.json",
