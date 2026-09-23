@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "wire": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "p=$(for c in \"${WIRE_PLUGIN_ROOT:-}\" \"${OPENHANDS_PROJECT_DIR:-.}/plugins/wire\" \"${HOME:-}/.agents/plugins/wire\" \"${HOME:-}/.openhands/plugins/installed/wire\"; do [ -f \"$c/scripts/wire_launcher.py\" ] && printf %s \"$c\" && break; done); [ -n \"$p\" ] || { echo \"wire plugin root unresolved\" >&2; exit 2; }; exec python3 \"$p/scripts/wire_launcher.py\" mcp_server"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "wire",
+  "version": "0.1.0",
+  "description": "OpenHands plugin for conversational wire harness design (connectors, wires, routes, gates, manufacturing projections)",
+  "author": {
+    "name": "VibeBB",
+    "url": "https://github.com/VibeBB/wire-agent"
+  },
+  "license": "BSD-3-Clause",
+  "repository": "https://github.com/VibeBB/wire-agent",
+  "entry_command": "doctor"
+}
