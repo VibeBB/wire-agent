@@ -141,7 +141,7 @@ def dependency_names(data: dict[str, Any]) -> list[str]:
     for deps in groups.values():
         if not isinstance(deps, list):
             continue
-        for dep in deps:
+        for dep in cast(list[Any], deps):
             add(dep)
     return names
 
