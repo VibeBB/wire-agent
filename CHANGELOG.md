@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- `post_tool_use` provenance hooks (ported from mechanical-agent):
+  `record-vision-tool-event` on `inspect_image_with_vision` and
+  `record-image-observation` on `file_editor|wire_drawio|wire_export`, writing
+  hashed observation records to `.openhands/wire/vision-tool-events.jsonl` and
+  `.openhands/wire/image-observations.jsonl`. `wire-review` now declares its
+  required hooks in frontmatter (plugin hooks do not propagate to sub-agents).
+
+
 ### Fixed
 
 - `scripts/check_plugin_load.py` now renders the OK summary from the actual

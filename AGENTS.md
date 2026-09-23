@@ -31,7 +31,7 @@ plugins/wire/             # OpenHands plugin
 ├── agents/               # wire-brief, wire-design, wire-review
 ├── commands/             # /wire:design, /wire:doctor, /wire:gates, /wire:export
 ├── hooks/                # session_start doctor, pre_tool_use artifact guard,
-│                         # stop status report
+│                         # stop status report, post_tool_use vision records
 ├── scripts/wire_launcher.py
 ├── .mcp.json
 └── .plugin/plugin.json
