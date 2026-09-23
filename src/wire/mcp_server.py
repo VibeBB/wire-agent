@@ -119,16 +119,21 @@ def _text(payload: Any) -> list[types.TextContent]:
     ]
 
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
+def tool_specs() -> list[types.Tool]:
     return [
         types.Tool(
             name=name,
             description=_DESCRIPTIONS[name],
             inputSchema=schema,
+            annotations=_ANNOTATIONS[name],
         )
         for name, schema in _SCHEMAS.items()
     ]
+
+
+@server.list_tools()
+async def list_tools() -> list[types.Tool]:
+    return tool_specs()
 
 
 _DESCRIPTIONS: dict[str, str] = {
@@ -147,6 +152,28 @@ _DESCRIPTIONS: dict[str, str] = {
         "(pdf/svg/png/jpg/xml/html; options pass any extra drawio flags "
         "such as -l, --layout, --theme, --size, -u, -p, -g, -a)."
     ),
+}
+
+
+def _anno(title: str, *, write: bool) -> types.ToolAnnotations:
+    return types.ToolAnnotations(
+        title=title,
+        readOnlyHint=not write,
+        destructiveHint=write,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+
+
+_ANNOTATIONS: dict[str, types.ToolAnnotations] = {
+    "wire_doctor": _anno("Wire doctor", write=False),
+    "wire_standards": _anno("Wire standards", write=False),
+    "wire_validate_contract": _anno("Validate harness contract", write=False),
+    "wire_intake": _anno("Intake gate", write=False),
+    "wire_author": _anno("Author harness design", write=True),
+    "wire_gates": _anno("Re-run gates", write=False),
+    "wire_import": _anno("Import connectivity source", write=False),
+    "wire_drawio": _anno("Drawio export", write=True),
 }
 
 
