@@ -9,10 +9,17 @@ triggers:
   - gate failures
   - ゲート
 ---
+Inside OpenHands, wire commands run inside the pinned tools image via the
+plugin launcher. Resolve the plugin root the same way the hooks do
+(`$WIRE_PLUGIN_ROOT`, `${OPENHANDS_PROJECT_DIR}/plugins/wire`,
+`~/.agents/plugins/wire`, `~/.openhands/plugins/installed/wire`) into
+`$WIRE_PLUGIN`, then call `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
+<args>`. In a repo checkout, `uv run python -m wire <args>` is equivalent.
+
 
 # Harness gates
 
-Run `wire_author` / `python -m wire author --contract <file> --out <dir>`.
+Run `wire_author` / `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" author --contract <file> --out <dir>`.
 The verdict is `pass` iff every check is `pass`; `fail` and `unknown` both
 fail. Repair the CONTRACT and rerun — never edit artifacts, never weaken a
 limit.

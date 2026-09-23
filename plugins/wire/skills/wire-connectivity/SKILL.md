@@ -9,6 +9,13 @@ triggers:
   - mech envelope
   - 接続情報取り込み
 ---
+Inside OpenHands, wire commands run inside the pinned tools image via the
+plugin launcher. Resolve the plugin root the same way the hooks do
+(`$WIRE_PLUGIN_ROOT`, `${OPENHANDS_PROJECT_DIR}/plugins/wire`,
+`~/.agents/plugins/wire`, `~/.openhands/plugins/installed/wire`) into
+`$WIRE_PLUGIN`, then call `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
+<args>`. In a repo checkout, `uv run python -m wire <args>` is equivalent.
+
 
 # Connectivity and envelope imports
 
@@ -38,7 +45,7 @@ Shape (validated by `ConnectivitySource` in `src/wire/imports.py`):
 }
 ```
 
-`python -m wire import --contract <file> --source <connectivity.json> --from
+`python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" import --contract <file> --source <connectivity.json> --from
 circuit-json [--out <file>]` appends new C*/N* ids with `source` refs —
 existing elements are never overwritten, and the copy is the truth
 (re-import shows a diff, not live coupling). E3-style From/To CSV tables

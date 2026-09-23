@@ -4,6 +4,4 @@ __pycache__
 *.py[cod]
 out/
 docs/
-plugins/
 tests/
-examples/

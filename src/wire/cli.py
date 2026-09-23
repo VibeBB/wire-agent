@@ -39,8 +39,10 @@ def _emit(payload: dict[str, Any]) -> int:
     return 0 if payload.get("verdict") in ("pass", "ready") else 1
 
 
-def cmd_doctor(_args: argparse.Namespace) -> dict[str, Any]:
-    return run_doctor()
+def _emit_doctor(args: argparse.Namespace) -> int:
+    payload = run_doctor()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if args.warn or payload.get("verdict") in ("pass", "ready") else 1
 
 
 def cmd_intake(args: argparse.Namespace) -> dict[str, Any]:
@@ -124,7 +126,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="wire")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("doctor")
+    doctor = sub.add_parser("doctor")
+    doctor.add_argument(
+        "--warn",
+        action="store_true",
+        help="print the verdict but always exit 0 (advisory mode for hooks)",
+    )
 
     p = sub.add_parser("intake")
     p.add_argument("--contract", required=True)
@@ -154,8 +161,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default=None)
 
     args = parser.parse_args(argv)
+    if args.command == "doctor":
+        return _emit_doctor(args)
     handlers = {
-        "doctor": cmd_doctor,
         "intake": cmd_intake,
         "author": cmd_author,
         "export": cmd_export,

@@ -39,18 +39,31 @@ and re-check deadline in `scripts/dependency_update_deferrals.json`.
   version strings are bumped together by `scripts/bump_version.py`.
 - `.github/workflows/release.yml` is `workflow_dispatch` only.
 - Docker image digests live in `docker/image-digests.json` and are written
-  only by the planned `publish-wire-images.yml` workflow; do not commit
+  only by the `publish-wire-images.yml` workflow; do not commit
   placeholder entries.
+- `publish-wire-images.yml` builds and publishes `ghcr.io/<owner>/wire-tools`
+  on `workflow_dispatch` and on pushes to main that touch `docker/**`,
+  `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
+  project metadata (excluding the lock file and `docker/README.md`), then
+  opens and merges the digest-lock pull request. Its checkout keeps
+  `persist-credentials: true` because the job pushes the lock-update
+  branch.
+- `locked-image-check.yml` (weekly + post-publish dispatch) pulls the
+  locked tools image and re-runs the authoring smoke check in the
+  container.
 
 ## CI
 
-- `ci.yml` runs on pushes to main, pull requests, merge groups, and
-  `workflow_call`: verify (Python 3.12/3.13), plugin-load against the
-  pinned SDK, and a container smoke check when the tools image changes.
+- `ci.yml` runs on pushes to main, pull requests, merge groups,
+  `workflow_call`, and `workflow_dispatch` (the publish workflow dispatches
+  it on the lock-update branch): verify (Python 3.12/3.13), plugin-load
+  against the pinned SDK, and a container smoke check when the tools image
+  changes.
 - `workflow-lint.yml` runs zizmor on every pull request, merge group,
   main pushes touching `.github/**`, and weekly; SARIF uploads to code
   scanning. Every `uses:` entry is pinned to a 40-character SHA with a
-  `# vX.Y.Z` comment; checkout uses `persist-credentials: false`; every
+  `# vX.Y.Z` comment; checkout uses `persist-credentials: false` except in
+  the image publish job (the lock-update PR needs push credentials); every
   job sets `timeout-minutes`.
 - `dependabot.yml` monitors GitHub Actions and uv weekly (uv with a
   seven-day cooldown).

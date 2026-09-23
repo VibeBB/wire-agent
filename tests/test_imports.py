@@ -111,6 +111,33 @@ def test_envelope_missing_anchor_fails(tmp_path: Path) -> None:
     assert anchor and all(c.status == "fail" for c in anchor)
 
 
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "upstream"
+
+
+def test_upstream_connectivity_fixture(tmp_path: Path) -> None:
+    """The canonical upstream ConnectivitySource fixture imports cleanly."""
+    src = FIXTURES / "board.connectivity.json"
+    source = load_connectivity_source(src)
+    assert source.system == "circuit"
+    contract = HarnessContract.model_validate(example_contract_data())
+    merged = import_connectivity(contract, source, src)
+    imported = [s for s in merged.imported_sources if s.system == "circuit"]
+    assert len(imported) == 1
+    assert imported[0].sha256 == hashlib.sha256(src.read_bytes()).hexdigest()
+    assert {c.source.ref for c in merged.connectors if c.source} >= {"J1", "J2"}
+
+
+def test_upstream_envelope_fixture(tmp_path: Path) -> None:
+    """The canonical upstream EnvelopeSource fixture imports cleanly."""
+    src = FIXTURES / "housing.envelope.json"
+    source = load_envelope_source(src)
+    assert source.system == "mech"
+    assert [a.name for a in source.anchors] == ["clip-01", "clip-02", "breakout-01"]
+    contract = HarnessContract.model_validate(example_contract_data())
+    merged = import_envelope(contract, source, src)
+    assert merged.imported_sources[-1].system == "mech"
+
+
 def test_csv_connectivity(tmp_path: Path) -> None:
     csv_path = tmp_path / "wirelist.csv"
     csv_path.write_text(

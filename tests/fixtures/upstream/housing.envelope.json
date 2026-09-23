@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "system": "mech",
+  "anchors": [
+    {
+      "name": "clip-01",
+      "kind": "clip",
+      "position_mm": [100.0, 0.0, 40.0]
+    },
+    {
+      "name": "clip-02",
+      "kind": "clip",
+      "position_mm": [180.0, 0.0, 40.0]
+    },
+    {
+      "name": "breakout-01",
+      "kind": "breakout",
+      "position_mm": [140.0, 55.0, 10.0]
+    }
+  ]
+}
