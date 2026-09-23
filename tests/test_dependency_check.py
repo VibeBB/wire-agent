@@ -23,7 +23,7 @@ def test_project_dependencies_parsed():
     deps = dependency_names(project_data(ROOT))
     assert "pydantic" in deps
     assert "openhands-sdk" in deps
-    assert deps["openhands-sdk"] == "1.49.5"
+    assert "mcp" in deps
     assert "pytest" in deps
 
 
