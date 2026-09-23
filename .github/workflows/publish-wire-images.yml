@@ -32,9 +32,13 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     permissions:
+      # Approves action_required pull_request runs on the lock branch.
       actions: write
+      # Pushes the bot digest-lock branch.
       contents: write
+      # Pushes the wire-tools image to ghcr.io.
       packages: write
+      # Opens and auto-merges the digest-lock pull request.
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,6 +47,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: publish
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -64,7 +69,10 @@ jobs:
             ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools:${{ github.sha }}-tools
             ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools:latest
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # A failed cache export must not fail the publish; gha cache
+          # imports already degrade to a miss rather than an error, so
+          # ignore-error applies to cache-to only.
+          cache-to: type=gha,mode=max,ignore-error=true
       - name: Resolve tools digest
         env:
           BUILT_DIGEST: ${{ steps.tools.outputs.digest }}
@@ -278,20 +286,24 @@ jobs:
             echo "auto-merge is armed on $pr_url but the merge did not land within the wait; post-merge checks skipped" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # The post-merge checks are observational: their conclusions (including
-          # 'cancelled' when a newer main push supersedes them via concurrency
-          # groups) are recorded in the step summary and never fail this run.
-          dispatch_workflow ci.yml main || true
-          main_conclusion="${DISPATCH_CONCLUSION:-not_observed}"
-          main_run_url="${DISPATCH_RUN_URL:-no run observed}"
-          echo "post-merge main CI: ${main_conclusion} ${main_run_url}" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$main_conclusion" != "success" ]; then
-            echo "::warning::post-merge main CI for ${pr_url} finished as ${main_conclusion}: ${main_run_url}"
-          fi
-          dispatch_workflow locked-image-check.yml main || true
-          lock_conclusion="${DISPATCH_CONCLUSION:-not_observed}"
-          lock_run_url="${DISPATCH_RUN_URL:-no run observed}"
-          echo "post-merge locked image check: ${lock_conclusion} ${lock_run_url}" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$lock_conclusion" != "success" ]; then
-            echo "::warning::post-merge locked image check for ${pr_url} finished as ${lock_conclusion}: ${lock_run_url}"
-          fi
+          # Post-merge verification is fire-and-forget: the workflows are
+          # dispatched on main and their run URLs recorded, but this job does
+          # not wait for them — main-ci-failure-issue.yml watches completed
+          # main runs and files a tracking issue on any failure.
+          for wf in ci.yml locked-image-check.yml; do
+            started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            retry gh workflow run "$wf" --repo "$GITHUB_REPOSITORY" --ref main || continue
+            run_id=""
+            for _ in $(seq 1 6); do
+              sleep 10
+              run_id=$(retry gh run list --repo "$GITHUB_REPOSITORY" --workflow "$wf" --branch main \
+                --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty' || true)
+              [ -n "$run_id" ] && break
+            done
+            if [ -n "$run_id" ]; then
+              echo "post-merge ${wf} run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "post-merge ${wf} dispatch was not observed on main" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          echo "::notice::post-merge verification for ${pr_url} is delegated to main-ci-failure-issue"
