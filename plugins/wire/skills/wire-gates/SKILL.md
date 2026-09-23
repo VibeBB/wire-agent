@@ -29,7 +29,8 @@ limit.
 | Check | What it measures | Typical repair |
 | --- | --- | --- |
 | `connectivity` | wire endpoints → connector:cavity, wire → net/route resolution | fix the referenced id; declare the missing element |
-| `cavity_occupancy` | >1 wire on one cavity | reassign a cavity or split the splice (v0.2) |
+| `cavity_occupancy` | >1 wire on one cavity | reassign a cavity, or merge the wires on a splice |
+| `splice_integrity` | a splice joins ≥2 wire legs on one net | add the missing leg, drop the splice, or keep the legs on one net |
 | `netlist_coverage` | declared net with no wire | add the wire or drop the net |
 | `shielding_pairing` | `shield_required` on unshielded type; twisted-pair nets on different routes | pick a shielded type; route both nets together |
 | `ampacity` | net current vs ampacity × ambient × bundle derating | larger gauge, higher-class wire, fewer wires per route |

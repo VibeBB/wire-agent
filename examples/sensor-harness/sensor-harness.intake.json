@@ -1,5 +1,5 @@
 {
-  "contract_sha256": "d7764ffba228385cfda6d47b239d73ec02515a1df1699a5f40308b8454a317ee",
+  "contract_sha256": "1922d84a736c1507fc82b254d2ae6614781153e7947f2b3838ad7b7006bd7541",
   "requirements": [
     {
       "id": "R1",
@@ -9,7 +9,7 @@
     },
     {
       "id": "R2",
-      "text": "+24 V supply at 2 A, analog sensor output 0-5 V at 0.1 A, ambient 60 °C",
+      "text": "+24 V supply at 2 A, analog sensor output 0-5 V at 0.1 A, ambient 60 \u00b0C",
       "source": "user",
       "speaker": "user"
     },
@@ -23,23 +23,54 @@
   "assumptions": [
     {
       "id": "A1",
-      "text": "AVSS 0.5 for the supply pair and FLRY-B 0.35 for the analog line meet derating at 60 °C",
+      "text": "AVSS 0.5 for the supply pair and FLRY-B 0.35 for the analog line meet derating at 60 \u00b0C",
       "rationale": "standard automotive thin-wall types; supply current 2 A is far below derated ampacity"
     }
   ],
   "open_questions": [],
   "element_sources": {
-    "C1": ["R3"],
-    "C2": ["R3"],
-    "WT1": ["R2", "A1"],
-    "WT2": ["R2", "A1"],
-    "N1": ["R2"],
-    "N2": ["R2"],
-    "N3": ["R2"],
-    "W1": ["R2", "R3"],
-    "W2": ["R2", "R3"],
-    "W3": ["R2", "R3"],
-    "RT1": ["R1", "R3"],
-    "RT2": ["R1", "R3"]
+    "C1": [
+      "R3"
+    ],
+    "C2": [
+      "R3"
+    ],
+    "WT1": [
+      "R2",
+      "A1"
+    ],
+    "WT2": [
+      "R2",
+      "A1"
+    ],
+    "N1": [
+      "R2"
+    ],
+    "N2": [
+      "R2"
+    ],
+    "N3": [
+      "R2"
+    ],
+    "W1": [
+      "R2",
+      "R3"
+    ],
+    "W2": [
+      "R2",
+      "R3"
+    ],
+    "W3": [
+      "R2",
+      "R3"
+    ],
+    "RT1": [
+      "R1",
+      "R3"
+    ],
+    "RT2": [
+      "R1",
+      "R3"
+    ]
   }
 }

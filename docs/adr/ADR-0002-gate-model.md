@@ -27,8 +27,9 @@ v0.1 gate set (each check is deterministic over the contract):
 
 | Check | Rule |
 | --- | --- |
-| `connectivity` | every wire endpoint resolves to a declared connector + cavity; every wire's net and route resolve |
+| `connectivity` | every wire endpoint resolves to a declared connector + cavity or a declared splice; every wire's net and route resolve |
 | `cavity_occupancy` | a cavity accepts at most one wire |
+| `splice_integrity` | every splice joins ≥2 wire legs, all on one net |
 | `netlist_coverage` | every declared net is carried by at least one wire |
 | `ampacity` | net current ≤ wire ampacity × ambient-temperature derating × bundle derating for the wire's route |
 | `voltage_drop` | wire resistance × current over declared length ≤ net drop budget (default 3% of nominal) |
@@ -46,7 +47,7 @@ Enforcement rules (same as siblings):
 2. Generated artifacts are write-protected by the `protect-generated`
    pre_tool_use hook (`manifest.json`, `provenance.json`,
    `design-report.json/md`, `wire-list.csv`, `cut-table.csv`, `bom.*`,
-   `harness-diagram.svg`, `kbl.xml`, `vec.xml`); regeneration only via
+   `harness-diagram.drawio.svg`, `kbl.xml`, `vec.xml`); regeneration only via
    `wire_author`/`python -m wire author`.
 3. Intake binds provenance: `element_sources` maps every
    connector/net/wire/route to R*/A*/Q*/I* ids, and `check_intake` fails a

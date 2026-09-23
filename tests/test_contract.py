@@ -70,3 +70,44 @@ def test_extra_fields_rejected() -> None:
     data["wires"][0]["mystery"] = 1
     with pytest.raises(ValidationError):
         HarnessContract.model_validate(data)
+
+
+def test_splice_endpoint_validates() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}]
+    data["wires"][0]["to_endpoint"] = {"splice": "SP1"}
+    leg = dict(data["wires"][0])
+    leg["id"] = "W9"
+    leg["from_endpoint"] = {"splice": "SP1"}
+    leg["to_endpoint"] = {"connector": "C2", "cavity": "2"}
+    data["wires"].append(leg)
+    HarnessContract.model_validate(data)
+
+
+def test_endpoint_rejects_connector_and_splice() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}]
+    data["wires"][0]["to_endpoint"] = {"connector": "C2", "cavity": "1", "splice": "SP1"}
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)
+
+
+def test_endpoint_rejects_bare_endpoint() -> None:
+    data = example_contract_data()
+    data["wires"][0]["to_endpoint"] = {"connector": "C2"}
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)
+
+
+def test_unknown_splice_rejected() -> None:
+    data = example_contract_data()
+    data["wires"][0]["to_endpoint"] = {"splice": "SP9"}
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)
+
+
+def test_duplicate_splice_id_rejected() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}, {"id": "SP1"}]
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)

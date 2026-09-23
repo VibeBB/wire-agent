@@ -18,7 +18,7 @@ EXPECTED_ARTIFACTS = {
     "bom.csv",
     "bom.json",
     "cut-table.csv",
-    "harness-diagram.svg",
+    "harness-diagram.drawio.svg",
     "manifest.json",
     "provenance.json",
     "wire-list.csv",
@@ -117,7 +117,11 @@ def test_harness_diagram_wire_labels_do_not_overlap(tmp_path: Path) -> None:
         data["wires"].append(wire)
     contract = HarnessContract.model_validate(data)
     export_design(contract, tmp_path)
-    svg = (tmp_path / "harness-diagram.svg").read_text(encoding="utf-8")
-    anchors = re.findall(r'<text x="([\d.]+)" y="([\d.]+)" fill="#225">', svg)
+    svg = (tmp_path / "harness-diagram.drawio.svg").read_text(encoding="utf-8")
+    anchors = re.findall(
+        r'<text x="([\d.]+)" y="([\d.]+)" font-size="10" fill="#[0-9a-f]+" '
+        r'text-anchor="middle">',
+        svg,
+    )
     assert len(anchors) == len(data["wires"])
     assert len(set(anchors)) == len(anchors)

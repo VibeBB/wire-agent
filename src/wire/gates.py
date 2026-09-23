@@ -88,9 +88,16 @@ def _route_wire_map(contract: HarnessContract) -> dict[str | None, list[HarnessW
 def _check_connectivity(contract: HarnessContract) -> list[GateCheck]:
     problems: list[str] = []
     connectors = contract.connector_map()
+    splices = contract.splice_map()
     routes = contract.route_map()
     for wire in contract.wires:
         for endpoint in (wire.from_endpoint, wire.to_endpoint):
+            if endpoint.splice is not None:
+                if endpoint.splice not in splices:
+                    problems.append(f"{wire.id}: unknown splice {endpoint.splice}")
+                continue
+            if endpoint.connector is None:
+                continue
             connector = connectors.get(endpoint.connector)
             if connector is None:
                 problems.append(f"{wire.id}: unknown connector {endpoint.connector}")
@@ -105,10 +112,12 @@ def _check_connectivity(contract: HarnessContract) -> list[GateCheck]:
 
 
 def _check_cavity_occupancy(contract: HarnessContract) -> list[GateCheck]:
-    seen: dict[tuple[str, str], str] = {}
+    seen: dict[tuple[str | None, str | None], str] = {}
     problems: list[str] = []
     for wire in contract.wires:
         for endpoint in (wire.from_endpoint, wire.to_endpoint):
+            if endpoint.splice is not None:
+                continue
             key = (endpoint.connector, endpoint.cavity)
             if key in seen:
                 problems.append(
@@ -120,6 +129,32 @@ def _check_cavity_occupancy(contract: HarnessContract) -> list[GateCheck]:
     return [
         GateCheck("cavity_occupancy", "one wire per cavity", status, detail="; ".join(problems))
     ]
+
+
+def _check_splice_integrity(contract: HarnessContract) -> list[GateCheck]:
+    """Every splice joins >=2 wire legs, and all legs share one net."""
+    checks: list[GateCheck] = []
+    legs: dict[str, list[HarnessWire]] = {splice.id: [] for splice in contract.splices}
+    for wire in contract.wires:
+        for endpoint in (wire.from_endpoint, wire.to_endpoint):
+            if endpoint.splice is not None and endpoint.splice in legs:
+                legs[endpoint.splice].append(wire)
+    for splice in sorted(contract.splices, key=lambda s: s.id):
+        wires = legs[splice.id]
+        problems: list[str] = []
+        if len(wires) < 2:
+            problems.append(f"{len(wires)} leg(s), need >=2")
+        if len({wire.net for wire in wires}) > 1:
+            problems.append("legs span multiple nets")
+        checks.append(
+            GateCheck(
+                "splice_integrity",
+                splice.id,
+                "pass" if not problems else "fail",
+                detail="; ".join(problems),
+            )
+        )
+    return checks
 
 
 def _check_netlist_coverage(contract: HarnessContract) -> list[GateCheck]:
@@ -365,8 +400,9 @@ def _check_segregation(contract: HarnessContract) -> list[GateCheck]:
     grouped = _route_wire_map(contract)
     connector_wires: dict[str, list[HarnessWire]] = {}
     for wire in contract.wires:
-        connector_wires.setdefault(wire.from_endpoint.connector, []).append(wire)
-        connector_wires.setdefault(wire.to_endpoint.connector, []).append(wire)
+        for endpoint in (wire.from_endpoint, wire.to_endpoint):
+            if endpoint.connector is not None:
+                connector_wires.setdefault(endpoint.connector, []).append(wire)
 
     for policy in contract.segregations:
         class_a, class_b = sorted(policy.classes)
@@ -421,6 +457,8 @@ def _check_terminal_compatibility(contract: HarnessContract) -> list[GateCheck]:
             (wire.from_endpoint, wire.terminal_a),
             (wire.to_endpoint, wire.terminal_b),
         ):
+            if endpoint.splice is not None or endpoint.connector is None:
+                continue
             connector = connectors[endpoint.connector]
             cavity = next(c for c in connector.cavities if c.id == endpoint.cavity)
             subject = f"{wire.id}:{endpoint.connector}:{endpoint.cavity}"
@@ -603,6 +641,7 @@ def run_gates(contract: HarnessContract, out_dir: Path | None = None) -> GateRep
     checks: list[GateCheck] = []
     checks.extend(_wrap("connectivity", _check_connectivity, contract))
     checks.extend(_wrap("cavity_occupancy", _check_cavity_occupancy, contract))
+    checks.extend(_wrap("splice_integrity", _check_splice_integrity, contract))
     checks.extend(_wrap("netlist_coverage", _check_netlist_coverage, contract))
     checks.extend(_wrap("shielding_pairing", _check_shielding_pairing, contract))
     checks.extend(_wrap("ampacity", _ampacity_details, contract))

@@ -28,8 +28,10 @@ source of truth for a harness. Its schema (`src/wire/contract.py`,
 - `wire_types` — gauge, ampacity + temperature/bundle derating, insulation
   rating and temperature class, minimum bend factor, shielding, flex life;
 - `nets` — declared electrical nets with signal class, voltage, current;
-- `wires` — endpoint-to-endpoint connections bound to connector cavities,
-  nets, routes, lengths, strip lengths, terminal part numbers;
+- `wires` — endpoint-to-endpoint connections bound to connector cavities
+  or splices, nets, routes, lengths, strip lengths, terminal part numbers;
+- `splices` — named junction points (`SP<num>`) that merge two or more
+  wire legs on one net;
 - `routes` — declared segments carrying wires, minimum bend radius, flex
   expectations, protection;
 - `segregation` — signal-class separation policies;

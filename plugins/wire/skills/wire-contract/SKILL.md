@@ -33,6 +33,7 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
 | wire | `W<num>` | W1 |
 | route | `RT<num>` | RT1 |
 | route segment | `S<num>` | S1 |
+| splice | `SP<num>` | SP1 |
 | imported source | `I<num>` | I1 |
 | requirement/assumption/question | `R*/A*/Q*` | R1 |
 
@@ -52,7 +53,13 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
   two nets to one route.
 - **wires**: `route` is required for a passing verdict (bend and
   segregation gates report `unknown` for unrouted wires). `length_m` feeds
-  voltage drop; strip lengths and terminals feed the cut table.
+  voltage drop; strip lengths and terminals feed the cut table. Each
+  endpoint is either `{connector, cavity}` or `{splice}` — never both.
+  `color` uses WireViz codes (BK BN RD OG YE GN BU VT GY WH PK TQ; `X/Y`
+  is base + stripe) and drives the diagram's wire stroke.
+- **splices**: `id` + `kind` (crimp|solder|ultrasonic|ferrule). A splice
+  merges ≥2 wire legs that must all sit on one net (`splice_integrity`);
+  use it when wires share a net but terminate on different cavities.
 - **routes**: every segment needs `min_bend_radius_mm`; `flex_required`
   requires non-static wire classes; `anchors` resolve against an imported
   mech envelope (`anchor_resolution`).
