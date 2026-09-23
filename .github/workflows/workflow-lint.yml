@@ -34,3 +34,10 @@ jobs:
         if: always()
         with:
           sarif_file: results.sarif
+      - name: Fail on zizmor findings
+        # The SARIF run always exits 0 so findings can be uploaded; the
+        # plain-format run exits non-zero when findings exist, which makes
+        # them gate this check.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uvx zizmor@1.30.1 --format plain .github/workflows
