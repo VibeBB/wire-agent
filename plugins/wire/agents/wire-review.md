@@ -30,10 +30,13 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
    vision pass, run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
    export --contract <file> --out <dir> --png` and open
    `harness-diagram.png` (drawio-desktop renders it). When your model is
-   vision-capable the FileEditorTool sends the raster to it directly;
-   when it is not, the SDK replaces the image with a reference — call
+   vision-capable the FileEditorTool sends the raster to it directly
+   (the SDK advertises image viewing only then); when it is not there is
+   no vision fallback for the workspace file —
    `inspect_image_with_vision` (declared as `VisionInspectTool`; it
-   consults a saved vision-capable LLM profile; if none exists, fall back to decoding the model below).
+   consults a saved vision-capable LLM profile) inspects only images
+   attached to the latest user message — so fall back to decoding the
+   topology below.
    Sensible connector placement, no accidental star grounds, analog and
    power routing consistent with segregation intent. Legend: wire stroke
    follows the physical insulation `color` (`X/Y` draws a striped second

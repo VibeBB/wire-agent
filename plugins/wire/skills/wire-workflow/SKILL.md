@@ -40,7 +40,10 @@ Vision is welcome at three points — every vision output stays an L2
 steering aid, never a verdict. When the model does not support image
 input, `inspect_image_with_vision` (spec name `VisionInspectTool`)
 delegates to a saved vision-capable LLM profile instead (no such profile
-→ skip vision entirely rather than guess):
+→ skip vision entirely rather than guess) — and it inspects only images
+attached to the latest user message, so it covers intake and
+user-provided harness photos, not workspace renders like
+`harness-diagram.png`:
 
 - **Intake**: user-supplied pinout photos, datasheet tables, or wiring
   sketches can seed connector/cavity/wire candidates. Claims read off an
