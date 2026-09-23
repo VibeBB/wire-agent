@@ -27,30 +27,18 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
       - name: Collect update candidates
-        run: uv run python scripts/check_dependency_updates.py > report.json
+        run: |
+          uv run python scripts/check_dependency_updates.py \
+            --markdown report.md --json report.json
       - name: Post report to issue
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 - <<'PY' > report.md
-          import json
-          data = json.load(open("report.json", encoding="utf-8"))
-          outdated = [
-              s for group in data.values() for s in group if s["outdated"]
-          ]
-          if not outdated:
-              print("All checked dependencies are current.")
-          for s in outdated:
-              print(
-                  f"- `{s['name']}` ({s['source']}): "
-                  f"{s['current']} -> {s['latest']} {s['note']}"
-              )
-          PY
           # gh issue create fails with "could not add label" when the label
-          # does not exist yet (it did on mechanical-agent's first run).
+          # does not exist (observed before the first report issue landed).
           gh label create dependency-updates --repo "$GITHUB_REPOSITORY" \
             --color 0366d6 --description "Dependency update report" --force
-          outdated=$(python3 -c 'import json; d = json.load(open("report.json", encoding="utf-8")); print(sum(1 for g in d.values() for s in g if s["outdated"]))')
+          outdated=$(python3 -c 'import json; print(json.load(open("report.json", encoding="utf-8"))["outdated_count"])')
           number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --label dependency-updates \
             --search "in:title Dependency update check report" \
