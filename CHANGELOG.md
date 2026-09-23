@@ -4,6 +4,10 @@
 
 ### Added
 
+- MCP tool metadata: every `wire_*` tool now carries `annotations.title`
+  plus `readOnlyHint` / `destructiveHint` / `idempotentHint` /
+  `openWorldHint` so MCP clients (including AgentCanvas) can rank and
+  gate tool calls on honest write/read semantics.
 - `harness-diagram.drawio.svg` export: WireViz-style pin-table diagram
   rendered as SVG with the editable drawio (diagrams.net) model embedded
   in the root `content` attribute. Wire edges bind to cavity cells and
