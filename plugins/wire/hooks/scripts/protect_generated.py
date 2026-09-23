@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Reject writes to generated harness artifacts and design reports.
 
-Generated files (wire-list.csv, cut-table.csv, bom.*, harness-diagram.svg,
-manifest.json, provenance.json, design-report.*, kbl.xml, vec.xml) are
-projections of the contract. Editing them by hand breaks the
-input-files-are-truth invariant; they must be regenerated from the
-contract.
+Generated files (wire-list.csv, cut-table.csv, bom.*,
+harness-diagram.drawio.svg, manifest.json, provenance.json,
+design-report.*, kbl.xml, vec.xml) are projections of the contract.
+Editing them by hand breaks the input-files-are-truth invariant; they
+must be regenerated from the contract.
 
 Only path-bearing arguments decide the verdict: file bodies such as
 file_text/new_str may legitimately mention artifact names, so payload

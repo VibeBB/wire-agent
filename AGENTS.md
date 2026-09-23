@@ -19,7 +19,7 @@ src/wire/                 # deterministic wire-harness core
 ├── intake.py             # intake/provenance schema + coverage check
 ├── standards.py          # wire specs, derating, bend factors, connector families
 ├── gates.py              # authoritative gate runner
-├── export.py             # wire list/cut table/BOM/SVG + manifest/provenance
+├── export.py             # wire list/cut table/BOM/diagram + manifest/provenance
 ├── report.py             # design-report.json/md
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
@@ -45,9 +45,9 @@ docs/adr/  docs/research/
 ## Invariants
 
 - The harness contract and intake files are the source of truth; generated
-  artifacts (wire lists, cut tables, BOMs, diagrams, manifest, provenance,
-  design report, KBL/VEC exports) are projections and are never edited by
-  hand — the `protect-generated` hook blocks such writes.
+  artifacts (wire lists, cut tables, BOMs, drawio/SVG diagrams, manifest,
+  provenance, design report, KBL/VEC exports) are projections and are never
+  edited by hand — the `protect-generated` hook blocks such writes.
 - Pass/fail verdicts are produced only by the deterministic gates in
   `src/wire/gates.py` and the schemas they serialize.
 - LLM output, conversation text, review comments, and vision observations

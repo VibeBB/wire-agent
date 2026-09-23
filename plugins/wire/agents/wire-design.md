@@ -48,7 +48,7 @@ You are the wire harness authoring sub-agent. Input: a valid
 Iterate until `verdict` is `pass` or you can name the exact blocking check
 and why it cannot pass with the current requirements — then hand that back
 to the orchestrator instead of weakening a limit. Never edit
-`wire-list.csv`, `cut-table.csv`, `bom.*`, `harness-diagram.svg`,
+`wire-list.csv`, `cut-table.csv`, `bom.*`, `harness-diagram.drawio.svg`,
 `manifest.json`, `provenance.json`, or `design-report.*` directly; they are
 projections of the contract. Report the final verdict and the artifact
 directory verbatim.

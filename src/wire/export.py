@@ -1,24 +1,37 @@
 """Deterministic artifact export.
 
-Writes wire-list.csv, cut-table.csv, bom.json, bom.csv,
-harness-diagram.svg, plus manifest.json (sha256 per file) and
-provenance.json (contract hash and tool versions). Nothing here judges the
-design; gates read these artifacts. Identical contract bytes produce
+Writes wire-list.csv, cut-table.csv, bom.json, bom.csv, and
+harness-diagram.drawio.svg (an SVG whose root `content` attribute embeds
+the editable drawio model), plus manifest.json (sha256 per file) and
+provenance.json (contract hash and tool versions). Nothing here judges
+the design; gates read these artifacts. Identical contract bytes produce
 identical artifact bytes.
 """
 
 from __future__ import annotations
 
+import base64
 import csv
 import hashlib
 import io
 import json
 import platform
+import urllib.parse
+import zlib
 from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .contract import HarnessContract, contract_sha256
+from .contract import (
+    CavitySpec,
+    Endpoint,
+    HarnessConnector,
+    HarnessContract,
+    HarnessNet,
+    HarnessWire,
+    WireType,
+    contract_sha256,
+)
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -161,59 +174,251 @@ def _esc(text: str) -> str:
     )
 
 
-def _harness_svg(contract: HarnessContract) -> str:
-    """Flat two-column schematic: connectors as boxes, wires as labeled lines."""
-    connectors = sorted(contract.connectors, key=lambda c: c.id)
-    left = connectors[0::2]
-    right = connectors[1::2]
-    rows = max(len(left), len(right), 1)
-    box_w, box_h = 150.0, 26.0
-    margin_y, gap_y = 40.0, 52.0
-    left_x, right_x = 60.0, 560.0
-    width = left_x + box_w + (right_x - left_x) + 160.0
-    height = margin_y * 2 + rows * gap_y
-    positions: dict[str, tuple[float, float]] = {}
-    for idx, c in enumerate(left):
-        positions[c.id] = (left_x, margin_y + idx * gap_y)
-    for idx, c in enumerate(right):
-        positions[c.id] = (right_x, margin_y + idx * gap_y)
+_SIGNAL_COLORS: dict[str, str] = {
+    "power": "#c00000",
+    "ground": "#1a1a1a",
+    "signal": "#2e7d32",
+    "analog": "#1565c0",
+    "data": "#6a3fb5",
+    "highspeed": "#ef6c00",
+    "shield": "#616161",
+}
 
+_HEADER_H = 26.0
+_ROW_H = 22.0
+_CONN_W = 200.0
+_COL_X = (60.0, 620.0)
+_TOP_Y = 100.0
+_GAP_Y = 48.0
+
+
+def _num(value: float) -> str:
+    return f"{value:g}"
+
+
+def _connector_height(connector: HarnessConnector) -> float:
+    return _HEADER_H + len(connector.cavities) * _ROW_H
+
+
+def _cavity_label(cavity: CavitySpec) -> str:
+    details = [cavity.id]
+    if cavity.terminal is not None:
+        details.append(cavity.terminal)
+    if cavity.accepts_mm2 is not None:
+        lo, hi = cavity.accepts_mm2
+        details.append(f"{_num(lo)}-{_num(hi)}mm2")
+    return " · ".join(details)
+
+
+def _wire_label(wire: HarnessWire, wtype: WireType, net: HarnessNet) -> str:
+    return f"{wire.id} · {wtype.name} · {net.id}/{net.signal_class} · {_num(wire.length_m)}m"
+
+
+def _diagram_title(contract: HarnessContract) -> str:
+    return f"{contract.name} · {contract.contract_id} · rev {contract.revision}"
+
+
+def _diagram_geometry(
+    contract: HarnessContract,
+) -> tuple[dict[str, tuple[float, float]], dict[str, int], float, float]:
+    """Connector origins, column assignment, and page size of the pin-table layout."""
+    connectors = sorted(contract.connectors, key=lambda c: c.id)
+    columns = (connectors[0::2], connectors[1::2])
+    column_of = {c.id: i for i, members in enumerate(columns) for c in members}
+    positions: dict[str, tuple[float, float]] = {}
+    y_cursor = [_TOP_Y, _TOP_Y]
+    max_y = _TOP_Y
+    for column, members in enumerate(columns):
+        for connector in members:
+            y = y_cursor[column]
+            positions[connector.id] = (_COL_X[column], y)
+            y_cursor[column] = y + _connector_height(connector) + _GAP_Y
+            max_y = max(max_y, y + _connector_height(connector))
+    page_w = _COL_X[1] + _CONN_W + 60.0
+    return positions, column_of, page_w, max_y + 60.0
+
+
+def _wire_anchors(
+    contract: HarnessContract,
+    positions: dict[str, tuple[float, float]],
+    column_of: dict[str, int],
+    wire: HarnessWire,
+) -> tuple[float, float, float, float, float]:
+    """Inner-edge attach points for both endpoints plus the routing channel x."""
+    connectors = contract.connector_map()
+
+    def point(endpoint: Endpoint) -> tuple[float, float]:
+        connector = connectors[endpoint.connector]
+        x, y = positions[endpoint.connector]
+        index = next(
+            i for i, cavity in enumerate(connector.cavities) if cavity.id == endpoint.cavity
+        )
+        mid_y = y + _HEADER_H + index * _ROW_H + _ROW_H / 2
+        x_edge = x + (_CONN_W if column_of[endpoint.connector] == 0 else 0.0)
+        return x_edge, mid_y
+
+    ax, ay = point(wire.from_endpoint)
+    bx, by = point(wire.to_endpoint)
+    col_a = column_of[wire.from_endpoint.connector]
+    col_b = column_of[wire.to_endpoint.connector]
+    mid_x = (ax + bx) / 2 if col_a != col_b else ax + (40.0 if col_a == 0 else -40.0)
+    return ax, ay, bx, by, mid_x
+
+
+def _pin_table_svg_body(
+    contract: HarnessContract,
+    positions: dict[str, tuple[float, float]],
+    column_of: dict[str, int],
+) -> list[str]:
+    """SVG elements for the pin-table diagram (everything inside <svg>)."""
+    parts = ['<rect width="100%" height="100%" fill="#ffffff"/>']
+    parts.append(
+        f'<text x="{_num(_COL_X[0])}" y="52" font-size="14">{_esc(_diagram_title(contract))}</text>'
+    )
+    for connector in sorted(contract.connectors, key=lambda c: c.id):
+        x, y = positions[connector.id]
+        height = _connector_height(connector)
+        header = f"{connector.id} · {connector.family} · {len(connector.cavities)}p"
+        parts.append(
+            f'<rect x="{_num(x)}" y="{_num(y)}" width="{_num(_CONN_W)}" '
+            f'height="{_num(height)}" fill="#ffffff" stroke="#333333"/>'
+        )
+        parts.append(
+            f'<rect x="{_num(x)}" y="{_num(y)}" width="{_num(_CONN_W)}" '
+            f'height="{_num(_HEADER_H)}" fill="#eef2ff" stroke="#333333"/>'
+        )
+        parts.append(f'<text x="{_num(x + 8)}" y="{_num(y + 17)}">{_esc(header)}</text>')
+        for idx, cavity in enumerate(connector.cavities):
+            row_y = y + _HEADER_H + idx * _ROW_H
+            if idx:
+                parts.append(
+                    f'<line x1="{_num(x)}" y1="{_num(row_y)}" x2="{_num(x + _CONN_W)}" '
+                    f'y2="{_num(row_y)}" stroke="#dddddd"/>'
+                )
+            parts.append(
+                f'<text x="{_num(x + 6)}" y="{_num(row_y + 15)}" font-size="10" '
+                f'fill="#444444">{_esc(_cavity_label(cavity))}</text>'
+            )
     nets = contract.net_map()
     types = contract.wire_type_map()
-    parts: list[str] = [
-        f'<svg xmlns="{SVG_NS}" width="{width:.0f}" height="{height:.0f}" '
-        f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="monospace" font-size="11">',
-        '<rect width="100%" height="100%" fill="#ffffff"/>',
-    ]
-    for c in connectors:
-        x, y = positions[c.id]
-        parts.append(
-            f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="4" '
-            f'fill="#eef2ff" stroke="#333" stroke-width="1"/>'
-        )
-        label = f"{c.id} {c.family} ({len(c.cavities)}p)"
-        parts.append(f'<text x="{x + 8}" y="{y + 17}">{_esc(label)}</text>')
     for wire in sorted(contract.wires, key=lambda w: w.id):
-        x1, y1 = positions[wire.from_endpoint.connector]
-        x2, y2 = positions[wire.to_endpoint.connector]
-        cy = (y1 + y2) / 2 + box_h / 2 + 4
-        wtype = types[wire.wire_type]
+        ax, ay, bx, by, mid_x = _wire_anchors(contract, positions, column_of, wire)
         net = nets[wire.net]
-        label = f"{wire.id} {wtype.name} {net.id}/{net.signal_class} {wire.length_m}m"
+        wtype = types[wire.wire_type]
+        color = _SIGNAL_COLORS[net.signal_class]
+        dash = ' stroke-dasharray="4 3"' if wtype.shield != "none" else ""
         parts.append(
-            f'<path d="M {x1 + box_w} {y1 + box_h / 2} C {(x1 + x2 + box_w) / 2} {cy}, '
-            f'{(x1 + x2 + box_w) / 2} {cy}, {x2} {y2 + box_h / 2}" '
-            f'fill="none" stroke="#2255aa" stroke-width="1.4"/>'
+            f'<path d="M {_num(ax)} {_num(ay)} H {_num(mid_x)} V {_num(by)} H {_num(bx)}" '
+            f'fill="none" stroke="{color}" stroke-width="1.5"{dash}/>'
         )
         parts.append(
-            f'<text x="{(x1 + x2 + box_w) / 2 - 110}" y="{cy - 4}" fill="#225">{_esc(label)}</text>'
+            f'<text x="{_num(mid_x)}" y="{_num((ay + by) / 2 - 4)}" font-size="10" '
+            f'fill="{color}" text-anchor="middle">{_esc(_wire_label(wire, wtype, net))}</text>'
         )
     for route in contract.routes:
         parts.append(
             f"<!-- route {route.id}: {len(route.segments)} segments, "
             f"protection {route.protection} -->"
         )
-    parts.append("</svg>")
+    return parts
+
+
+def _drawio_model(
+    contract: HarnessContract,
+    positions: dict[str, tuple[float, float]],
+    column_of: dict[str, int],
+    page_w: float,
+    page_h: float,
+) -> str:
+    """mxGraphModel for the same pin-table layout; edges bind cavity cells."""
+    parts = [
+        '<mxGraphModel dx="0" dy="0" grid="1" gridSize="10" guides="1" '
+        'tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" '
+        f'pageWidth="{_num(page_w)}" pageHeight="{_num(page_h)}" math="0" shadow="0">',
+        "<root>",
+        '<mxCell id="0" />',
+        '<mxCell id="1" parent="0" />',
+        f'<mxCell id="title" value="{_esc(_diagram_title(contract))}" '
+        'style="text;html=1;align=left;fontSize=14;fontFamily=monospace;" vertex="1" parent="1">'
+        f'<mxGeometry x="{_num(_COL_X[0])}" y="40" '
+        f'width="{_num(page_w - 2 * _COL_X[0])}" height="24" as="geometry" /></mxCell>',
+    ]
+    for connector in sorted(contract.connectors, key=lambda c: c.id):
+        x, y = positions[connector.id]
+        header = f"{connector.id} · {connector.family} · {len(connector.cavities)}p"
+        parts.append(
+            f'<mxCell id="conn-{connector.id}" value="{_esc(header)}" '
+            f'style="swimlane;startSize={_num(_HEADER_H)};html=1;whiteSpace=wrap;'
+            "fillColor=#eef2ff;strokeColor=#333333;fontFamily=monospace;fontSize=11;"
+            'align=left;spacingLeft=8;collapsible=0;" vertex="1" parent="1">'
+            f'<mxGeometry x="{_num(x)}" y="{_num(y)}" width="{_num(_CONN_W)}" '
+            f'height="{_num(_connector_height(connector))}" as="geometry" /></mxCell>'
+        )
+        for idx, cavity in enumerate(connector.cavities):
+            row_y = _HEADER_H + idx * _ROW_H
+            parts.append(
+                f'<mxCell id="cav-{connector.id}:{cavity.id}" '
+                f'value="{_esc(_cavity_label(cavity))}" '
+                'style="rounded=0;html=1;whiteSpace=wrap;fillColor=#ffffff;'
+                "strokeColor=#bbbbbb;fontFamily=monospace;fontSize=10;align=left;"
+                f'spacingLeft=6;" vertex="1" parent="conn-{connector.id}">'
+                f'<mxGeometry y="{_num(row_y)}" width="{_num(_CONN_W)}" '
+                f'height="{_num(_ROW_H)}" as="geometry" /></mxCell>'
+            )
+    nets = contract.net_map()
+    types = contract.wire_type_map()
+    for wire in sorted(contract.wires, key=lambda w: w.id):
+        net = nets[wire.net]
+        wtype = types[wire.wire_type]
+        color = _SIGNAL_COLORS[net.signal_class]
+        exit_side = 1 - column_of[wire.from_endpoint.connector]
+        entry_side = 1 - column_of[wire.to_endpoint.connector]
+        dashed = "dashed=1;" if wtype.shield != "none" else ""
+        parts.append(
+            f'<mxCell id="wire-{wire.id}" value="{_esc(_wire_label(wire, wtype, net))}" '
+            'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
+            f"jettySize=auto;strokeWidth=1.5;strokeColor={color};{dashed}"
+            "fontFamily=monospace;fontSize=10;labelBackgroundColor=#ffffff;"
+            f"exitX={exit_side};exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;"
+            f'entryX={entry_side};entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;" '
+            'edge="1" parent="1" '
+            f'source="cav-{wire.from_endpoint.connector}:{wire.from_endpoint.cavity}" '
+            f'target="cav-{wire.to_endpoint.connector}:{wire.to_endpoint.cavity}">'
+            '<mxGeometry relative="1" as="geometry" /></mxCell>'
+        )
+    parts.append("</root></mxGraphModel>")
+    return "".join(parts)
+
+
+def _drawio_compress(xml: str) -> str:
+    """encodeURIComponent → raw deflate → base64, matching drawio's embed format."""
+    encoded = urllib.parse.quote(xml, safe="!~*'()")
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    payload = compressor.compress(encoded.encode("utf-8")) + compressor.flush()
+    return base64.b64encode(payload).decode("ascii")
+
+
+def _harness_drawio_svg(contract: HarnessContract) -> str:
+    """Pin-table harness diagram as SVG with an embedded editable drawio model.
+
+    The file renders anywhere SVG does; opening it in diagrams.net restores
+    the mxfile stored in the root `content` attribute, where every connector
+    is a swimlane of cavity cells and every wire is an edge bound to its two
+    cavity cells, so manual re-layout keeps connectivity attached.
+    """
+    positions, column_of, page_w, page_h = _diagram_geometry(contract)
+    model = _drawio_model(contract, positions, column_of, page_w, page_h)
+    mxfile = (
+        '<mxfile host="wire-agent" type="device">'
+        f'<diagram id="harness" name="{_esc(contract.name)}">{model}</diagram></mxfile>'
+    )
+    parts = [
+        f'<svg xmlns="{SVG_NS}" width="{_num(page_w)}" height="{_num(page_h)}" '
+        f'viewBox="0 0 {_num(page_w)} {_num(page_h)}" font-family="monospace" '
+        f'font-size="11" content="{_drawio_compress(mxfile)}">',
+        *_pin_table_svg_body(contract, positions, column_of),
+        "</svg>",
+    ]
     return "\n".join(parts) + "\n"
 
 
@@ -224,7 +429,7 @@ def export_design(contract: HarnessContract, out_dir: Path) -> dict[str, Any]:
         "wire-list.csv": _wire_list_csv(contract),
         "cut-table.csv": _cut_table_csv(contract),
         "bom.csv": _bom_csv(contract),
-        "harness-diagram.svg": _harness_svg(contract),
+        "harness-diagram.drawio.svg": _harness_drawio_svg(contract),
     }
     bom_json = json.dumps(_bom(contract), indent=2, sort_keys=True) + "\n"
     artifacts["bom.json"] = bom_json

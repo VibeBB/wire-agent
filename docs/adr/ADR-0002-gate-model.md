@@ -46,7 +46,7 @@ Enforcement rules (same as siblings):
 2. Generated artifacts are write-protected by the `protect-generated`
    pre_tool_use hook (`manifest.json`, `provenance.json`,
    `design-report.json/md`, `wire-list.csv`, `cut-table.csv`, `bom.*`,
-   `harness-diagram.svg`, `kbl.xml`, `vec.xml`); regeneration only via
+   `harness-diagram.drawio.svg`, `kbl.xml`, `vec.xml`); regeneration only via
    `wire_author`/`python -m wire author`.
 3. Intake binds provenance: `element_sources` maps every
    connector/net/wire/route to R*/A*/Q*/I* ids, and `check_intake` fails a

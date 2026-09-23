@@ -18,7 +18,7 @@ EXPECTED_ARTIFACTS = {
     "bom.csv",
     "bom.json",
     "cut-table.csv",
-    "harness-diagram.svg",
+    "harness-diagram.drawio.svg",
     "manifest.json",
     "provenance.json",
     "wire-list.csv",
