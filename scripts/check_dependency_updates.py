@@ -194,6 +194,7 @@ def docker_base_image() -> tuple[str, str] | None:
 _DOCKER_ARG_UPSTREAMS = {
     # ARG name -> (github repo, current-tag prefix stripped before compare)
     "UV_VERSION": ("astral-sh/uv", ""),
+    "DRAWIO_DESKTOP_VERSION": ("jgraph/drawio-desktop", "v"),
 }
 
 

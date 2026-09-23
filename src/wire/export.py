@@ -10,7 +10,6 @@ identical artifact bytes.
 
 from __future__ import annotations
 
-import base64
 import csv
 import hashlib
 import io
@@ -18,8 +17,8 @@ import json
 import platform
 import shutil
 import subprocess
-import urllib.parse
-import zlib
+import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -380,16 +379,6 @@ def _wire_anchors(
     return (ax, ay), (bx, by), mid_x, loop
 
 
-def _wire_path(
-    a: tuple[float, float], b: tuple[float, float], mid_x: float, loop: bool = False
-) -> str:
-    ax, ay = a
-    bx, by = b
-    if ax == bx and not loop:
-        return f"M {_num(ax)} {_num(ay)} V {_num(by)}"
-    return f"M {_num(ax)} {_num(ay)} H {_num(mid_x)} V {_num(by)} H {_num(bx)}"
-
-
 def _twist_links(
     contract: HarnessContract, layout: dict[str, Any]
 ) -> list[tuple[tuple[float, float], tuple[float, float], str]]:
@@ -409,96 +398,33 @@ def _twist_links(
     return links
 
 
-def _pin_table_svg_body(contract: HarnessContract, layout: dict[str, Any]) -> list[str]:
-    """SVG elements for the pin-table diagram (everything inside <svg>)."""
+def _loop_waypoint(wire: HarnessWire, layout: dict[str, Any]) -> tuple[float, float] | None:
+    """Channel-side bump point for a same-connector loop, or None."""
+    if wire.from_endpoint.connector is None:
+        return None
+    if wire.from_endpoint.connector != wire.to_endpoint.connector:
+        return None
+    conn = wire.from_endpoint.connector
     positions = layout["positions"]
-    used = layout["used_cavities"]
-    parts = ['<rect width="100%" height="100%" fill="#ffffff"/>']
-    parts.append(
-        f'<text x="{_num(_COL_X[0])}" y="52" font-size="14">{_esc(_diagram_title(contract))}</text>'
-    )
-    for connector in sorted(contract.connectors, key=lambda c: c.id):
-        x, y = positions[connector.id]
-        height = _connector_height(connector)
-        header = f"{connector.id} · {connector.family} · {len(connector.cavities)}p"
-        parts.append(
-            f'<rect x="{_num(x)}" y="{_num(y)}" width="{_num(_CONN_W)}" '
-            f'height="{_num(height)}" fill="#ffffff" stroke="#333333"/>'
-        )
-        parts.append(
-            f'<rect x="{_num(x)}" y="{_num(y)}" width="{_num(_CONN_W)}" '
-            f'height="{_num(_HEADER_H)}" fill="#eef2ff" stroke="#333333"/>'
-        )
-        parts.append(f'<text x="{_num(x + 8)}" y="{_num(y + 17)}">{_esc(header)}</text>')
-        for idx, cavity in enumerate(connector.cavities):
-            row_y = y + _HEADER_H + idx * _ROW_H
-            occupied = (connector.id, cavity.id) in used
-            if not occupied:
-                parts.append(
-                    f'<rect x="{_num(x)}" y="{_num(row_y)}" width="{_num(_CONN_W)}" '
-                    f'height="{_num(_ROW_H)}" fill="#f5f5f5"/>'
-                )
-            if idx:
-                parts.append(
-                    f'<line x1="{_num(x)}" y1="{_num(row_y)}" x2="{_num(x + _CONN_W)}" '
-                    f'y2="{_num(row_y)}" stroke="#dddddd"/>'
-                )
-            text_color = "#444444" if occupied else "#9e9e9e"
-            parts.append(
-                f'<text x="{_num(x + 6)}" y="{_num(row_y + 15)}" font-size="10" '
-                f'fill="{text_color}">{_esc(_cavity_label(cavity))}</text>'
-            )
-    for splice in sorted(contract.splices, key=lambda s: s.id):
-        sx, sy = layout["splice_pos"][splice.id]
-        parts.append(
-            f'<circle cx="{_num(sx)}" cy="{_num(sy)}" r="{_num(_SPLICE_R)}" fill="#333333"/>'
-        )
-        parts.append(
-            f'<text x="{_num(sx)}" y="{_num(sy + 16)}" font-size="9" fill="#616161" '
-            f'text-anchor="middle">{_esc(splice.id)} · {splice.kind}</text>'
-        )
-    nets = contract.net_map()
-    types = contract.wire_type_map()
-    label_slots: dict[tuple[float, float], int] = {}
-    for wire in sorted(contract.wires, key=lambda w: w.id):
-        (ax, ay), (bx, by), mid_x, _loop = _wire_anchors(contract, layout, wire)
-        net = nets[wire.net]
-        wtype = types[wire.wire_type]
-        color, stripe = _wire_stroke(wire, net)
-        dash = ' stroke-dasharray="4 3"' if wtype.shield != "none" else ""
-        # Wires sharing a routing channel (parallel runs on one connector
-        # pair, or crossing runs on mirrored pairs) are staggered 16px per
-        # slot so every vertical leg and label stays legible.
-        slot_key = (mid_x, (ay + by) / 2)
-        slot = label_slots.get(slot_key, 0)
-        label_slots[slot_key] = slot + 1
-        run_x = mid_x + slot * 16.0
-        d = _wire_path((ax, ay), (bx, by), run_x, loop=_loop)
-        parts.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="1.5"{dash}/>')
-        if stripe is not None:
-            parts.append(
-                f'<path d="{d}" fill="none" stroke="{stripe}" stroke-width="1.5" '
-                'stroke-dasharray="2 6"/>'
-            )
-        parts.append(
-            f'<text x="{_num(run_x)}" y="{_num((ay + by) / 2 - 4)}" font-size="10" '
-            f'fill="{color}" text-anchor="middle">{_esc(_wire_label(wire, wtype, net))}</text>'
-        )
-    for a, b, label in _twist_links(contract, layout):
-        parts.append(
-            f'<line x1="{_num(a[0])}" y1="{_num(a[1])}" x2="{_num(b[0])}" y2="{_num(b[1])}" '
-            'stroke="#616161" stroke-width="1" stroke-dasharray="3 3"/>'
-        )
-        parts.append(
-            f'<text x="{_num((a[0] + b[0]) / 2)}" y="{_num((a[1] + b[1]) / 2 - 3)}" '
-            f'font-size="8" fill="#616161" text-anchor="middle">{_esc(label)}</text>'
-        )
-    for route in contract.routes:
-        parts.append(
-            f"<!-- route {route.id}: {len(route.segments)} segments, "
-            f"protection {route.protection} -->"
-        )
-    return parts
+    column_of = layout["column_of"]
+    cavity_y = layout["cavity_y"]
+    col = column_of[conn]
+    x_edge = positions[conn][0] + (_CONN_W if col == 0 else 0.0)
+    sign = 1.0 if col == 0 else -1.0
+    seen = layout["loop_bumps"].get(wire.id, 0)
+    bump_x = x_edge + sign * (36.0 + seen * 18.0)
+    mid_y = (
+        cavity_y[(conn, wire.from_endpoint.cavity or "")]
+        + cavity_y[(conn, wire.to_endpoint.cavity or "")]
+    ) / 2
+    return bump_x, mid_y
+
+
+def _loop_points(bump: tuple[float, float] | None) -> str:
+    """Waypoint Array fragment routing a loop edge through the channel."""
+    if bump is None:
+        return ""
+    return f'<Array as="points"><mxPoint x="{_num(bump[0])}" y="{_num(bump[1])}" /></Array>'
 
 
 def _endpoint_cell_id(endpoint: Endpoint) -> str:
@@ -588,11 +514,21 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         )
     nets = contract.net_map()
     types = contract.wire_type_map()
-    for wire in sorted(contract.wires, key=lambda w: w.id):
+    ordered_wires = sorted(contract.wires, key=lambda w: w.id)
+    # Unique vertical label offsets keep wire labels from stacking where
+    # parallel edges share the routing channel.
+    label_offsets = {
+        wire.id: (i - (len(ordered_wires) - 1) / 2) * 14.0 for i, wire in enumerate(ordered_wires)
+    }
+    for wire in ordered_wires:
         net = nets[wire.net]
         wtype = types[wire.wire_type]
-        color, _stripe = _wire_stroke(wire, net)
+        color, stripe = _wire_stroke(wire, net)
         dashed = "dashed=1;" if wtype.shield != "none" else ""
+        bump = _loop_waypoint(wire, layout)
+        # Loop bumps sit at the connector edge; drop their labels below the
+        # bump into open channel space instead of overlapping the frame.
+        label_y = 30.0 if bump is not None else label_offsets[wire.id]
         parts.append(
             f'<mxCell id="wire-{wire.id}" value="{_esc(_wire_label(wire, wtype, net))}" '
             'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
@@ -603,8 +539,25 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
             'edge="1" parent="wires" '
             f'source="{_endpoint_cell_id(wire.from_endpoint)}" '
             f'target="{_endpoint_cell_id(wire.to_endpoint)}">'
-            '<mxGeometry relative="1" as="geometry" /></mxCell>'
+            '<mxGeometry x="0" relative="1" as="geometry">'
+            f'<mxPoint y="{_num(label_y)}" as="offset" />'
+            + _loop_points(bump)
+            + "</mxGeometry></mxCell>"
         )
+        if stripe is not None:
+            parts.append(
+                f'<mxCell id="wire-{wire.id}-stripe" value="" '
+                'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
+                f"jettySize=auto;strokeWidth=1;dashed=1;strokeColor={stripe};"
+                f"{_endpoint_side(wire.from_endpoint, 'exit', column_of)}"
+                f'{_endpoint_side(wire.to_endpoint, "entry", column_of)}" '
+                'edge="1" parent="wires" '
+                f'source="{_endpoint_cell_id(wire.from_endpoint)}" '
+                f'target="{_endpoint_cell_id(wire.to_endpoint)}">'
+                '<mxGeometry relative="1" as="geometry">'
+                + _loop_points(bump)
+                + "</mxGeometry></mxCell>"
+            )
     for idx, (a, b, label) in enumerate(_twist_links(contract, layout)):
         parts.append(
             f'<mxCell id="twist-{idx}" value="{_esc(label)}" '
@@ -614,89 +567,151 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
             '<mxGeometry relative="1" as="geometry">'
             f'<mxPoint x="{_num(a[0])}" y="{_num(a[1])}" as="sourcePoint" />'
             f'<mxPoint x="{_num(b[0])}" y="{_num(b[1])}" as="targetPoint" />'
+            '<mxPoint y="-30" as="offset" />'
             "</mxGeometry></mxCell>"
         )
     parts.append("</root></mxGraphModel>")
     return "".join(parts)
 
 
-def _drawio_compress(xml: str) -> str:
-    """encodeURIComponent → raw deflate → base64, matching drawio's embed format."""
-    encoded = urllib.parse.quote(xml, safe="!~*'()")
-    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
-    payload = compressor.compress(encoded.encode("utf-8")) + compressor.flush()
-    return base64.b64encode(payload).decode("ascii")
+def _harness_mxfile(contract: HarnessContract) -> str:
+    """Drawio mxfile of the pin-table diagram.
 
-
-def _harness_drawio_svg(contract: HarnessContract) -> str:
-    """Pin-table harness diagram as SVG with an embedded editable drawio model.
-
-    The file renders anywhere SVG does; opening it in diagrams.net restores
-    the mxfile stored in the root `content` attribute, where every connector
-    is a swimlane of cavity cells and every wire is an edge bound to its two
-    cavity cells, so manual re-layout keeps connectivity attached.
+    Every connector is a swimlane of cavity cells and every wire is an edge
+    bound to its two cavity cells, so manual re-layout keeps connectivity
+    attached.
     """
     layout = _diagram_layout(contract)
     model = _drawio_model(contract, layout)
-    page_w = layout["page_w"]
-    page_h = layout["page_h"]
-    mxfile = (
+    return (
         '<mxfile host="wire-agent" type="device">'
         f'<diagram id="harness" name="{_esc(contract.name)}">{model}</diagram></mxfile>'
     )
-    parts = [
-        f'<svg xmlns="{SVG_NS}" width="{_num(page_w)}" height="{_num(page_h)}" '
-        f'viewBox="0 0 {_num(page_w)} {_num(page_h)}" font-family="monospace" '
-        f'font-size="11" content="{_drawio_compress(mxfile)}">',
-        *_pin_table_svg_body(contract, layout),
-        "</svg>",
+
+
+def _drawio_cli() -> list[str] | None:
+    """Headless drawio-desktop export prefix, or None when unavailable."""
+    if shutil.which("drawio") is None or shutil.which("xvfb-run") is None:
+        return None
+    return [
+        "xvfb-run",
+        "-a",
+        "drawio",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-update",
     ]
-    return "\n".join(parts) + "\n"
 
 
-def _harness_png(svg_text: str) -> bytes:
-    """Rasterize the pin-table drawing for vision review.
+def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
+    """Render the mxfile through ``drawio -x`` and return the output bytes.
 
-    Runs the unmodified ``rsvg-convert`` (librsvg) binary as a subprocess:
-    pango/fontconfig resolves CJK glyphs where cairo alone drops or boxes
-    them, and the subprocess boundary keeps librsvg's LGPL out of the
-    import set. The wire-tools image ships ``librsvg2-bin`` plus
-    ``fonts-ipafont`` for CJK coverage. The PNG is a presentation raster
-    for L2 reviewers: pixel bytes vary with the host's librsvg and font
-    versions, so it is a review aid rather than a projection with a
-    cross-environment byte guarantee.
+    drawio-desktop renders the canonical view (what diagrams.net shows) and
+    resolves CJK glyphs through its bundled text stack — a successful run
+    also proves drawio actually loads the generated model. The subprocess
+    boundary keeps the Electron app out of the import set. Output bytes vary
+    with the installed drawio version, so rendered artifacts are review aids
+    rather than byte-stable projections.
     """
-    rsvg = shutil.which("rsvg-convert")
-    if rsvg is None:
+    cmd = _drawio_cli()
+    if cmd is None:
         raise RuntimeError(
-            "PNG export needs rsvg-convert (librsvg2-bin ships in the wire-tools image)"
+            "drawio export needs drawio-desktop and xvfb (both ship in the wire-tools image)"
         )
-    result = subprocess.run(
-        [rsvg, "-z", "2", "-f", "png"],
-        input=svg_text.encode("utf-8"),
-        capture_output=True,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="wire-drawio-") as tmp:
+        src = Path(tmp) / "harness.drawio"
+        out = Path(tmp) / "out"
+        src.write_text(mxfile, encoding="utf-8")
+        result = subprocess.run(
+            [*cmd, "-x", *fmt_args, "-o", str(out), str(src)],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+            detail = result.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"drawio -x {' '.join(fmt_args)} failed: {detail}")
+        return out.read_bytes()
+
+
+_DRAWIO_EXPORTS: dict[str, tuple[str, list[str]]] = {
+    "png": ("harness-diagram.png", ["-f", "png", "-s", "2"]),
+    "jpg": ("harness-diagram.jpg", ["-f", "jpg", "-s", "2", "-q", "95"]),
+    "pdf": ("harness-diagram.pdf", ["-f", "pdf", "--crop"]),
+    "html": ("harness-diagram.html", ["-f", "html", "-a"]),
+    "svg": ("harness-diagram.svg", ["-f", "svg"]),
+    "xml": ("harness-diagram.drawio", ["-f", "xml"]),
+}
+
+
+def drawio_export_formats() -> list[str]:
+    """Formats accepted by ``--drawio`` (drawio-desktop -x outputs)."""
+    return sorted(_DRAWIO_EXPORTS)
+
+
+def run_drawio_export(
+    input_path: Path,
+    output_path: Path | None,
+    fmt: str | None,
+    options: Sequence[str],
+) -> dict[str, Any]:
+    """Proxy a drawio-desktop ``-x`` export on any supported input.
+
+    ``options`` passes through drawio flags (pages, layers, layout, embeds,
+    quality, ...) so the full CLI surface is reachable; inputs may be drawio,
+    vsdx, csv, or mermaid files.
+    """
+    cmd = _drawio_cli()
+    if cmd is None:
+        raise RuntimeError(
+            "drawio export needs drawio-desktop and xvfb (both ship in the wire-tools image)"
+        )
+    argv = [*cmd, "-x"]
+    if fmt is not None:
+        argv += ["-f", fmt]
+    if output_path is not None:
+        argv += ["-o", str(output_path)]
+    argv += [*options, str(input_path)]
+    result = subprocess.run(argv, capture_output=True, check=False)
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"rsvg-convert failed: {detail}")
-    return result.stdout
+        raise RuntimeError(f"drawio -x failed: {detail}")
+    emitted = output_path or input_path.with_suffix(f".{fmt or 'pdf'}")
+    return {"path": str(emitted), "exists": emitted.is_file()}
 
 
-def export_design(contract: HarnessContract, out_dir: Path, *, png: bool = False) -> dict[str, Any]:
+def export_design(
+    contract: HarnessContract,
+    out_dir: Path,
+    *,
+    png: bool = False,
+    drawio: Sequence[str] = (),
+) -> dict[str, Any]:
     """Write every projection plus manifest.json and provenance.json.
 
-    ``png=True`` also writes ``harness-diagram.png`` — the same drawing
-    rasterized for vision-capable reviewers (the OpenHands FileEditorTool
-    auto-sends raster images to the LLM).
+    The diagram is rendered by drawio-desktop when it is installed (canonical
+    rendering, embedded model round-trips); without it the raw mxfile is
+    written as ``harness-diagram.drawio`` so the design stays editable.
+    ``png=True`` is a shorthand for ``drawio=["png"]`` — ``drawio`` lists
+    extra formats (png, jpg, pdf, html, xml) rendered through ``drawio -x``
+    for vision-capable reviewers (the OpenHands FileEditorTool auto-sends
+    raster images to the LLM).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
+    mxfile = _harness_mxfile(contract)
     artifacts: dict[str, str] = {
         "wire-list.csv": _wire_list_csv(contract),
         "cut-table.csv": _cut_table_csv(contract),
         "bom.csv": _bom_csv(contract),
-        "harness-diagram.drawio.svg": _harness_drawio_svg(contract),
     }
+    diagram_source = "drawio-desktop"
+    try:
+        artifacts["harness-diagram.drawio.svg"] = _drawio_render(
+            mxfile, ["-f", "svg", "-e"]
+        ).decode("utf-8")
+    except RuntimeError:
+        diagram_source = "mxfile"
+        artifacts["harness-diagram.drawio"] = mxfile + "\n"
     bom_json = json.dumps(_bom(contract), indent=2, sort_keys=True) + "\n"
     artifacts["bom.json"] = bom_json
 
@@ -711,14 +726,20 @@ def export_design(contract: HarnessContract, out_dir: Path, *, png: bool = False
                 "bytes": len(artifacts[name].encode("utf-8")),
             }
         )
+
+    extra = set(drawio)
     if png:
-        png_bytes = _harness_png(artifacts["harness-diagram.drawio.svg"])
-        (out_dir / "harness-diagram.png").write_bytes(png_bytes)
+        extra.add("png")
+    for fmt in sorted(extra):
+        name, fmt_args = _DRAWIO_EXPORTS[fmt]
+        rendered = _drawio_render(mxfile, fmt_args)
+        path = out_dir / name
+        path.write_bytes(rendered)
         files.append(
             {
-                "path": "harness-diagram.png",
-                "sha256": hashlib.sha256(png_bytes).hexdigest(),
-                "bytes": len(png_bytes),
+                "path": name,
+                "sha256": hashlib.sha256(rendered).hexdigest(),
+                "bytes": len(rendered),
             }
         )
 
@@ -739,6 +760,7 @@ def export_design(contract: HarnessContract, out_dir: Path, *, png: bool = False
             for s in contract.imported_sources
         ],
         "tool_versions": {"python": platform.python_version()},
+        "diagram_renderer": diagram_source,
     }
     provenance_text = json.dumps(provenance, indent=2, sort_keys=True) + "\n"
     (out_dir / "provenance.json").write_text(provenance_text, encoding="utf-8")

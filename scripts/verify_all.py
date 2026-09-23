@@ -61,6 +61,10 @@ STAGES: dict[str, tuple[Command, ...]] = {
         Command(("uv", "run", "python", "scripts/verify_docs.py")),
         Command(("git", "diff", "--check")),
     ),
+    "drawio": (
+        Command(("uv", "sync", "--locked"), barrier=True),
+        Command(("uv", "run", "python", "scripts/check_drawio_export.py")),
+    ),
 }
 
 

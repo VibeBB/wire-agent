@@ -26,12 +26,15 @@ verdicts and artifact hashes.
 
 PyPI dependencies are pinned in `pyproject.toml` and `uv.lock`. The
 pinned OpenHands SDK version is `1.49.4` — the same pin as the sibling
-plugins so a merged conversation sees one SDK. `--png` vision review
-rasterizes the diagram through the unmodified `rsvg-convert` binary
-(`librsvg2-bin`) plus `fonts-ipafont` for CJK coverage — both installed
-in `docker/wire-tools.Dockerfile` and invoked as a subprocess, keeping
-librsvg's LGPL out of the import set; without them the flag fails the
-export step cleanly. When adding or removing a
+plugins so a merged conversation sees one SDK. Diagram rendering and
+all raster/PDF/SVG/HTML exports run the unmodified `drawio-desktop`
+binary (`draw.io`) under `xvfb-run`, plus `fonts-ipafont` for CJK
+coverage — installed in `docker/wire-tools.Dockerfile` from the
+pinned, sha256-verified upstream `.deb` (`DRAWIO_DESKTOP_VERSION` /
+`DRAWIO_DESKTOP_SHA256` ARGs) and invoked as a subprocess behind an
+adapter, keeping Electron's code out of the import set; without it the
+`--png`/`--drawio` flags fail the export step cleanly and the diagram
+falls back to a raw `harness-diagram.drawio` mxfile. When adding or removing a
 dependency, update the checker targets in
 `scripts/check_dependency_updates.py` and this document in the same change.
 The weekly `check-dependency-updates` workflow reports candidates to a

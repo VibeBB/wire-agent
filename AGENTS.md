@@ -23,7 +23,7 @@ src/wire/                 # deterministic wire-harness core
 ├── report.py             # design-report.json/md
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
-├── cli.py                # python -m wire {doctor,intake,author,gates,export,import}
+├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,import}
 └── mcp_server.py         # stdio MCP boundary
 plugins/wire/             # OpenHands plugin
 ├── skills/               # wire-workflow, wire-contract, wire-gates,
