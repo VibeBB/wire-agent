@@ -3,7 +3,7 @@ name: Main CI failure issue
 on:
   # zizmor: ignore[dangerous-triggers] files a tracking Issue on completed main runs; no code is checked out
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI", "Publish wire images", "Locked image check"]
     types: [completed]
     branches: [main]
 
