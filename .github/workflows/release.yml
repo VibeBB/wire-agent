@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump kind"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      version:
+        description: "Explicit X.Y.Z override; leave empty to bump"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      sha: ${{ steps.bump.outputs.sha }}
+    steps:
+      - name: Require main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          test "$REF" = "refs/heads/main"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Bump version files
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          SET_VERSION="${SET_VERSION#v}"
+          CURRENT=$(python3 -c 'import tomllib,sys;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          SKIP_COMMIT=false
+          if [ -n "$SET_VERSION" ]; then
+            if [ "$SET_VERSION" = "$CURRENT" ]; then
+              VERSION="$CURRENT"
+              python3 scripts/bump_version.py --dry-run --bump patch >/dev/null
+              SKIP_COMMIT=true
+            else
+              VERSION=$(python3 scripts/bump_version.py --set "$SET_VERSION")
+            fi
+          else
+            VERSION=$(python3 scripts/bump_version.py --bump "$BUMP")
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
+            echo "::error::tag v${VERSION} already exists" >&2
+            exit 1
+          fi
+          if [ "$SKIP_COMMIT" = false ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add plugins/wire/.plugin/plugin.json pyproject.toml \
+              plugins/wire/skills/*/SKILL.md uv.lock
+            git commit -m "Release v${VERSION}: update version files"
+            if ! git push origin HEAD:main; then
+              echo "::error::direct push to main was rejected. Add 'GitHub Actions' " >&2
+              echo "as a bypass actor on the 'main' ruleset (Settings → Rules → " >&2
+              echo "Rulesets → main → Bypass actors), or merge a version-bump PR " >&2
+              echo "first and re-run Release with version=${VERSION}." >&2
+              exit 1
+            fi
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: bump-version
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository] same-repo reuse
+    with:
+      ref: ${{ needs.bump-version.outputs.sha }}
+
+  install-smoke:
+    needs: bump-version
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.bump-version.outputs.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --locked --group sdk-check
+      - name: Smoke-test remote install
+        env:
+          REF: ${{ needs.bump-version.outputs.sha }}
+        run: >
+          uv run --group sdk-check python scripts/smoke_install_plugin.py
+          --repo VibeBB/wire-agent --ref "$REF" --repo-path plugins/wire
+
+  release:
+    needs: [bump-version, verify, install-smoke]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.bump-version.outputs.version }}
+      SHA: ${{ needs.bump-version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.bump-version.outputs.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --locked
+      - name: Author example harness
+        run: |
+          mkdir -p dist/samples
+          uv run python scripts/e2e_authoring.py \
+            --contract examples/sensor-harness/sensor-harness.contract.json \
+            --out dist/samples/sensor-harness
+      - name: Build release zips
+        run: |
+          (cd plugins && zip -r "../dist/wire-plugin-v${VERSION}.zip" wire)
+          zip -r "dist/wire-samples-v${VERSION}.zip" dist/samples
+      - name: Create release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "v${VERSION}" --target "$SHA"
+          --title "wire v${VERSION}" --generate-notes dist/*.zip

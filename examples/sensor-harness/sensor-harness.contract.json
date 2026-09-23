@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "contract_id": "WH-0001",
+  "name": "sensor-harness",
+  "revision": "r1",
+  "ipc_class": 2,
+  "ambient_temperature_c": 60.0,
+  "connectors": [
+    {
+      "id": "C1",
+      "family": "JST XH",
+      "housing": "B4B-XH-A",
+      "rated_current_a": 3.0,
+      "rated_voltage_v": 250.0,
+      "mating_cycles": 30,
+      "keying": "A",
+      "sealed": false,
+      "temp_rating_c": 85.0,
+      "cavities": [
+        {"id": "1", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"},
+        {"id": "2", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"},
+        {"id": "3", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"},
+        {"id": "4", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"}
+      ]
+    },
+    {
+      "id": "C2",
+      "family": "JST XH",
+      "housing": "B4B-XH-A",
+      "rated_current_a": 3.0,
+      "rated_voltage_v": 250.0,
+      "mating_cycles": 30,
+      "keying": "B",
+      "sealed": false,
+      "temp_rating_c": 85.0,
+      "cavities": [
+        {"id": "1", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"},
+        {"id": "2", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"},
+        {"id": "3", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"},
+        {"id": "4", "accepts_mm2": [0.08, 0.5], "terminal": "SXH-001T-P0.6"}
+      ]
+    }
+  ],
+  "wire_types": [
+    {
+      "id": "WT1",
+      "name": "AVSS 0.5",
+      "spec": "AVSS",
+      "gauge_mm2": 0.5,
+      "outer_diameter_mm": 2.0,
+      "resistance_ohm_per_km": 32.7,
+      "ampacity_a": 12.7,
+      "reference_temp_c": 80.0,
+      "temp_derating": [
+        {"temperature_c": 80.0, "factor": 1.0},
+        {"temperature_c": 90.0, "factor": 0.85},
+        {"temperature_c": 100.0, "factor": 0.65},
+        {"temperature_c": 105.0, "factor": 0.0}
+      ],
+      "insulation_rating_v": 60.0,
+      "insulation_temp_c": 105.0,
+      "min_bend_factor": 4.0,
+      "shield": "none",
+      "flex_class": "static"
+    },
+    {
+      "id": "WT2",
+      "name": "FLRY-B 0.35",
+      "spec": "FLRY-B",
+      "gauge_mm2": 0.35,
+      "outer_diameter_mm": 1.3,
+      "resistance_ohm_per_km": 52.0,
+      "ampacity_a": 7.0,
+      "reference_temp_c": 105.0,
+      "temp_derating": [
+        {"temperature_c": 105.0, "factor": 1.0},
+        {"temperature_c": 115.0, "factor": 0.75},
+        {"temperature_c": 125.0, "factor": 0.0}
+      ],
+      "insulation_rating_v": 60.0,
+      "insulation_temp_c": 105.0,
+      "min_bend_factor": 4.0,
+      "shield": "none",
+      "flex_class": "static"
+    }
+  ],
+  "nets": [
+    {
+      "id": "N1",
+      "signal_class": "power",
+      "voltage_v": 24.0,
+      "current_a": 2.0
+    },
+    {
+      "id": "N2",
+      "signal_class": "ground",
+      "voltage_v": 0.0,
+      "current_a": 2.0,
+      "max_voltage_drop_v": 0.1
+    },
+    {
+      "id": "N3",
+      "signal_class": "analog",
+      "voltage_v": 5.0,
+      "current_a": 0.1,
+      "max_voltage_drop_v": 0.05
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "wire_type": "WT1",
+      "net": "N1",
+      "color": "RD",
+      "from_endpoint": {"connector": "C1", "cavity": "1"},
+      "to_endpoint": {"connector": "C2", "cavity": "1"},
+      "length_m": 0.5,
+      "strip_a_mm": 4.0,
+      "strip_b_mm": 4.0,
+      "terminal_a": "SXH-001T-P0.6",
+      "terminal_b": "SXH-001T-P0.6",
+      "route": "RT1"
+    },
+    {
+      "id": "W2",
+      "wire_type": "WT1",
+      "net": "N2",
+      "color": "BK",
+      "from_endpoint": {"connector": "C1", "cavity": "2"},
+      "to_endpoint": {"connector": "C2", "cavity": "2"},
+      "length_m": 0.5,
+      "strip_a_mm": 4.0,
+      "strip_b_mm": 4.0,
+      "terminal_a": "SXH-001T-P0.6",
+      "terminal_b": "SXH-001T-P0.6",
+      "route": "RT1"
+    },
+    {
+      "id": "W3",
+      "wire_type": "WT2",
+      "net": "N3",
+      "color": "WH",
+      "from_endpoint": {"connector": "C1", "cavity": "3"},
+      "to_endpoint": {"connector": "C2", "cavity": "3"},
+      "length_m": 0.55,
+      "strip_a_mm": 4.0,
+      "strip_b_mm": 4.0,
+      "terminal_a": "SXH-001T-P0.6",
+      "terminal_b": "SXH-001T-P0.6",
+      "route": "RT2"
+    }
+  ],
+  "routes": [
+    {
+      "id": "RT1",
+      "segments": [
+        {"id": "S1", "length_m": 0.3, "min_bend_radius_mm": 15.0},
+        {"id": "S2", "length_m": 0.2, "min_bend_radius_mm": 12.0}
+      ],
+      "protection": "tube",
+      "flex_required": false
+    },
+    {
+      "id": "RT2",
+      "segments": [
+        {"id": "S1", "length_m": 0.35, "min_bend_radius_mm": 10.0},
+        {"id": "S2", "length_m": 0.2, "min_bend_radius_mm": 10.0}
+      ],
+      "protection": "tape",
+      "flex_required": false
+    }
+  ],
+  "segregations": [
+    {"classes": ["power", "analog"], "rule": "no_shared_route"}
+  ],
+  "service": {"mating_cycles": 30},
+  "imported_sources": []
+}

@@ -1,0 +1,45 @@
+{
+  "contract_sha256": "d7764ffba228385cfda6d47b239d73ec02515a1df1699a5f40308b8454a317ee",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "4-wire sensor harness between the controller board J2 and the remote sensor head, IPC class 2",
+      "source": "user",
+      "speaker": "user"
+    },
+    {
+      "id": "R2",
+      "text": "+24 V supply at 2 A, analog sensor output 0-5 V at 0.1 A, ambient 60 °C",
+      "source": "user",
+      "speaker": "user"
+    },
+    {
+      "id": "R3",
+      "text": "JST XH connectors on both ends; analog line must not share a route with the supply pair",
+      "source": "user",
+      "speaker": "user"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "A1",
+      "text": "AVSS 0.5 for the supply pair and FLRY-B 0.35 for the analog line meet derating at 60 °C",
+      "rationale": "standard automotive thin-wall types; supply current 2 A is far below derated ampacity"
+    }
+  ],
+  "open_questions": [],
+  "element_sources": {
+    "C1": ["R3"],
+    "C2": ["R3"],
+    "WT1": ["R2", "A1"],
+    "WT2": ["R2", "A1"],
+    "N1": ["R2"],
+    "N2": ["R2"],
+    "N3": ["R2"],
+    "W1": ["R2", "R3"],
+    "W2": ["R2", "R3"],
+    "W3": ["R2", "R3"],
+    "RT1": ["R1", "R3"],
+    "RT2": ["R1", "R3"]
+  }
+}
