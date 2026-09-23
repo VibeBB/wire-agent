@@ -16,6 +16,8 @@ import hashlib
 import io
 import json
 import platform
+import shutil
+import subprocess
 import urllib.parse
 import zlib
 from pathlib import Path
@@ -652,8 +654,42 @@ def _harness_drawio_svg(contract: HarnessContract) -> str:
     return "\n".join(parts) + "\n"
 
 
-def export_design(contract: HarnessContract, out_dir: Path) -> dict[str, Any]:
-    """Write every projection plus manifest.json and provenance.json."""
+def _harness_png(svg_text: str) -> bytes:
+    """Rasterize the pin-table drawing for vision review.
+
+    Runs the unmodified ``rsvg-convert`` (librsvg) binary as a subprocess:
+    pango/fontconfig resolves CJK glyphs where cairo alone drops or boxes
+    them, and the subprocess boundary keeps librsvg's LGPL out of the
+    import set. The wire-tools image ships ``librsvg2-bin`` plus
+    ``fonts-ipafont`` for CJK coverage. The PNG is a presentation raster
+    for L2 reviewers: pixel bytes vary with the host's librsvg and font
+    versions, so it is a review aid rather than a projection with a
+    cross-environment byte guarantee.
+    """
+    rsvg = shutil.which("rsvg-convert")
+    if rsvg is None:
+        raise RuntimeError(
+            "PNG export needs rsvg-convert (librsvg2-bin ships in the wire-tools image)"
+        )
+    result = subprocess.run(
+        [rsvg, "-z", "2", "-f", "png"],
+        input=svg_text.encode("utf-8"),
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"rsvg-convert failed: {detail}")
+    return result.stdout
+
+
+def export_design(contract: HarnessContract, out_dir: Path, *, png: bool = False) -> dict[str, Any]:
+    """Write every projection plus manifest.json and provenance.json.
+
+    ``png=True`` also writes ``harness-diagram.png`` — the same drawing
+    rasterized for vision-capable reviewers (the OpenHands FileEditorTool
+    auto-sends raster images to the LLM).
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     artifacts: dict[str, str] = {
         "wire-list.csv": _wire_list_csv(contract),
@@ -673,6 +709,16 @@ def export_design(contract: HarnessContract, out_dir: Path) -> dict[str, Any]:
                 "path": name,
                 "sha256": hashlib.sha256(artifacts[name].encode("utf-8")).hexdigest(),
                 "bytes": len(artifacts[name].encode("utf-8")),
+            }
+        )
+    if png:
+        png_bytes = _harness_png(artifacts["harness-diagram.drawio.svg"])
+        (out_dir / "harness-diagram.png").write_bytes(png_bytes)
+        files.append(
+            {
+                "path": "harness-diagram.png",
+                "sha256": hashlib.sha256(png_bytes).hexdigest(),
+                "bytes": len(png_bytes),
             }
         )
 

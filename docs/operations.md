@@ -26,7 +26,12 @@ verdicts and artifact hashes.
 
 PyPI dependencies are pinned in `pyproject.toml` and `uv.lock`. The
 pinned OpenHands SDK version is `1.49.4` — the same pin as the sibling
-plugins so a merged conversation sees one SDK. When adding or removing a
+plugins so a merged conversation sees one SDK. `--png` vision review
+rasterizes the diagram through the unmodified `rsvg-convert` binary
+(`librsvg2-bin`) plus `fonts-ipafont` for CJK coverage — both installed
+in `docker/wire-tools.Dockerfile` and invoked as a subprocess, keeping
+librsvg's LGPL out of the import set; without them the flag fails the
+export step cleanly. When adding or removing a
 dependency, update the checker targets in
 `scripts/check_dependency_updates.py` and this document in the same change.
 The weekly `check-dependency-updates` workflow reports candidates to a

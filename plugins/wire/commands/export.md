@@ -23,3 +23,10 @@ nodes, dashed twisted-pair bands, physical insulation colors (`X/Y` codes
 draw a striped overlay), and greyed unused cavities. Same-connector loops
 draw a small bump off the channel-facing side. Export does not judge the
 design — run `/wire:gates` or `wire_author` for a verdict.
+
+Pass `--png` (also on `author`, and `png: true` on the `wire_author` MCP
+tool) to additionally write `harness-diagram.png`, a 2× raster of the
+same drawing for vision review — PNG bytes depend on the host's librsvg
+and font versions, so treat it as a review aid, not a byte-stable
+projection. Rasterization runs the `rsvg-convert` binary (librsvg2-bin),
+which resolves CJK glyphs through pango/fontconfig.

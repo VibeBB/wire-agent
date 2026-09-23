@@ -20,6 +20,13 @@
   pair midpoints plus a `TP⇄<net>` label suffix, unused cavities are
   greyed, splice nodes draw as labeled dots on a separate `wires` drawio
   layer, and same-connector loops bump off the channel-facing edge.
+- `export --png` / `author --png` (and `png: true` on `wire_author`):
+  writes `harness-diagram.png`, a 2× raster of the diagram for
+  vision-capable reviewers. Rasterization shells out to the unmodified
+  `rsvg-convert` binary (librsvg: pango/fontconfig resolves CJK glyphs
+  and the subprocess boundary keeps its LGPL out of the import set) —
+  the tools image ships `librsvg2-bin` plus `fonts-ipafont`; the PNG is
+  a review aid — pixel bytes vary with the host's librsvg/font versions.
 - Initial repository scaffold: HarnessContract schema, intake provenance,
   deterministic gates, manufacturing projections, OpenHands plugin
   (`plugins/wire`), CLI/MCP boundary, docs and ADRs.

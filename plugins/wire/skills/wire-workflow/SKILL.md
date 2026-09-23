@@ -31,8 +31,25 @@ plugin launcher. Resolve the plugin root the same way the hooks do
 2. `wire-design` — runs `wire_author`: projections → all deterministic
    gates → `design-report.json`. Failing checks are fixed in the CONTRACT,
    never in the artifacts, until `verdict: pass`.
-3. `wire-review` — L2 advisory pass over values, topology, and the SVG
+3. `wire-review` — L2 advisory pass over values, topology, and the
    diagram. Findings feed the contract, never a verdict.
+
+## Vision uses (L2 only)
+
+When the model supports image input, vision is welcome at three points —
+every vision output stays an L2 steering aid, never a verdict:
+
+- **Intake**: user-supplied pinout photos, datasheet tables, or wiring
+  sketches can seed connector/cavity/wire candidates. Claims read off an
+  image land in the intake as A* (rationale attached) or Q* — never R*.
+- **Diagram review**: `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" export --png` writes
+  `harness-diagram.png`, the pin-table raster the FileEditorTool can send
+  to the vision model. Check legibility and topology against the legend
+  in `plugins/wire/agents/wire-review.md`.
+- **Manufactured-harness crosscheck**: a photo of a built harness vs the
+  PNG can flag obvious mismatches (missing cavity population, wrong
+  insulation color) as observations for the user — the contract is not
+  edited from photos.
 
 ## Domain coverage
 
@@ -42,7 +59,8 @@ plugin launcher. Resolve the plugin root the same way the hooks do
   flex requirements, anchors — declared, not 3D-computed, in v0.1.
 - 分離 (segregation): signal-class separation policies over routes and
   connectors.
-- 製造 (manufacturing): wire list, cut table, BOM, harness diagram SVG,
+- 製造 (manufacturing): wire list, cut table, BOM, harness diagram
+  (`.drawio.svg`, plus a `.png` raster on `--png` for vision review),
   manifest + provenance — deterministic projections of the contract.
 
 ## Boundaries

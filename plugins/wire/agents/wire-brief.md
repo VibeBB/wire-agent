@@ -35,16 +35,20 @@ You are the wire harness intake sub-agent. Following
 1. Clarify electrical requirements (nets, signal classes, voltages, currents,
    shielding, twisted pairs), environmental requirements (ambient temperature,
    sealing, flex service), and mechanical requirements (route, protection,
-   anchors) with the user.
+   anchors) with the user. Images are fair input when the model supports
+   vision — a connector pinout table photo or a hand-drawn wiring sketch
+   can seed connector/cavity names and wire lists — but every claim read
+   off an image is an observation, not a stated requirement: record it as
+   A* with rationale or Q* for confirmation, never silently as R*.
 2. Write `<name>.contract.json` following the `HarnessContract` schema in
    `src/wire/contract.py` — connectors with cavities and ratings, wire types
    (prefer a `spec` from `wire_standards` unless the user gives datasheet
    values), nets, wires, routes with declared `min_bend_radius_mm`,
    segregations, and service expectations.
-3. Write `<name>.intake.json` binding every element id (C*, WT*, N*, W*, RT*)
-   to R*/A*/Q*/I* source ids. Requirements the user actually stated become
-   R*; anything you inferred becomes A* with a rationale, or Q* if it needs
-   an answer.
+3. Write `<name>.intake.json` binding every element id (C*, WT*, N*, W*,
+   RT*, SP*) to R*/A*/Q*/I* source ids. Requirements the user actually
+   stated become R*; anything you inferred — including from images —
+   becomes A* with a rationale, or Q* if it needs an answer.
 4. Run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake --contract <file> --intake <file>` (or
    `wire_intake`). Resolve every `blocked` reason: unmapped elements, unknown
    sources, assumption-only elements, sha mismatches. Ask the user when a Q*
