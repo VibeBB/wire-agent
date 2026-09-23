@@ -125,12 +125,12 @@ def main() -> int:
         for reason in reasons:
             print(reason)
         return 1
+    all_hooks = EXPECTED_SESSION_START_HOOKS | EXPECTED_PRE_TOOL_USE_HOOKS | EXPECTED_STOP_HOOKS
     print(
-        "plugin-load OK: agents={wire-brief,wire-design,wire-review} "
-        "skills={wire-connectivity,wire-contract,wire-contract-rules,"
-        "wire-gates,wire-workflow} "
-        "commands={design,doctor,export,gates} "
-        "hooks={wire-doctor,protect-generated,report-design-status}"
+        f"plugin-load OK: agents={{{','.join(sorted(EXPECTED_AGENTS))}}} "
+        f"skills={{{','.join(sorted(EXPECTED_SKILLS))}}} "
+        f"commands={{{','.join(sorted(EXPECTED_COMMANDS))}}} "
+        f"hooks={{{','.join(sorted(all_hooks))}}}"
     )
     return 0
 

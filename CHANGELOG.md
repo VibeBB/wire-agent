@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/check_plugin_load.py` now renders the OK summary from the actual
+  expected asset sets instead of a hardcoded string that could drift.
+
+
 ### Added
 
 - MCP tool metadata: every `wire_*` tool now carries `annotations.title`
