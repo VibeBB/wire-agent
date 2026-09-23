@@ -13,4 +13,6 @@ OpenHands plugin assets for wire-agent. The deterministic core lives in
 - `.mcp.json` — registers the `wire` stdio MCP server (thin wrapper over
   `src/wire`)
 - `scripts/wire_launcher.py` — resolves the `wire` package matching the
-  installed plugin before exec
+  installed plugin and execs it inside the pinned `wire-tools` image
+  (`docker run`), so every hook/MCP/CLI call runs against containerized
+  dependencies; `python3 <launcher> <args>` mirrors `python -m wire`

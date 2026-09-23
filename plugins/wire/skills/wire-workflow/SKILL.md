@@ -18,6 +18,13 @@ three sub-agents through the SDK task tools (`TaskToolSet` +
 `AgentDefinition` + `TaskTrackerTool`; never DelegateTool or
 WorkflowToolSet).
 
+Inside OpenHands, wire commands run inside the pinned tools image via the
+plugin launcher. Resolve the plugin root the same way the hooks do
+(`$WIRE_PLUGIN_ROOT`, `${OPENHANDS_PROJECT_DIR}/plugins/wire`,
+`~/.agents/plugins/wire`, `~/.openhands/plugins/installed/wire`) into
+`$WIRE_PLUGIN`, then call `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
+<args>`. In a repo checkout, `uv run python -m wire <args>` is equivalent.
+
 1. `wire-brief` — writes `<name>.contract.json` + `<name>.intake.json`.
    Resolve every `Q*` open question with the user; the intake gate must
    report `ready`.
@@ -55,7 +62,7 @@ WorkflowToolSet).
 
 ## Imported connectivity
 
-- `wire_import` (and `python -m wire import --from circuit-json|csv|
+- `wire_import` (and `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" import --from circuit-json|csv|
   mech-envelope`) merges validated source files into the contract and
   records them as `I*` imported sources with sha256. Cite I* ids in the
   intake instead of duplicating imported values as R*/A*.

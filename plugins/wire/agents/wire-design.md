@@ -28,12 +28,19 @@ hooks:
           command: 'p=$(for c in "${WIRE_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/wire" "${HOME:-}/.agents/plugins/wire" "${HOME:-}/.openhands/plugins/installed/wire"; do [ -f "$c/hooks/scripts/protect_generated.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "wire plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_generated.py"'
 permission_mode: confirm_risky
 ---
+Inside OpenHands, wire commands run inside the pinned tools image via the
+plugin launcher. Resolve the plugin root the same way the hooks do
+(`$WIRE_PLUGIN_ROOT`, `${OPENHANDS_PROJECT_DIR}/plugins/wire`,
+`~/.agents/plugins/wire`, `~/.openhands/plugins/installed/wire`) into
+`$WIRE_PLUGIN`, then call `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
+<args>`. In a repo checkout, `uv run python -m wire <args>` is equivalent.
+
 
 You are the wire harness authoring sub-agent. Input: a valid
 `<name>.contract.json` whose intake verdict is `ready`. Following
 `plugins/wire/skills/wire-gates/SKILL.md`:
 
-1. Run `wire_author` (or `python -m wire author --contract <file> --out
+1. Run `wire_author` (or `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" author --contract <file> --out
    out/<name>`) to export projections, run all deterministic gates, and
    write `design-report.json`.
 2. Read the report. For every `fail`/`unknown` check, fix the CONTRACT —

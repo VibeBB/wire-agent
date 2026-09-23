@@ -9,12 +9,19 @@ triggers:
   - wire brief
   - ハーネス契約
 ---
+Inside OpenHands, wire commands run inside the pinned tools image via the
+plugin launcher. Resolve the plugin root the same way the hooks do
+(`$WIRE_PLUGIN_ROOT`, `${OPENHANDS_PROJECT_DIR}/plugins/wire`,
+`~/.agents/plugins/wire`, `~/.openhands/plugins/installed/wire`) into
+`$WIRE_PLUGIN`, then call `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
+<args>`. In a repo checkout, `uv run python -m wire <args>` is equivalent.
+
 
 # Harness contract authoring
 
 The contract (`<name>.contract.json`) is the single source of truth. Author
 it against `src/wire/contract.py` (`HarnessContract`, `schema_version: 1`)
-and validate with `python -m wire intake` or `wire_validate_contract`.
+and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `wire_validate_contract`.
 
 ## Element id conventions
 
@@ -62,7 +69,7 @@ and validate with `python -m wire intake` or `wire_validate_contract`.
   speaker recorded);
 - `A*` — an assumption you made, with `rationale`;
 - `Q*` — an open question (blocks `ready` until resolved);
-- `I*` — an `imported_sources` entry created by `python -m wire import`.
+- `I*` — an `imported_sources` entry created by `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" import`.
 
 `check_intake` fails (`blocked`) on sha mismatch (contract edited after
 intake), unmapped or unknown elements, unknown source ids, and elements

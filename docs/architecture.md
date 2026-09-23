@@ -86,3 +86,8 @@ There is no acd-agent dependency anywhere in the repository.
 - Text I/O always `encoding="utf-8"`.
 - `python -m wire` and the MCP tools share the same functions; outputs are
   identical JSON payloads.
+- Inside OpenHands, `plugins/wire/scripts/wire_launcher.py` is the single
+  exec point: hooks and the MCP server call it, and it runs the module
+  inside the pinned `wire-tools` image (source mounted at `/plugin-src`,
+  the workspace bind-mounted at its own path). Host Python only needs to
+  launch docker.

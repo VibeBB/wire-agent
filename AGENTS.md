@@ -80,6 +80,10 @@ docs/adr/  docs/research/
   from prompts.
 - The `wire` MCP server exposes only deterministic entry points (the same
   functions `python -m wire` uses). It contains no agent logic.
+- `plugins/wire/scripts/wire_launcher.py` is the single exec point for
+  hooks and the MCP server: it runs `python -m wire` inside the pinned
+  `wire-tools` image. Any argument other than `mcp_server`/`prewarm` is
+  forwarded to `wire.cli`, so docs write `python3 <launcher> <args>`.
 - Skills use `triggers:` (`KeywordTrigger`).
 
 ## Parallel execution
@@ -104,7 +108,7 @@ record the reason and a re-check deadline in
 `scripts/dependency_update_deferrals.json`.
 
 Published image digests live in `docker/image-digests.json`, written only
-by the planned `publish-wire-images.yml` workflow; do not commit
+by the `publish-wire-images.yml` workflow; do not commit
 placeholder entries.
 
 ## Verification

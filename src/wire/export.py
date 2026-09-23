@@ -301,18 +301,26 @@ def _pin_table_svg_body(
             )
     nets = contract.net_map()
     types = contract.wire_type_map()
+    label_slots: dict[tuple[float, float], int] = {}
     for wire in sorted(contract.wires, key=lambda w: w.id):
         ax, ay, bx, by, mid_x = _wire_anchors(contract, positions, column_of, wire)
         net = nets[wire.net]
         wtype = types[wire.wire_type]
         color = _SIGNAL_COLORS[net.signal_class]
         dash = ' stroke-dasharray="4 3"' if wtype.shield != "none" else ""
+        # Wires sharing a routing channel (parallel runs on one connector
+        # pair, or crossing runs on mirrored pairs) are staggered 16px per
+        # slot so every vertical leg and label stays legible.
+        slot_key = (mid_x, (ay + by) / 2)
+        slot = label_slots.get(slot_key, 0)
+        label_slots[slot_key] = slot + 1
+        run_x = mid_x + slot * 16.0
         parts.append(
-            f'<path d="M {_num(ax)} {_num(ay)} H {_num(mid_x)} V {_num(by)} H {_num(bx)}" '
+            f'<path d="M {_num(ax)} {_num(ay)} H {_num(run_x)} V {_num(by)} H {_num(bx)}" '
             f'fill="none" stroke="{color}" stroke-width="1.5"{dash}/>'
         )
         parts.append(
-            f'<text x="{_num(mid_x)}" y="{_num((ay + by) / 2 - 4)}" font-size="10" '
+            f'<text x="{_num(run_x)}" y="{_num((ay + by) / 2 - 4)}" font-size="10" '
             f'fill="{color}" text-anchor="middle">{_esc(_wire_label(wire, wtype, net))}</text>'
         )
     for route in contract.routes:
