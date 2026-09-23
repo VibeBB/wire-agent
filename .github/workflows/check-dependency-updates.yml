@@ -9,6 +9,10 @@ permissions:
   contents: read
   issues: write
 
+concurrency:
+  group: check-dependency-updates
+  cancel-in-progress: false
+
 jobs:
   report:
     runs-on: ubuntu-26.04
@@ -46,11 +50,19 @@ jobs:
           # does not exist yet (it did on mechanical-agent's first run).
           gh label create dependency-updates --repo "$GITHUB_REPOSITORY" \
             --color 0366d6 --description "Dependency update report" --force
-          issue=$(gh issue list --label dependency-updates --state open \
-            --json number --jq '.[0].number' || true)
-          if [ -z "$issue" ]; then
-            gh issue create --title "Dependency update check report" \
-              --label dependency-updates --body-file report.md
+          outdated=$(python3 -c 'import json; d = json.load(open("report.json", encoding="utf-8")); print(sum(1 for g in d.values() for s in g if s["outdated"]))')
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label dependency-updates \
+            --search "in:title Dependency update check report" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file report.md
           else
-            gh issue comment "$issue" --body-file report.md
+            number=$(gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Dependency update check report" \
+              --label dependency-updates --body-file report.md | sed 's#.*/##')
+          fi
+          if [ "$outdated" = "0" ] && [ -n "$number" ]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" \
+              --comment "All checked dependencies are current."
           fi
