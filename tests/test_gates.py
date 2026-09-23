@@ -173,3 +173,35 @@ def test_manifest_passes_after_export(tmp_path: Path) -> None:
     by_id = {c.id: c.status for c in report.checks}
     assert by_id["manifest_integrity"] == "pass"
     assert report.verdict == "pass"
+
+
+def test_splice_single_leg_fails() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}]
+    data["wires"][0]["to_endpoint"] = {"splice": "SP1"}
+    _, by_id, verdict = _verdict(data)
+    assert verdict == "fail"
+    assert "fail" in by_id["splice_integrity"]
+
+
+def test_splice_across_nets_fails() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}]
+    data["wires"][0]["to_endpoint"] = {"splice": "SP1"}
+    data["wires"][1]["to_endpoint"] = {"splice": "SP1"}
+    _, by_id, verdict = _verdict(data)
+    assert verdict == "fail"
+    assert "fail" in by_id["splice_integrity"]
+
+
+def test_splice_passes_with_two_legs_one_net() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}]
+    data["wires"][0]["to_endpoint"] = {"splice": "SP1"}
+    leg = dict(data["wires"][0])
+    leg["id"] = "W9"
+    leg["from_endpoint"] = {"splice": "SP1"}
+    leg["to_endpoint"] = {"connector": "C2", "cavity": "2"}
+    data["wires"].append(leg)
+    _, by_id, _ = _verdict(data, None)
+    assert "fail" not in by_id["splice_integrity"]

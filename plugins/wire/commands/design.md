@@ -19,9 +19,10 @@ deprecated DelegateTool or WorkflowToolSet.
 `wire-brief` writes `<name>.contract.json` plus `<name>.intake.json`. The
 contract declares connectors (cavities, ratings, keying), wire types (gauge,
 ampacity + derating, insulation, bend factor), nets (signal class, voltage,
-current), wires (endpoints, length, terminals), routes (segments with
-declared min bend radius, protection), segregations, and service
-expectations. A blocked intake stops delegation — never hand an unready
+current, twisted pairs, shield requirements), wires (connector-cavity or
+splice endpoints, insulation `color` codes, length, terminals), splices,
+routes (segments with declared min bend radius, protection), segregations,
+and service expectations. A blocked intake stops delegation — never hand an unready
 contract to `wire-design`.
 
 Then delegate to `wire-design`: it runs `wire_author` (export wire list, cut

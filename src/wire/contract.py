@@ -126,12 +126,32 @@ class WireType(BaseModel):
 
 
 class Endpoint(BaseModel):
-    """One termination: connector + cavity."""
+    """One termination: a connector cavity, or a leg on a splice junction."""
 
     model_config = ConfigDict(extra="forbid")
 
-    connector: str = Field(pattern=r"^C[0-9]+$")
-    cavity: str = Field(min_length=1)
+    connector: str | None = Field(default=None, pattern=r"^C[0-9]+$")
+    cavity: str | None = Field(default=None, min_length=1)
+    splice: str | None = Field(default=None, pattern=r"^SP[0-9]+$")
+
+    @model_validator(mode="after")
+    def validate_endpoint(self) -> Endpoint:
+        if self.splice is not None:
+            if self.connector is not None or self.cavity is not None:
+                raise ValueError("splice endpoints cannot set connector or cavity")
+        elif self.connector is None or self.cavity is None:
+            raise ValueError("endpoints need connector+cavity or splice")
+        return self
+
+
+class HarnessSplice(BaseModel):
+    """A galvanic junction joining several wire legs (crimp/solder/ferrule)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^SP[0-9]+$")
+    kind: Literal["crimp", "solder", "ultrasonic", "ferrule"] = "crimp"
+    source: ElementSource | None = None
 
 
 class HarnessWire(BaseModel):
@@ -247,6 +267,7 @@ class HarnessContract(BaseModel):
     nets: list[HarnessNet] = Field(default_factory=list[HarnessNet])
     wires: list[HarnessWire] = Field(default_factory=list[HarnessWire])
     routes: list[HarnessRoute] = Field(default_factory=list[HarnessRoute])
+    splices: list[HarnessSplice] = Field(default_factory=list[HarnessSplice])
     segregations: list[SegregationPolicy] = Field(default_factory=list[SegregationPolicy])
     service: ServiceExpectation | None = None
     imported_sources: list[ImportedSource] = Field(default_factory=list[ImportedSource])
@@ -259,6 +280,7 @@ class HarnessContract(BaseModel):
             (self.nets, "net"),
             (self.wires, "wire"),
             (self.routes, "route"),
+            (self.splices, "splice"),
             (self.imported_sources, "imported source"),
         ):
             ids = [element.id for element in collection]
@@ -270,6 +292,7 @@ class HarnessContract(BaseModel):
             for connector in self.connectors
             for cavity in connector.cavities
         }
+        splice_ids = {splice.id for splice in self.splices}
         wire_type_ids = {wire_type.id for wire_type in self.wire_types}
         net_ids = {net.id for net in self.nets}
         route_ids = {route.id for route in self.routes}
@@ -284,9 +307,12 @@ class HarnessContract(BaseModel):
             if wire.route is not None and wire.route not in route_ids:
                 raise ValueError(f"wire {wire.id} references unknown route")
             for endpoint in (wire.from_endpoint, wire.to_endpoint):
-                if endpoint.connector not in connector_ids:
+                if endpoint.splice is not None:
+                    if endpoint.splice not in splice_ids:
+                        raise ValueError(f"wire {wire.id} references unknown splice")
+                elif endpoint.connector not in connector_ids:
                     raise ValueError(f"wire {wire.id} references unknown connector")
-                if (endpoint.connector, endpoint.cavity) not in cavities:
+                elif (endpoint.connector, endpoint.cavity) not in cavities:
                     raise ValueError(
                         f"wire {wire.id} references unknown cavity "
                         f"{endpoint.connector}:{endpoint.cavity}"
@@ -301,6 +327,7 @@ class HarnessContract(BaseModel):
         ids.extend(net.id for net in self.nets)
         ids.extend(wire.id for wire in self.wires)
         ids.extend(route.id for route in self.routes)
+        ids.extend(splice.id for splice in self.splices)
         return ids
 
     def connector_map(self) -> dict[str, HarnessConnector]:
@@ -314,6 +341,9 @@ class HarnessContract(BaseModel):
 
     def route_map(self) -> dict[str, HarnessRoute]:
         return {route.id: route for route in self.routes}
+
+    def splice_map(self) -> dict[str, HarnessSplice]:
+        return {splice.id: splice for splice in self.splices}
 
 
 def contract_sha256(contract: HarnessContract) -> str:

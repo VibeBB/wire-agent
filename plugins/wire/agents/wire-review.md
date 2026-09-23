@@ -26,7 +26,15 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
    environment, does keying prevent cross-mating?
 2. Topology review: read `harness-diagram.drawio.svg` (via vision if useful) —
    sensible connector placement, no accidental star grounds, analog and
-   power routing consistent with segregation intent.
+   power routing consistent with segregation intent. Legend: wire stroke
+   follows the physical insulation `color` (`X/Y` draws a striped second
+   color), unused cavities are greyed, a filled dot is a splice node,
+   dashed grey bands link twisted-pair wires, and same-connector loops
+   bump off the channel-facing edge. The SDK's FileEditorTool only sends
+   raster images (png/jpg/webp/bmp) to vision-capable LLMs — for a true
+   vision pass rasterize the SVG to PNG first if a renderer is available;
+   otherwise decode the embedded drawio model (base64 → raw-DEFLATE →
+   URL-decode) and review the XML topology directly.
 3. Report observations only. Never edit the contract or artifacts; the
    orchestrator folds findings back through the contract and reruns
    `wire_author`. A failed gate is a fact, not a suggestion — quote it

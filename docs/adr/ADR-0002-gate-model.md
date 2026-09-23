@@ -27,8 +27,9 @@ v0.1 gate set (each check is deterministic over the contract):
 
 | Check | Rule |
 | --- | --- |
-| `connectivity` | every wire endpoint resolves to a declared connector + cavity; every wire's net and route resolve |
+| `connectivity` | every wire endpoint resolves to a declared connector + cavity or a declared splice; every wire's net and route resolve |
 | `cavity_occupancy` | a cavity accepts at most one wire |
+| `splice_integrity` | every splice joins ≥2 wire legs, all on one net |
 | `netlist_coverage` | every declared net is carried by at least one wire |
 | `ampacity` | net current ≤ wire ampacity × ambient-temperature derating × bundle derating for the wire's route |
 | `voltage_drop` | wire resistance × current over declared length ≤ net drop budget (default 3% of nominal) |
