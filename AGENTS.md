@@ -84,7 +84,10 @@ docs/adr/  docs/research/
   hooks and the MCP server: it runs `python -m wire` inside the pinned
   `wire-tools` image. Any argument other than `mcp_server`/`prewarm` is
   forwarded to `wire.cli`, so docs write `python3 <launcher> <args>`.
-- Skills use `triggers:` (`KeywordTrigger`).
+- Skills use `triggers:` (`KeywordTrigger`). A `paths:` glob list makes
+  a skill a path-triggered rule instead (deterministic injection when a
+  matching file is touched); the two mechanisms are exclusive — keyword
+  skills stay model-invocable, rules live in their own `skills/` entries.
 
 ## Parallel execution
 

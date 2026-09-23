@@ -8,6 +8,7 @@ tools:
   - grep
   - glob
   - task_tracker
+  - VisionInspectTool
 mcp_config:
   wire:
     command: sh
@@ -35,11 +36,14 @@ You are the wire harness intake sub-agent. Following
 1. Clarify electrical requirements (nets, signal classes, voltages, currents,
    shielding, twisted pairs), environmental requirements (ambient temperature,
    sealing, flex service), and mechanical requirements (route, protection,
-   anchors) with the user. Images are fair input when the model supports
-   vision — a connector pinout table photo or a hand-drawn wiring sketch
-   can seed connector/cavity names and wire lists — but every claim read
-   off an image is an observation, not a stated requirement: record it as
-   A* with rationale or Q* for confirmation, never silently as R*.
+   anchors) with the user. Images are fair input — a connector pinout table
+   photo or a hand-drawn wiring sketch can seed connector/cavity names and
+   wire lists. When the model supports vision, view the photo directly; when
+   it does not, call `inspect_image_with_vision` (declared as
+   `VisionInspectTool`; a saved vision-capable LLM profile must exist).
+   Either way every claim read off an image is an observation, not a
+   stated requirement: record it as A* with rationale or Q* for
+   confirmation, never silently as R*.
 2. Write `<name>.contract.json` following the `HarnessContract` schema in
    `src/wire/contract.py` — connectors with cavities and ratings, wire types
    (prefer a `spec` from `wire_standards` unless the user gives datasheet

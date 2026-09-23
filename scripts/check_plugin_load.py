@@ -19,6 +19,7 @@ EXPECTED_AGENTS = {"wire-brief", "wire-design", "wire-review"}
 EXPECTED_SKILLS = {
     "wire-connectivity",
     "wire-contract",
+    "wire-contract-rules",
     "wire-gates",
     "wire-workflow",
 }
@@ -39,8 +40,12 @@ def _registered_tools() -> set[str]:
     import openhands.tools.glob.definition  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
     import openhands.tools.grep.definition  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
     import openhands.tools.task.definition  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
+    from openhands.sdk.tool.builtins import (  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
+        BUILT_IN_TOOL_CLASSES,
+    )
 
-    return set(list_registered_tools())
+    # resolve_tool falls back to BUILT_IN_TOOL_CLASSES for unregistered names.
+    return set(list_registered_tools()) | set(BUILT_IN_TOOL_CLASSES)
 
 
 def check_plugin(plugin_dir: Path) -> list[str]:
@@ -122,7 +127,8 @@ def main() -> int:
         return 1
     print(
         "plugin-load OK: agents={wire-brief,wire-design,wire-review} "
-        "skills={wire-connectivity,wire-contract,wire-gates,wire-workflow} "
+        "skills={wire-connectivity,wire-contract,wire-contract-rules,"
+        "wire-gates,wire-workflow} "
         "commands={design,doctor,export,gates} "
         "hooks={wire-doctor,protect-generated,report-design-status}"
     )

@@ -82,3 +82,10 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
 intake), unmapped or unknown elements, unknown source ids, and elements
 backed only by assumptions/questions — so every inferred value must be
 visible and named.
+
+## Canonical example
+
+`references/example-contract.json` ships inside this skill — a complete
+sensor-harness contract (connectors, wire types, nets, wires, routes,
+segregations, service) you can copy as a starting point even without the
+repo checkout.
