@@ -1,11 +1,15 @@
-"""harness-diagram.drawio.svg tests: valid SVG plus embedded drawio model."""
+"""harness diagram tests: the mxfile model behind the drawio projection.
+
+The rendered artifact is ``harness-diagram.drawio.svg`` when drawio-desktop
+is installed (its ``content`` attribute embeds the mxfile) and falls back to
+a plain ``harness-diagram.drawio`` mxfile without it; both decode to the same
+mxGraphModel.
+"""
 
 from __future__ import annotations
 
-import base64
 import urllib.parse
 import xml.etree.ElementTree as ET
-import zlib
 from pathlib import Path
 
 from helpers import example_contract_data
@@ -13,21 +17,26 @@ from wire.contract import HarnessContract
 from wire.export import export_design
 
 ARTIFACT = "harness-diagram.drawio.svg"
+FALLBACK = "harness-diagram.drawio"
 
 
-def _svg_root(out_dir: Path) -> ET.Element:
-    return ET.parse(out_dir / ARTIFACT).getroot()
+def _mxfile(out_dir: Path) -> ET.Element:
+    svg_path = out_dir / ARTIFACT
+    if svg_path.is_file():
+        content = ET.parse(svg_path).getroot().get("content")
+        assert content is not None
+        try:
+            mxfile = ET.fromstring(content)
+        except ET.ParseError:
+            mxfile = ET.fromstring(urllib.parse.unquote(content))
+    else:
+        mxfile = ET.parse(out_dir / FALLBACK).getroot()
+    assert mxfile.tag == "mxfile"
+    return mxfile
 
 
 def _embedded_cells(out_dir: Path) -> dict[str, ET.Element]:
-    """Decompress the root `content` attribute back into the drawio model."""
-    content = _svg_root(out_dir).get("content")
-    assert content is not None
-    inflated = zlib.decompress(base64.b64decode(content), wbits=-15)
-    xml_text = urllib.parse.unquote(inflated.decode("utf-8"))
-    mxfile = ET.fromstring(xml_text)
-    assert mxfile.tag == "mxfile"
-    model = mxfile.find("diagram/mxGraphModel")
+    model = _mxfile(out_dir).find("diagram/mxGraphModel")
     assert model is not None
     cells: dict[str, ET.Element] = {}
     for cell in model.iter("mxCell"):
@@ -43,11 +52,17 @@ def _export(tmp_path: Path) -> HarnessContract:
     return contract
 
 
-def test_drawio_svg_is_well_formed(tmp_path: Path) -> None:
+def test_drawio_projection_written(tmp_path: Path) -> None:
     _export(tmp_path)
-    root = _svg_root(tmp_path)
-    assert root.tag == "{http://www.w3.org/2000/svg}svg"
-    assert root.find("{http://www.w3.org/2000/svg}rect") is not None
+    rendered = tmp_path / ARTIFACT
+    if rendered.is_file():
+        # drawio-desktop render: svg with the mxfile embedded in `content`.
+        root = ET.parse(rendered).getroot()
+        assert root.tag == "{http://www.w3.org/2000/svg}svg"
+        assert "mxfile" in (root.get("content") or "")
+    else:
+        assert (tmp_path / FALLBACK).is_file()
+        assert _mxfile(tmp_path).get("host") == "wire-agent"
 
 
 def test_drawio_embedded_model_skeleton(tmp_path: Path) -> None:
@@ -86,6 +101,27 @@ def test_drawio_edges_bind_wire_endpoints(tmp_path: Path) -> None:
         assert wire.id in value and wire.net in value
 
 
+def test_drawio_wire_labels_get_unique_offsets(tmp_path: Path) -> None:
+    import copy
+
+    data = copy.deepcopy(example_contract_data())
+    for wid in ("W4", "W5"):
+        wire = copy.deepcopy(data["wires"][0])
+        wire["id"] = wid
+        data["wires"].append(wire)
+    contract = HarnessContract.model_validate(data)
+    export_design(contract, tmp_path)
+    cells = _embedded_cells(tmp_path)
+    offsets: list[float] = []
+    for wire in contract.wires:
+        geometry = cells[f"wire-{wire.id}"].find("mxGeometry")
+        assert geometry is not None
+        offset = geometry.find("mxPoint")
+        assert offset is not None and offset.get("as") == "offset"
+        offsets.append(float(offset.get("y") or "0"))
+    assert len(set(offsets)) == len(offsets)
+
+
 def test_drawio_edge_color_prefers_physical_wire_color(tmp_path: Path) -> None:
     """Physical insulation color wins; signal class is only the fallback."""
     import copy
@@ -113,9 +149,13 @@ def test_drawio_striped_wire_draws_second_color(tmp_path: Path) -> None:
     data["wires"][0]["color"] = "RD/BK"
     contract = HarnessContract.model_validate(data)
     export_design(contract, tmp_path)
-    svg_text = (tmp_path / ARTIFACT).read_text(encoding="utf-8")
-    assert svg_text.count('stroke="#d32f2f"') >= 1
-    assert svg_text.count('stroke="#1a1a1a"') >= 1
+    cells = _embedded_cells(tmp_path)
+    stripe = cells[f"wire-{data['wires'][0]['id']}-stripe"]
+    assert stripe.get("edge") == "1"
+    assert "strokeColor=#1a1a1a" in (stripe.get("style") or "")
+    assert "dashed=1" in (stripe.get("style") or "")
+    base = cells[f"wire-{data['wires'][0]['id']}"]
+    assert "strokeColor=#d32f2f" in (base.get("style") or "")
 
 
 def test_drawio_splice_vertex_and_leg_edges(tmp_path: Path) -> None:
@@ -139,8 +179,7 @@ def test_drawio_splice_vertex_and_leg_edges(tmp_path: Path) -> None:
     leg_edge = cells["wire-W9"]
     assert leg_edge.get("source") == "splice-SP1"
     assert leg_edge.get("target") == "cav-C2:4"
-    svg_text = (tmp_path / ARTIFACT).read_text(encoding="utf-8")
-    assert "<circle" in svg_text
+    assert "ellipse" in (splice.get("style") or "")
 
 
 def test_drawio_loop_wire_bumps_off_inner_edge(tmp_path: Path) -> None:

@@ -16,11 +16,13 @@ from wire.export import export_design
 from wire.gates import run_gates
 from wire.report import write_report
 
+DRAWIO_PRESENT = shutil.which("drawio") is not None and shutil.which("xvfb-run") is not None
+DIAGRAM_ARTIFACT = "harness-diagram.drawio.svg" if DRAWIO_PRESENT else "harness-diagram.drawio"
 EXPECTED_ARTIFACTS = {
     "bom.csv",
     "bom.json",
     "cut-table.csv",
-    "harness-diagram.drawio.svg",
+    DIAGRAM_ARTIFACT,
     "manifest.json",
     "provenance.json",
     "wire-list.csv",
@@ -98,52 +100,35 @@ def test_cut_table_groups_identical_wires(tmp_path: Path) -> None:
     assert len(rows) == 3  # header + 2 groups
 
 
-def test_harness_diagram_wire_labels_do_not_overlap(tmp_path: Path) -> None:
-    import copy
-    import re
-
-    data = copy.deepcopy(example_contract_data())
-    # Parallel wires on one connector pair already collide; add mirrored
-    # connectors and two crossing wires whose midpoints coincide, so the
-    # label staggering is exercised on both collision modes.
-    c3 = copy.deepcopy(data["connectors"][0])
-    c3["id"] = "C3"
-    c4 = copy.deepcopy(data["connectors"][1])
-    c4["id"] = "C4"
-    data["connectors"].extend([c3, c4])
-    for wid, a, b in (("W4", "C1", "C4"), ("W5", "C3", "C2")):
-        wire = copy.deepcopy(data["wires"][0])
-        wire["id"] = wid
-        wire["from_endpoint"]["connector"] = a
-        wire["to_endpoint"]["connector"] = b
-        data["wires"].append(wire)
-    contract = HarnessContract.model_validate(data)
-    export_design(contract, tmp_path)
-    svg = (tmp_path / "harness-diagram.drawio.svg").read_text(encoding="utf-8")
-    anchors = re.findall(
-        r'<text x="([\d.]+)" y="([\d.]+)" font-size="10" fill="#[0-9a-f]+" '
-        r'text-anchor="middle">',
-        svg,
-    )
-    assert len(anchors) == len(data["wires"])
-    assert len(set(anchors)) == len(anchors)
-
-
-def test_export_png_raster(tmp_path: Path, tmp_path_factory: TempPathFactory) -> None:
-    """--png adds a vision-review raster; librsvg/font versions may shift
-    its bytes across hosts, so the manifest records the actual hash."""
-    if shutil.which("rsvg-convert") is None:
-        pytest.skip("rsvg-convert (librsvg2-bin) not installed")
+def test_export_drawio_renders(tmp_path: Path, tmp_path_factory: TempPathFactory) -> None:
+    """--png/--drawio add drawio-desktop renders; drawio/font versions may
+    shift their bytes across hosts, so the manifest records actual hashes."""
+    if not DRAWIO_PRESENT:
+        pytest.skip("drawio-desktop/xvfb not installed")
     contract = HarnessContract.model_validate(example_contract_data())
-    manifest = export_design(contract, tmp_path, png=True)
+    manifest = export_design(contract, tmp_path, png=True, drawio=["pdf", "xml"])
     png = tmp_path / "harness-diagram.png"
     assert png.read_bytes().startswith(b"\x89PNG")
-    assert {f["path"] for f in manifest["files"]} == (
-        EXPECTED_ARTIFACTS - {"manifest.json"} | {"harness-diagram.png"}
-    )
+    assert (tmp_path / "harness-diagram.pdf").read_bytes().startswith(b"%PDF")
+    assert (tmp_path / "harness-diagram.drawio").read_text(encoding="utf-8").startswith("<mxfile")
+    expected = EXPECTED_ARTIFACTS - {"manifest.json"} | {
+        "harness-diagram.png",
+        "harness-diagram.pdf",
+        "harness-diagram.drawio",
+    }
+    assert {f["path"] for f in manifest["files"]} == expected
     entry = next(f for f in manifest["files"] if f["path"] == "harness-diagram.png")
     assert entry["sha256"] == hashlib.sha256(png.read_bytes()).hexdigest()
-    # Same host, same librsvg: repeated exports stay byte-identical.
+    # Same host, same drawio: repeated exports stay byte-identical.
     other = tmp_path_factory.mktemp("other")
-    export_design(contract, other, png=True)
+    export_design(contract, other, png=True, drawio=["pdf", "xml"])
     assert (other / "harness-diagram.png").read_bytes() == png.read_bytes()
+
+
+def test_export_drawio_render_requires_drawio(tmp_path: Path) -> None:
+    """Without drawio-desktop the --png/--drawio renders fail closed."""
+    if DRAWIO_PRESENT:
+        pytest.skip("drawio-desktop present")
+    contract = HarnessContract.model_validate(example_contract_data())
+    with pytest.raises(RuntimeError):
+        export_design(contract, tmp_path, png=True)

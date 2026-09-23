@@ -21,13 +21,22 @@ LABEL org.opencontainers.image.source="https://github.com/VibeBB/wire-agent" \
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
+ARG DRAWIO_DESKTOP_VERSION=31.4.5
+ARG DRAWIO_DESKTOP_SHA256=296729ee18f781dc82deb757de2b3399fbe04fe0ddad3093909013e707ee2ae4
+
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         ca-certificates \
         curl \
         fonts-ipafont \
         git \
-        librsvg2-bin \
+        libasound2t64 \
+        xvfb \
+    && curl -fsSL -o /tmp/drawio.deb \
+        "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
+    && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \
+    && apt-get install -y /tmp/drawio.deb \
+    && rm /tmp/drawio.deb \
     && rm -rf /var/lib/apt/lists/*
 
 RUN uv python install 3.12 \

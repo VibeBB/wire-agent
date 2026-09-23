@@ -21,7 +21,7 @@ from typing import Any
 
 from .contract import HarnessContract, load_contract
 from .doctor import run_doctor
-from .export import export_design
+from .export import drawio_export_formats, export_design, run_drawio_export
 from .gates import run_gates
 from .imports import (
     import_connectivity,
@@ -56,6 +56,10 @@ def _load(path: str) -> HarnessContract:
     return load_contract(Path(path))
 
 
+def _drawio_formats(args: argparse.Namespace) -> list[str]:
+    return [f.strip() for f in getattr(args, "drawio", "").split(",") if f.strip()]
+
+
 def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
     out_dir = Path(args.out)
     try:
@@ -63,8 +67,13 @@ def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     try:
-        export_design(contract, out_dir, png=getattr(args, "png", False))
-    except RuntimeError as exc:
+        export_design(
+            contract,
+            out_dir,
+            png=getattr(args, "png", False),
+            drawio=_drawio_formats(args),
+        )
+    except (KeyError, RuntimeError) as exc:
         return {"verdict": "fail", "stage": "export", "detail": str(exc)}
     gate_report = run_gates(contract, out_dir)
     report_path = write_report(contract, gate_report, out_dir)
@@ -80,14 +89,32 @@ def cmd_export(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     try:
-        manifest = export_design(contract, out_dir, png=getattr(args, "png", False))
-    except RuntimeError as exc:
+        manifest = export_design(
+            contract,
+            out_dir,
+            png=getattr(args, "png", False),
+            drawio=_drawio_formats(args),
+        )
+    except (KeyError, RuntimeError) as exc:
         return {"verdict": "fail", "stage": "export", "detail": str(exc)}
     return {
         "verdict": "pass",
         "design": contract.name,
         "files": [entry["path"] for entry in manifest["files"]],
     }
+
+
+def cmd_drawio(args: argparse.Namespace) -> dict[str, Any]:
+    try:
+        result = run_drawio_export(
+            Path(args.input),
+            Path(args.out) if args.out else None,
+            args.format,
+            args.options,
+        )
+    except RuntimeError as exc:
+        return {"verdict": "fail", "stage": "drawio", "detail": str(exc)}
+    return {"verdict": "pass", **result}
 
 
 def cmd_gates(args: argparse.Namespace) -> dict[str, Any]:
@@ -149,7 +176,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--png",
         action="store_true",
-        help="also write harness-diagram.png (raster of the diagram, for vision review)",
+        help="also write harness-diagram.png via drawio-desktop (for vision review)",
+    )
+    p.add_argument(
+        "--drawio",
+        default="",
+        metavar="FORMATS",
+        help=f"comma-separated drawio -x exports: {','.join(drawio_export_formats())}",
     )
 
     p = sub.add_parser("export")
@@ -158,8 +191,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--png",
         action="store_true",
-        help="also write harness-diagram.png (raster of the diagram, for vision review)",
+        help="also write harness-diagram.png via drawio-desktop (for vision review)",
     )
+    p.add_argument(
+        "--drawio",
+        default="",
+        metavar="FORMATS",
+        help=f"comma-separated drawio -x exports: {','.join(drawio_export_formats())}",
+    )
+
+    p = sub.add_parser("drawio")
+    p.add_argument("--in", dest="input", required=True, help="input file (drawio/vsdx/csv/mermaid)")
+    p.add_argument("--out", default=None)
+    p.add_argument("--format", default=None)
+    p.add_argument("options", nargs=argparse.REMAINDER, help="extra drawio -x flags")
 
     p = sub.add_parser("gates")
     p.add_argument("--contract", required=True)
@@ -183,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         "intake": cmd_intake,
         "author": cmd_author,
         "export": cmd_export,
+        "drawio": cmd_drawio,
         "gates": cmd_gates,
         "import": cmd_import,
     }

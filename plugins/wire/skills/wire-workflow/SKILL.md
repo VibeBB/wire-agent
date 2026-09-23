@@ -43,9 +43,11 @@ every vision output stays an L2 steering aid, never a verdict:
   sketches can seed connector/cavity/wire candidates. Claims read off an
   image land in the intake as A* (rationale attached) or Q* — never R*.
 - **Diagram review**: `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" export --png` writes
-  `harness-diagram.png`, the pin-table raster the FileEditorTool can send
-  to the vision model. Check legibility and topology against the legend
-  in `plugins/wire/agents/wire-review.md`.
+  `harness-diagram.png`, a drawio-desktop render the FileEditorTool can
+  send to the vision model. Check legibility and topology against the
+  legend in `plugins/wire/agents/wire-review.md`. `--drawio` takes more
+  formats (jpg, pdf, html, svg, xml); `wire_drawio` / `python -m wire
+  drawio` expose the full `drawio -x` surface for arbitrary inputs.
 - **Manufactured-harness crosscheck**: a photo of a built harness vs the
   PNG can flag obvious mismatches (missing cavity population, wrong
   insulation color) as observations for the user — the contract is not
@@ -60,7 +62,8 @@ every vision output stays an L2 steering aid, never a verdict:
 - 分離 (segregation): signal-class separation policies over routes and
   connectors.
 - 製造 (manufacturing): wire list, cut table, BOM, harness diagram
-  (`.drawio.svg`, plus a `.png` raster on `--png` for vision review),
+  (`.drawio.svg` rendered by drawio-desktop, `.drawio` mxfile without
+  it, plus `--drawio` png/jpg/pdf/html/svg/xml review renders),
   manifest + provenance — deterministic projections of the contract.
 
 ## Boundaries

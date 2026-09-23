@@ -64,6 +64,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             "contract_path": {"type": "string"},
             "out_dir": {"type": "string"},
             "png": {"type": "boolean"},
+            "drawio": {"type": "array", "items": {"type": "string"}},
         },
         "required": ["contract_path", "out_dir"],
         "additionalProperties": False,
@@ -86,6 +87,17 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             "out_path": {"type": "string"},
         },
         "required": ["contract_path", "source_path", "kind"],
+        "additionalProperties": False,
+    },
+    "wire_drawio": {
+        "type": "object",
+        "properties": {
+            "input_path": {"type": "string"},
+            "output_path": {"type": "string"},
+            "format": {"type": "string"},
+            "options": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["input_path"],
         "additionalProperties": False,
     },
 }
@@ -125,16 +137,21 @@ _DESCRIPTIONS: dict[str, str] = {
     "wire_validate_contract": "Validate a harness contract JSON against the schema.",
     "wire_intake": "Run the intake/provenance gate between contract and intake files.",
     "wire_author": (
-        "Export projections (optionally the PNG raster), run all gates, write the design report."
+        "Export projections (optionally drawio-desktop renders: png, jpg, pdf, html, xml), "
+        "run all gates, write the design report."
     ),
     "wire_gates": "Re-run all deterministic gates on existing artifacts.",
     "wire_import": "Merge a connectivity or envelope source file into a contract.",
+    "wire_drawio": (
+        "Export a drawio/vsdx/csv/mermaid file through drawio-desktop -x "
+        "(pdf/svg/png/jpg/xml/html; options pass extra drawio flags)."
+    ),
 }
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
-    from .cli import cmd_author, cmd_gates, cmd_import, cmd_intake
+    from .cli import cmd_author, cmd_drawio, cmd_gates, cmd_import, cmd_intake
 
     if name == "wire_doctor":
         return _text(run_doctor())
@@ -156,6 +173,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                     contract=arguments["contract_path"],
                     out=arguments["out_dir"],
                     png=arguments.get("png", False),
+                    drawio=",".join(arguments.get("drawio", [])),
                 )
             )
         )
@@ -177,6 +195,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
             if result.get("verdict") == "pass":
                 result["merged_contract"] = json.loads(Path(out_path).read_text(encoding="utf-8"))
             return _text(result)
+    if name == "wire_drawio":
+        return _text(
+            cmd_drawio(
+                _ns(
+                    input=arguments["input_path"],
+                    out=arguments.get("output_path"),
+                    format=arguments.get("format"),
+                    options=arguments.get("options", []),
+                )
+            )
+        )
     raise ValueError(f"unknown tool {name}")
 
 
