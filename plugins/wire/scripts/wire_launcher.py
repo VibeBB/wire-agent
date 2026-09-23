@@ -160,7 +160,14 @@ def _ensure_image(plugin_root: Path) -> str:
         ):
             return ref
         print(f"wire_launcher: pulling tools image {ref}", file=sys.stderr)
-        if subprocess.run([docker, "pull", ref], check=False).returncode == 0:
+        if (
+            subprocess.run(
+                [docker, "pull", ref],
+                check=False,
+                stdout=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        ):
             return ref
         print(f"wire_launcher: pull failed for {ref}", file=sys.stderr)
 
@@ -195,6 +202,7 @@ def _ensure_image(plugin_root: Path) -> str:
             str(dockerfile.parent.parent),
         ],
         check=False,
+        stdout=subprocess.DEVNULL,
     )
     if result.returncode != 0:
         raise RuntimeError(f"docker build failed for {tag}")
