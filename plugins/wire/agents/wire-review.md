@@ -7,8 +7,8 @@ tools:
   - file_editor
   - grep
   - glob
-  - inspect_image_with_vision
-  - think
+  - VisionInspectTool
+  - ThinkTool
 max_iteration_per_run: 30
 max_budget_per_run: 2.0
 when_to_use_examples:
@@ -32,8 +32,8 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
    `harness-diagram.png` (drawio-desktop renders it). When your model is
    vision-capable the FileEditorTool sends the raster to it directly;
    when it is not, the SDK replaces the image with a reference — call
-   `inspect_image_with_vision` (it consults a saved vision-capable LLM
-   profile; if none exists, fall back to decoding the model below).
+   `inspect_image_with_vision` (declared as `VisionInspectTool`; it
+   consults a saved vision-capable LLM profile; if none exists, fall back to decoding the model below).
    Sensible connector placement, no accidental star grounds, analog and
    power routing consistent with segregation intent. Legend: wire stroke
    follows the physical insulation `color` (`X/Y` draws a striped second
