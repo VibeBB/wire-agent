@@ -28,8 +28,11 @@ jobs:
     # checks + merge wait.
     timeout-minutes: 45
     permissions:
+      # Approves action_required runs on the version-bump branch.
       actions: write
+      # Pushes the version bump, directly or via a bot branch.
       contents: write
+      # Opens and auto-merges the version-bump pull request.
       pull-requests: write
     outputs:
       version: ${{ steps.bump.outputs.version }}
@@ -220,6 +223,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: release-install-smoke
       - name: Sync dependencies
         run: uv sync --locked --group sdk-check
       - name: Smoke-test remote install
@@ -234,6 +238,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
+      # Creates the GitHub release and its tag.
       contents: write
     env:
       VERSION: ${{ needs.bump-version.outputs.version }}
@@ -246,6 +251,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: release
       - name: Sync dependencies
         run: uv sync --locked
       - name: Author example harness
