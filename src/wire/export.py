@@ -193,21 +193,27 @@ def _harness_svg(contract: HarnessContract) -> str:
         )
         label = f"{c.id} {c.family} ({len(c.cavities)}p)"
         parts.append(f'<text x="{x + 8}" y="{y + 17}">{_esc(label)}</text>')
+    label_slots: dict[tuple[float, float], int] = {}
     for wire in sorted(contract.wires, key=lambda w: w.id):
         x1, y1 = positions[wire.from_endpoint.connector]
         x2, y2 = positions[wire.to_endpoint.connector]
-        cy = (y1 + y2) / 2 + box_h / 2 + 4
+        # Wires sharing a label anchor (parallel runs on one connector pair,
+        # or crossing runs on mirrored pairs) are staggered 14px per slot so
+        # every curve and label stays legible.
+        mid_x = (x1 + x2 + box_w) / 2
+        slot_key = (mid_x, (y1 + y2) / 2)
+        slot = label_slots.get(slot_key, 0)
+        label_slots[slot_key] = slot + 1
+        cy = (y1 + y2) / 2 + box_h / 2 + 4 + slot * 14
         wtype = types[wire.wire_type]
         net = nets[wire.net]
         label = f"{wire.id} {wtype.name} {net.id}/{net.signal_class} {wire.length_m}m"
         parts.append(
-            f'<path d="M {x1 + box_w} {y1 + box_h / 2} C {(x1 + x2 + box_w) / 2} {cy}, '
-            f'{(x1 + x2 + box_w) / 2} {cy}, {x2} {y2 + box_h / 2}" '
+            f'<path d="M {x1 + box_w} {y1 + box_h / 2} C {mid_x} {cy}, '
+            f'{mid_x} {cy}, {x2} {y2 + box_h / 2}" '
             f'fill="none" stroke="#2255aa" stroke-width="1.4"/>'
         )
-        parts.append(
-            f'<text x="{(x1 + x2 + box_w) / 2 - 110}" y="{cy - 4}" fill="#225">{_esc(label)}</text>'
-        )
+        parts.append(f'<text x="{mid_x - 110}" y="{cy - 4}" fill="#225">{_esc(label)}</text>')
     for route in contract.routes:
         parts.append(
             f"<!-- route {route.id}: {len(route.segments)} segments, "

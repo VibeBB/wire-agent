@@ -94,3 +94,30 @@ def test_cut_table_groups_identical_wires(tmp_path: Path) -> None:
     rows = (out / "cut-table.csv").read_text(encoding="utf-8").splitlines()
     assert rows[0].startswith("wire_type,")
     assert len(rows) == 3  # header + 2 groups
+
+
+def test_harness_diagram_wire_labels_do_not_overlap(tmp_path: Path) -> None:
+    import copy
+    import re
+
+    data = copy.deepcopy(example_contract_data())
+    # Parallel wires on one connector pair already collide; add mirrored
+    # connectors and two crossing wires whose midpoints coincide, so the
+    # label staggering is exercised on both collision modes.
+    c3 = copy.deepcopy(data["connectors"][0])
+    c3["id"] = "C3"
+    c4 = copy.deepcopy(data["connectors"][1])
+    c4["id"] = "C4"
+    data["connectors"].extend([c3, c4])
+    for wid, a, b in (("W4", "C1", "C4"), ("W5", "C3", "C2")):
+        wire = copy.deepcopy(data["wires"][0])
+        wire["id"] = wid
+        wire["from_endpoint"]["connector"] = a
+        wire["to_endpoint"]["connector"] = b
+        data["wires"].append(wire)
+    contract = HarnessContract.model_validate(data)
+    export_design(contract, tmp_path)
+    svg = (tmp_path / "harness-diagram.svg").read_text(encoding="utf-8")
+    anchors = re.findall(r'<text x="([\d.]+)" y="([\d.]+)" fill="#225">', svg)
+    assert len(anchors) == len(data["wires"])
+    assert len(set(anchors)) == len(anchors)
