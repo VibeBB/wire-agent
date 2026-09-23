@@ -1,0 +1,56 @@
+name: Locked image check
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "40 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: locked-image-check
+  cancel-in-progress: false
+
+jobs:
+  check-lock:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      present: ${{ steps.lock.outputs.present }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: lock
+        run: |
+          if [ -s docker/image-digests.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+  check:
+    needs: check-lock
+    if: needs.check-lock.outputs.present == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run python scripts/pull_locked_image.py --entry wire_tools
+      - id: image
+        run: echo "ref=$(uv run python scripts/print_locked_image.py --entry wire_tools)" >> "$GITHUB_OUTPUT"
+      # e2e_authoring exits non-zero unless the gate verdict is "pass"
+      # (fail-closed), so the container exit code is the smoke check. The
+      # output dir stays inside the container's world-writable /tmp.
+      - name: Smoke locked image
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          docker run --rm --user wire "$IMAGE_REF" \
+            python /opt/wire/scripts/e2e_authoring.py \
+              --contract /opt/wire/examples/sensor-harness/sensor-harness.contract.json \
+              --out /tmp/wire-smoke/sensor-harness
