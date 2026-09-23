@@ -1,0 +1,17 @@
+{
+  "wire_tools": {
+    "digest": "sha256:a7dc8669a54854394f02e7c52c3df1b1bfd6a6cf5bfedaa83501064ac6fcfe8b",
+    "dockerfile": "docker/wire-tools.Dockerfile",
+    "image": "ghcr.io/vibebb/wire-tools",
+    "published_at": "2026-09-23T15:43:09Z",
+    "tag": "329a54f4fbb5d7bf9eee158ec981308d17148f3d-tools",
+    "tools": {
+      "git": "2.53.0",
+      "pydantic": "2.13.5",
+      "python": "Python 3.12.14",
+      "uv": "0.12.18 (x86_64-unknown-linux-musl)",
+      "wire": "0.1.0"
+    },
+    "workflow_run": "https://github.com/VibeBB/wire-agent/actions/runs/35883351886"
+  }
+}
