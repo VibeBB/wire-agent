@@ -45,6 +45,16 @@
   opt-in smoke that exports the example contract through drawio and
   validates the PNG/PDF/XML/drawio-svg bytes (skips when drawio is
   absent; not a gate).
+- Vision non-multimodal path: `wire-review` and `wire-brief` declare the
+  SDK builtin `inspect_image_with_vision` so a non-vision primary model
+  delegates image inspection to a saved vision-capable LLM profile
+  (vision stays an L2 aid either way); `think` joins the review tools.
+- `wire-contract-rules` path-triggered skill: schema/provenance reminders
+  injected whenever a `*.contract.json` / `*.intake.json` file is touched
+  (complements the keyword skills; rules and keyword triggers are
+  exclusive per skill).
+- `wire-contract` skill ships `references/example-contract.json` so a
+  plugin-only install carries a canonical sample contract.
 - Initial repository scaffold: HarnessContract schema, intake provenance,
   deterministic gates, manufacturing projections, OpenHands plugin
   (`plugins/wire`), CLI/MCP boundary, docs and ADRs.

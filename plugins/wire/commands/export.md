@@ -36,4 +36,9 @@ the same drawing without the embedded model. `--png` is a shorthand for
 host, so treat them as review aids — the manifest records actual hashes.
 For arbitrary drawio-desktop exports (vsdx/csv/mermaid inputs, page/layer
 selection, layout passes), the `wire_drawio` MCP tool and
-`python -m wire drawio` pass any `-x` options through.
+`python -m wire drawio` pass any `-x` options through. Useful flags:
+`-l wires` exports just the wires layer, `--size page --crop` a
+print-ready full-page PDF, `-u` an uncompressed (diffable) SVG/XML,
+`--theme dark` a dark render, `-s`/`--width`/`--height` rescale, `-t`
+transparent PNG/SVG, `-p`/`-g`/`-a` page selection, and `--layout
+elkLayered` (or a preset like `organic`) an alternative auto-layout.

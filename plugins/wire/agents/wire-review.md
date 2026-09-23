@@ -7,6 +7,8 @@ tools:
   - file_editor
   - grep
   - glob
+  - inspect_image_with_vision
+  - think
 max_iteration_per_run: 30
 max_budget_per_run: 2.0
 when_to_use_examples:
@@ -27,18 +29,21 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
 2. Topology review: read `harness-diagram.drawio.svg` — or for a true
    vision pass, run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
    export --contract <file> --out <dir> --png` and open
-   `harness-diagram.png` (drawio-desktop renders it; the FileEditorTool
-   sends raster images to vision-capable LLMs). Sensible connector
-   placement, no accidental star grounds, analog and power routing
-   consistent with segregation intent. Legend: wire stroke follows the
-   physical insulation `color` (`X/Y` draws a striped second color),
-   unused cavities are greyed, a filled dot is a splice node, dashed
-   grey bands link twisted-pair wires, and same-connector loops bump off
-   the channel-facing edge. To inspect the topology programmatically,
-   decode the embedded drawio model from the `content` attribute
-   (URL-decode, or base64 → raw-DEFLATE → URL-decode for compressed
-   embeds) — or read `harness-diagram.drawio` directly when the export
-   ran without drawio-desktop.
+   `harness-diagram.png` (drawio-desktop renders it). When your model is
+   vision-capable the FileEditorTool sends the raster to it directly;
+   when it is not, the SDK replaces the image with a reference — call
+   `inspect_image_with_vision` (it consults a saved vision-capable LLM
+   profile; if none exists, fall back to decoding the model below).
+   Sensible connector placement, no accidental star grounds, analog and
+   power routing consistent with segregation intent. Legend: wire stroke
+   follows the physical insulation `color` (`X/Y` draws a striped second
+   color), unused cavities are greyed, a filled dot is a splice node,
+   dashed grey bands link twisted-pair wires, and same-connector loops
+   bump off the channel-facing edge. To inspect the topology
+   programmatically, read the `content` attribute of the SVG root —
+   drawio-desktop embeds the mxfile model there as escaped XML — or read
+   `harness-diagram.drawio` directly when the export ran without
+   drawio-desktop.
 3. Report observations only. Never edit the contract or artifacts; the
    orchestrator folds findings back through the contract and reruns
    `wire_author`. A failed gate is a fact, not a suggestion — quote it

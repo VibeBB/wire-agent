@@ -36,8 +36,11 @@ plugin launcher. Resolve the plugin root the same way the hooks do
 
 ## Vision uses (L2 only)
 
-When the model supports image input, vision is welcome at three points —
-every vision output stays an L2 steering aid, never a verdict:
+Vision is welcome at three points — every vision output stays an L2
+steering aid, never a verdict. When the model does not support image
+input, `inspect_image_with_vision` delegates to a saved vision-capable
+LLM profile instead (no such profile → skip vision entirely rather than
+guess):
 
 - **Intake**: user-supplied pinout photos, datasheet tables, or wiring
   sketches can seed connector/cavity/wire candidates. Claims read off an

@@ -144,7 +144,8 @@ _DESCRIPTIONS: dict[str, str] = {
     "wire_import": "Merge a connectivity or envelope source file into a contract.",
     "wire_drawio": (
         "Export a drawio/vsdx/csv/mermaid file through drawio-desktop -x "
-        "(pdf/svg/png/jpg/xml/html; options pass extra drawio flags)."
+        "(pdf/svg/png/jpg/xml/html; options pass any extra drawio flags "
+        "such as -l, --layout, --theme, --size, -u, -p, -g, -a)."
     ),
 }
 

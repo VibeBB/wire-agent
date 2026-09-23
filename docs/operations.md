@@ -41,6 +41,23 @@ The weekly `check-dependency-updates` workflow reports candidates to a
 "Dependency update check report" issue; deferrals are recorded with reason
 and re-check deadline in `scripts/dependency_update_deferrals.json`.
 
+## Vision support
+
+Diagram review and photo intake are L2 aids. When the conversation model
+is vision-capable, `FileEditorTool` sends raster renders
+(`harness-diagram.png/.jpg`, pinout photos, manufactured-product photos)
+to it directly. When it is not, wire-review and wire-brief declare the
+builtin `inspect_image_with_vision` tool, which consults a saved
+vision-capable LLM profile (`LLMProfileStore`, e.g. saved via
+`store.save("vision", LLM(model="..."))` or the canvas settings UI). If
+no vision-capable profile exists the agents skip vision rather than
+guess — no degradation of gate authority either way.
+
+`wire_drawio` / `python -m wire drawio` proxy the full `drawio -x`
+surface; see `plugins/wire/commands/export.md` for the flag cheat sheet
+(layer selection, `--size page` print PDFs, `-u` uncompressed XML,
+`--theme`, `--layout`).
+
 ## Releases
 
 - Versions follow semver; `plugin.json`, `pyproject.toml`, and the skill

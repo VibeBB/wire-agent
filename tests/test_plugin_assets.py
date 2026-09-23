@@ -45,11 +45,27 @@ def test_skill_frontmatter() -> None:
         "wire-contract",
         "wire-gates",
         "wire-connectivity",
+        "wire-contract-rules",
     }
     for skill in skills:
         head = skill.read_text(encoding="utf-8")[:600]
         for marker in REQUIRED_FRONTMATTER:
             assert marker in head, f"{skill.name} missing {marker}"
+
+
+def test_contract_rule_is_path_triggered() -> None:
+    head = (PLUGIN_ROOT / "skills" / "wire-contract-rules" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )[:600]
+    assert "paths:" in head
+    assert "triggers:" not in head
+
+
+def test_contract_skill_reference_asset() -> None:
+    reference = PLUGIN_ROOT / "skills" / "wire-contract" / "references" / "example-contract.json"
+    assert reference.is_file()
+    data = json.loads(reference.read_text(encoding="utf-8"))
+    assert data["schema_version"] == 1
 
 
 def test_agent_definitions() -> None:
