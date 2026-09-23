@@ -42,6 +42,10 @@ jobs:
                   f"{s['current']} -> {s['latest']} {s['note']}"
               )
           PY
+          # gh issue create fails with "could not add label" when the label
+          # does not exist yet (it did on mechanical-agent's first run).
+          gh label create dependency-updates --repo "$GITHUB_REPOSITORY" \
+            --color 0366d6 --description "Dependency update report" --force
           issue=$(gh issue list --label dependency-updates --state open \
             --json number --jq '.[0].number' || true)
           if [ -z "$issue" ]; then
