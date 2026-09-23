@@ -10,6 +10,8 @@
   hashed observation records to `.openhands/wire/vision-tool-events.jsonl` and
   `.openhands/wire/image-observations.jsonl`. `wire-review` now declares its
   required hooks in frontmatter (plugin hooks do not propagate to sub-agents).
+- `wire-brief` likewise declares `protect-generated` and
+  `record-vision-tool-event` in frontmatter.
 
 
 ### Fixed
