@@ -1,5 +1,9 @@
 # Changelog
 
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/).
+
 ## [Unreleased]
 
 ### Added
@@ -80,3 +84,5 @@
 - Initial repository scaffold: HarnessContract schema, intake provenance,
   deterministic gates, manufacturing projections, OpenHands plugin
   (`plugins/wire`), CLI/MCP boundary, docs and ADRs.
+
+[Unreleased]: https://github.com/VibeBB/wire-agent/commits/main

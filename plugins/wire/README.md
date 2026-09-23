@@ -4,9 +4,14 @@ OpenHands plugin assets for wire-agent. The deterministic core lives in
 `src/wire`; everything here steers it — nothing here can pass a design.
 
 - `skills/` — `wire-workflow` (orchestration), `wire-contract` (schema
-  authoring), `wire-gates` (repair loop), `wire-connectivity` (imports)
+  authoring), `wire-gates` (repair loop), `wire-connectivity` (imports),
+  `wire-contract-rules` (path-triggered rule injected when a
+  `*.contract.json` / `*.intake.json` file is touched)
 - `agents/` — task sub-agents: `wire-brief` (intake conversation),
-  `wire-design` (author → gates loop), `wire-review` (advisory)
+  `wire-design` (author → gates loop), `wire-review` (advisory). Each agent
+  declares its own `hooks` because plugin-level hooks do not propagate to
+  sub-agents; `wire-review` omits `mcp_config` because it only reads files
+  and images and drives no `wire` MCP tools.
 - `commands/` — `/wire:design`, `/wire:doctor`, `/wire:gates`, `/wire:export`
 - `hooks/` — session doctor, `protect-generated` artifact guard, stop-time
   status report

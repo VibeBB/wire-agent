@@ -1,7 +1,19 @@
 # wire-agent
 
-An OpenHands plugin for conversational wire harness design — requirements
-in, verified manufacturing data out.
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/VibeBB/wire-agent)
+
+Part of the [VibeBB](https://github.com/VibeBB) agent family:
+[bard-agent](https://github.com/VibeBB/bard-agent) ·
+[electrical-circuit-agent](https://github.com/VibeBB/electrical-circuit-agent) ·
+[mechanical-agent](https://github.com/VibeBB/mechanical-agent) ·
+[wire-agent](https://github.com/VibeBB/wire-agent)
+
+[English](#english) | [日本語](#日本語)
+
+## English
+
+An [OpenHands](https://github.com/OpenHands) plugin for conversational wire
+harness design — requirements in, verified manufacturing data out.
 
 wire-agent turns a requirements conversation into a machine-readable
 harness contract, verifies it with deterministic gates, and projects it
@@ -9,7 +21,7 @@ into manufacturing artifacts: wire list, cut table, BOM, and a harness
 diagram. The same JSON file is both the design and the authority; nothing
 a model says can override a gate verdict.
 
-## What it does
+### What it does
 
 - **Conversational intake** — clarifies electrical, environmental, and
   mechanical requirements and writes `<name>.contract.json` plus an
@@ -31,7 +43,7 @@ a model says can override a gate verdict.
   envelope anchors from mechanical-agent, and emits artifacts
   bard-agent can sing about. No acd-agent dependency.
 
-## Layout
+### Layout
 
 ```text
 src/wire/          deterministic core (contract, gates, export, MCP)
@@ -42,7 +54,7 @@ docs/adr/          design decisions   docs/research/   domain survey
 docker/            tools image definition + digest lock
 ```
 
-## Quick start
+### Quick start
 
 ```bash
 uv sync
@@ -62,7 +74,7 @@ In an OpenHands conversation, install `plugins/wire` and run `/wire:design`
 [docs/architecture.md](docs/architecture.md) and the
 [ADR index](docs/README.md) for the full model.
 
-## Verification
+### Verification
 
 ```bash
 uv run python scripts/verify_all.py --stage fast
@@ -72,20 +84,27 @@ See [AGENTS.md](AGENTS.md) for the working agreement,
 [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup, and
 [docs/operations.md](docs/operations.md) for release and CI policy.
 
----
+### License
 
-# wire-agent（日本語）
+BSD-3-Clause © VibeBB — see [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-対話形式でワイヤハーネスを設計する OpenHands プラグインです。要件の
-会話から機械可読なハーネス契約（contract.json）を生成し、決定論的
-ゲートで検証し、ワイヤリスト・カットテーブル・BOM・ハーネス図へ投影
-します。設計と権威は同じ JSON です。モデルの発言がゲート判定を
-上書きすることはありません。
+## 日本語
 
-## できること
+[OpenHands](https://github.com/OpenHands) 向けの会話型ワイヤハーネス設計
+プラグインです — 要件を入力し、検証済みの製造データを得られます。
+
+wire-agent は要件の会話を機械可読なハーネス契約に変換し、決定論的
+ゲートで検証し、製造成果物（ワイヤリスト・カットテーブル・BOM・
+ハーネス図）へ投影します。設計と権威は同じ JSON です。モデルの発言が
+ゲート判定を上書きすることはありません。
+
+### できること
 
 - **対話による要件取り込み** — 電気・環境・機械要件を明確化し、
-  contract.json と intake（R*/A*/Q*/I* 由来記録）を出力します。
+  `<name>.contract.json` と intake サイドカー（全要素を要求 `R*`・
+  仮定 `A*`・質問 `Q*`・インポート元 `I*` の各 ID に紐付け）を出力
+  します。
 - **決定論的検証** — 接続性・キャビティ占有・許容電流（温度/束
   ディレーティング）・電圧降下・絶縁定格・曲げ半径・信号分離・
   端子適合・コネクタ定格を L1 ゲートで検査。`unknown` は失敗扱い。
@@ -97,7 +116,52 @@ See [AGENTS.md](AGENTS.md) for the working agreement,
   レビュー用レンダリングも追加可能。`wire_drawio`（MCP）と
   `python -m wire drawio` は `drawio -x` の全機能をプロキシします。
 - **プラグイン連携** — electrical-circuit-agent の契約や汎用 CSV から
-  接続情報を取り込み、mechanical-agent のアンカー契約を参照し、
-  bard-agent が歌にできる標準成果物を出力。acd-agent への依存はありません。
+  接続情報を取り込み、mechanical-agent のエンベロープアンカー契約を
+  参照し、bard-agent が歌にできる成果物を出力。acd-agent への依存は
+  ありません。
 
-詳細は [docs/README.md](docs/README.md) と各 ADR を参照してください。
+### 構成
+
+```text
+src/wire/          決定論コア（契約・ゲート・エクスポート・MCP）
+plugins/wire/      OpenHands プラグイン（skills, agents, commands, hooks）
+tests/  scripts/   検証
+examples/          サンプルハーネス契約
+docs/adr/          設計決定          docs/research/   領域調査
+docker/            ツールイメージ定義 + digest ロック
+```
+
+### クイックスタート
+
+```bash
+uv sync
+uv run python -m wire doctor
+uv run python -m wire intake \
+  --contract examples/sensor-harness/sensor-harness.contract.json \
+  --intake  examples/sensor-harness/sensor-harness.intake.json
+uv run python -m wire author \
+  --contract examples/sensor-harness/sensor-harness.contract.json \
+  --out out/sensor-harness
+```
+
+すべてのゲート検査が `pass` を報告したときのみ判定は `pass` です。
+
+OpenHands の会話では `plugins/wire` をインストールし `/wire:design`
+を実行します（または `wire-brief` サブエージェントへ `task`）。
+詳細は [docs/architecture.md](docs/architecture.md) と
+[ADR 索引](docs/README.md)を参照してください。
+
+### 検証
+
+```bash
+uv run python scripts/verify_all.py --stage fast
+```
+
+作業規約は [AGENTS.md](AGENTS.md)、コントリビュータのセットアップは
+[CONTRIBUTING.md](CONTRIBUTING.md)、リリース・CI 方針は
+[docs/operations.md](docs/operations.md)を参照してください。
+
+### ライセンス
+
+BSD-3-Clause © VibeBB — [LICENSE](LICENSE) と
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照してください。

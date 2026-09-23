@@ -6,12 +6,13 @@
 
 <!-- Link related issues, or write "None". -->
 
+## Verification
+
+<!-- Paste commands run and their results. -->
+
 ## Checklist
 
-- [ ] `uv run ruff check .` passes.
-- [ ] `uv run ruff format --check .` passes.
-- [ ] `uv run pyright` passes.
-- [ ] `uv run pytest -q` passes.
+- [ ] `uv run python scripts/verify_all.py --stage fast` passes.
 - [ ] This does not change runtime behavior unless that change is described above.
 - [ ] Relevant documentation and ADRs are updated.
 - [ ] Code comments, issues, and pull request text are in English.

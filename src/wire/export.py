@@ -745,6 +745,7 @@ def export_design(
 
     provenance = {
         "schema_version": 1,
+        "license": "BSD-3-Clause",
         "generator": f"wire-agent/{__version__}",
         "contract": contract.name,
         "contract_id": contract.contract_id,
