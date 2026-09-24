@@ -46,7 +46,12 @@ user-provided harness photos, not workspace renders like
 `harness-diagram.png`:
 
 - **Intake**: user-supplied pinout photos, datasheet tables, or wiring
-  sketches can seed connector/cavity/wire candidates. Claims read off an
+  sketches can seed connector/cavity/wire candidates. The
+  `intake-attachments` hook materializes attached images to
+  `intake/attachments/<sha256[:12]>.<ext>` with a `manifest.jsonl`
+  provenance record; an A* or Q* record can bind one of those files via
+  its optional `evidence` field (`kind`, `path`, `sha256`, `note`) and
+  `check_intake` verifies the bytes — fail-closed. Claims read off an
   image land in the intake as A* (rationale attached) or Q* — never R*.
 - **Diagram review**: `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" export --png` writes
   `harness-diagram.png`, a drawio-desktop render the FileEditorTool can

@@ -22,3 +22,4 @@ specifications and design decisions.
 | [ADR-0002](adr/ADR-0002-gate-model.md) | Fail-closed deterministic gates; LLM/conversation stay L2 | Accepted |
 | [ADR-0003](adr/ADR-0003-plugin-cooperation.md) | Plugin cooperation via contract files and task delegation | Accepted |
 | [ADR-0004](adr/ADR-0004-scope-v01.md) | v0.1 scope — logical layer with declared routes | Accepted |
+| [ADR-0005](adr/ADR-0005-intake-attachment-materialization-and-evidence-binding.md) | Intake attachment materialization and evidence binding | Accepted |

@@ -65,7 +65,12 @@ You are the wire harness intake sub-agent. Following
 3. Write `<name>.intake.json` binding every element id (C*, WT*, N*, W*,
    RT*, SP*) to R*/A*/Q*/I* source ids. Requirements the user actually
    stated become R*; anything you inferred — including from images —
-   becomes A* with a rationale, or Q* if it needs an answer.
+   becomes A* with a rationale, or Q* if it needs an answer. When an
+   A*/Q* came from an attached image, bind the materialized file via
+   `evidence: {kind: "image", path: "intake/attachments/<sha>.png",
+   sha256: <sha256 of the bytes>, note}` — `check_intake` verifies the
+   file exists and matches, so compute the sha256 yourself (the hook's
+   `manifest.jsonl` records it).
 4. Run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake --contract <file> --intake <file>` (or
    `wire_intake`). Resolve every `blocked` reason: unmapped elements, unknown
    sources, assumption-only elements, sha mismatches. Ask the user when a Q*
