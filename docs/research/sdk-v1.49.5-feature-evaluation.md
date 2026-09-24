@@ -49,15 +49,26 @@ agent-server `conversation_service.py` / `conversation_router.py` on `main`.
 
 | Feature | Where it lives | Decision | Rationale |
 | --- | --- | --- | --- |
-| `EnsembleSecurityAnalyzer` (`PatternSecurityAnalyzer` + `PolicyRailSecurityAnalyzer`, worst-case fusion) | `Conversation.state` / agent-server `POST /conversations/{id}/security_analyzer` | not adoptable at plugin boundary | `AgentDefinition` has no `security_analyzer` field; only the host app can attach an analyzer. Plugin-side substitute is limited to `pre_tool_use` deny hooks (separate candidate, tracked in the adoption plan). |
+| `EnsembleSecurityAnalyzer` (`PatternSecurityAnalyzer` + `PolicyRailSecurityAnalyzer`, worst-case fusion) | `Conversation.state` / agent-server `POST /conversations/{id}/security_analyzer` | not adoptable at plugin boundary | `AgentDefinition` has no `security_analyzer` field; only the host app can attach an analyzer. Plugin-side substitute adopted instead: the `safety-rail` `pre_tool_use` hook denies a deterministic denylist on terminal commands. |
 | `LLMSecurityAnalyzer` / `ToolShieldLLMSecurityAnalyzer` / `GraySwanAnalyzer` | same | not adoptable at plugin boundary | Same as above; all opt-in server-side analyzers. |
-| `ConfirmRisky` (`permission_mode: confirm_risky`) | AgentDefinition frontmatter → conversation confirmation policy | adopted, degraded upstream | wire-brief/design/review already declare `confirm_risky`. Finding A below: task sub-agent conversations never receive the parent's analyzer, so every action is `UNKNOWN` and the policy auto-resumes — effectively `never_confirm` plus status churn until the SDK propagates the analyzer. |
+| `ConfirmRisky` (`permission_mode: confirm_risky`) | AgentDefinition frontmatter → conversation confirmation policy | **switched to `never_confirm`** | Finding A below: task sub-agent conversations never receive the parent's analyzer, so every action is `UNKNOWN` and `confirm_risky` auto-resumes — zero gating plus status churn. All wire sub-agents now declare `never_confirm` to match the real behavior; revisit if the SDK propagates the analyzer. |
 | `SecretRegistry` (`/secrets` API, env injection) | conversation state; `${VAR}` expansion in `.mcp.json` / `mcp_config` | adopt (documentation only) | `${VAR}`/`${VAR:-default}` in `mcp_config` resolves through `secret_registry.get_secret_value` before env; `wire_launcher.py` already forwards `OPENHANDS_*`/`WIRE_*` env into the tools container, so a Canvas-registered `WIRE_*` secret reaches `wire_*` tool code end-to-end today. Remaining work is documenting the naming contract. |
 | `StuckDetector` | `Conversation(stuck_detection=True)` default | already effective | On by default in every `LocalConversation`, including task sub-agents. Thresholds are Conversation init params — not plugin-settable; `max_iteration_per_run` already bounds runs. |
 | Persistent memory (`AgentContext(load_memory=True)`) | server-side `AgentContext` (Canvas "Settings > Agent Context") | not adoptable at plugin boundary | The sub-agent factory builds `AgentContext` without `load_memory`; frontmatter has no switch. Top-level conversation only. |
-| Model routing (`Router`/`MultimodalRouter`, `model:` frontmatter) | `Agent.llm` (server) / `LLMProfileStore` | keep `model: inherit` | The Router itself is server-side. `model:` resolves a named profile via `LLMProfileStore.load` and hard-fails the spawn with `ValueError` when the profile is absent — adopt only behind a documented profile-naming convention. Custom `profile_store_dir` is discouraged (it splits provider-connections resolution). |
+| Model routing (`Router`/`MultimodalRouter`, `model:` frontmatter) | `Agent.llm` (server) / `LLMProfileStore` | **adopted via profile convention** | The Router itself is server-side. Authoring sub-agents now declare `model: vibebb-author`, reviews `vibebb-review` — operators create the matching profiles in `~/.openhands/profiles/` (contract in `docs/operations.md`); a missing profile hard-fails the spawn (Finding B). Custom `profile_store_dir` stays discouraged (it splits provider-connections resolution). |
 | `SwitchLLMTool` / agent profiles (`mcp_server_refs`, `secret_refs`) / critic | agent-server profile + Canvas settings | not adoptable at plugin boundary | Server-side scoping features; wire-review already plays the critic role at L2. |
-| `condenser:` frontmatter | AgentDefinition | deferred | Available and unused; a candidate for long review runs, but `max_iteration_per_run`-bounded runs have shown no pressure yet. |
+| `condenser:` frontmatter | AgentDefinition | not adopted | Sub-agents already get a summarizing condenser by default at factory time (`default_condenser`), so there is nothing to add; tuning `max_size`/`keep_first` stays an option for long review runs if pressure shows. |
+
+### Persistent memory seed — `.openhands/memory/MEMORY.md`
+
+`AgentContext(load_memory=True)` loads `<workspace>/.openhands/memory/MEMORY.md`
+(project tier) plus `~/.openhands/memory/MEMORY.md` (user tier) into a
+~6000-char prompt section. The seed committed at repo root ships the durable
+invariants (gate authority, projection rule, fail-closed, secret flow,
+profile names) for hosts that enable Canvas "Settings > Agent Context"; the
+agent then maintains the index itself. Sub-agents cannot opt in — the factory
+builds `AgentContext` without `load_memory` — so the seed serves the
+top-level conversation only.
 
 ### Finding A — `confirm_risky` is effectively auto-approved in sub-agents
 

@@ -1,0 +1,5 @@
+- Pass/fail verdicts come only from the deterministic gates in `src/wire/gates.py`; LLM, vision, and review output is L2 advisory and never promoted to a verdict.
+- Generated artifacts (wire-list, cut-table, BOM, harness-diagram, manifest, provenance, design-report, kbl/vec) are projections of the contract — regenerate them, never edit by hand.
+- Fail-closed: an unexecuted or unmeasurable gate reports `unknown` and fails the design.
+- Secrets flow via `${VAR}` expansion in `mcp_config` and `WIRE_*`/`OPENHANDS_*` env passthrough; never log or commit them.
+- Sub-agents resolve `model: vibebb-author`/`vibebb-review` from `~/.openhands/profiles/`; create those profiles before invoking `task` agents.

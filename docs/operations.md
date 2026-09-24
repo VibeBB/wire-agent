@@ -73,6 +73,41 @@ and `OpenQuestion` records may bind such a file with an `evidence` field
 (`kind`, `path`, `sha256`, `note`); `check_intake` verifies existence and
 hash — fail-closed, same as the `contract_sha256` binding.
 
+## OpenHands runtime surfaces
+
+Runtime policy surfaces that the plugin declares but the host executes:
+
+- `permission_mode: never_confirm` on every wire sub-agent. The SDK's
+  task path (`openhands-tools` `task/manager.py`, verified 1.49.5 and
+  upstream `main`) never attaches a `security_analyzer` to the child
+  `LocalConversation`, so `confirm_risky` saw every action as `UNKNOWN`
+  and auto-resumed — zero gating plus status churn. `never_confirm`
+  declares the real behavior; revisit if the SDK propagates the parent's
+  analyzer.
+- `model:` resolves through `LLMProfileStore` (`~/.openhands/profiles/`).
+  Authoring sub-agents (wire-brief, wire-design) use `vibebb-author`;
+  wire-review uses `vibebb-review`. A missing profile raises `ValueError`
+  at task spawn — create the profiles (canvas LLM settings or
+  `LLMProfileStore.save`) before invoking the agents. To fall back to the
+  conversation model, set `model: inherit` locally.
+- Secrets: `${VAR}` / `${VAR:-default}` in `mcp_config` expands through
+  the conversation `SecretRegistry` before env, and `wire_launcher.py`
+  forwards `OPENHANDS_*`/`WIRE_*` env into the tools container — a
+  canvas-registered `WIRE_*` secret reaches `wire_*` tool code
+  end-to-end. Bash commands also receive registry values when the key
+  name appears in the command text.
+- The `safety-rail` `pre_tool_use` hook (`hooks/scripts/safety_rail.py`)
+  denies a deterministic denylist on terminal commands: root/home `rm
+  -rf`, block-device writes, power commands, and the git operations the
+  working agreement bans. It is advisory depth — not a security
+  analyzer — and passes everything it does not positively recognize.
+- `.openhands/memory/MEMORY.md` seeds the project-tier persistent
+  memory loaded when the host enables `AgentContext(load_memory)`
+  (canvas "Settings > Agent Context"). The agent maintains the index;
+  keep the seed to durable facts only.
+- `StuckDetector` is on by default for every conversation including
+  task sub-agents; `max_iteration_per_run` remains the repo-side bound.
+
 ## Releases
 
 - Versions follow semver; `plugin.json`, `pyproject.toml`, and the skill

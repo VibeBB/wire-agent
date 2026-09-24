@@ -237,3 +237,51 @@ def test_launcher_resolves() -> None:
     )
     # doctor verdict is pass/fail JSON or a resolution error; must be JSON
     assert proc.stdout.strip().startswith("{")
+
+
+def _safety_rail_rc(command: str) -> int:
+    script = PLUGIN_ROOT / "hooks" / "scripts" / "safety_rail.py"
+    payload = json.dumps({"tool_name": "terminal", "tool_input": {"command": command}})
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=_hook_env(),
+        check=False,
+    )
+    return proc.returncode
+
+
+def test_safety_rail_denies_denylist() -> None:
+    for command in (
+        "rm -rf /",
+        "rm -fr ~",
+        "dd if=x of=/dev/sda",
+        "mkfs.ext4 /dev/sda1",
+        "shutdown now",
+        "git push origin main",
+        "git push --force origin feat",
+        "git reset --hard",
+        "git clean -fd",
+        "git checkout -- src/wire/gates.py",
+        "git stash drop",
+        "git add .",
+        "git commit --amend",
+        "git commit --no-verify",
+    ):
+        assert _safety_rail_rc(command) == 2, command
+
+
+def test_safety_rail_allows_normal_commands() -> None:
+    for command in (
+        "rm -rf out/artifacts",
+        "git push --force-with-lease origin feat",
+        "git push origin feat",
+        "git add src/wire/gates.py docs",
+        "git commit -m message",
+        "python -m wire gates",
+        "echo hi > out.txt",
+        "find . -name '*.svg'",
+    ):
+        assert _safety_rail_rc(command) == 0, command
