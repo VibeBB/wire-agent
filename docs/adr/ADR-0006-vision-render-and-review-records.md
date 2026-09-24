@@ -37,7 +37,11 @@ drawio-desktop (`--png`), but three gaps kept the vision lane thin:
 - `src/wire/advisory.py` ports the circuit `AdvisoryResult` /
   `VisualReviewDetail` contract: `review-visual-<slug>.advisory.json`
   records with a fixed checklist vocabulary (`harness_diagram`,
-  `intake_image`), finding categories, `error`/`warning`/`info`
+  `intake_image`), a required `impression` free-text field (the
+  reviewer's subjective reading of the drawing — a record without one
+  is discarded), finding categories (including the drawing-quality set
+  `ambiguous_notation`, `missing_dimension`,
+  `missing_manufacturing_info`, `design_intent`), `error`/`warning`/`info`
   severities, and optional normalized bounding boxes. Malformed details
   validate to `None`.
 - The record-image-observation matcher is corrected to

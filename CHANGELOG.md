@@ -34,6 +34,13 @@ All notable changes to this project are documented here. The format follows
   `AdvisoryResult`/`VisualReviewDetail` contract for
   `review-visual-<slug>.advisory.json`; `wire-review` documents the
   convention (ADR-0006).
+- Drawing-quality review: `wire-review` now reviews rendered drawings on
+  baseline fidelity (accurate, legible, unambiguous), manufacturing
+  completeness (self-sufficient for a no-context shop floor), and design
+  intent (dimensioning, layout, linework, topology). `VisualReviewDetail`
+  gains a required `impression` field — the reviewer's subjective reading
+  of the drawing — and four shared categories: `ambiguous_notation`,
+  `missing_dimension`, `missing_manufacturing_info`, `design_intent`.
 - `scripts/e2e_authoring.py` requests the PNG render and reports
   `renders`/`render_status` (fail-open when drawio-desktop is absent).
 - `post_tool_use` provenance hooks (ported from mechanical-agent):
