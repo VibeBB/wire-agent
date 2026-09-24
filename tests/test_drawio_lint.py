@@ -149,6 +149,30 @@ def test_page_underutilized_warns() -> None:
     assert any(f.type == "page_underutilized" for f in report.findings)
 
 
+def test_page_underutilized_skipped_on_framed_sheet() -> None:
+    """A framed sheet intentionally holds margins/zone grid/title block —
+    coverage checks do not apply."""
+    body = '<mxCell id="frame" value="frame" parent="0" />'
+    body += _vertex("conn-C1", 10, 10, w=40, h=30) + _vertex("conn-C2", 60, 10, w=40, h=30)
+    body += _edge("w1", "conn-C1", "conn-C2")
+    report = _lint(body, page_w=1200, page_h=900)
+    assert not any(f.type == "page_underutilized" for f in report.findings)
+
+
+def test_floating_edge_is_not_missing_endpoints() -> None:
+    """Edges anchored to absolute mxPoints (twist-pair bands) need no
+    source/target cell — drawio draws them fine."""
+    floating = (
+        '<mxCell id="twist-0" value="tp" edge="1" parent="wires">'
+        '<mxGeometry relative="1" as="geometry">'
+        '<mxPoint x="10" y="10" as="sourcePoint" />'
+        '<mxPoint x="90" y="90" as="targetPoint" />'
+        "</mxGeometry></mxCell>"
+    )
+    report = _lint(floating)
+    assert not any(f.type == "edge_missing_endpoints" for f in report.findings)
+
+
 @requires_drawio
 def test_design_report_embeds_lint_advisory(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())

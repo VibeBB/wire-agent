@@ -219,6 +219,16 @@ def test_drawio_unused_cavity_cells_dimmed(tmp_path: Path) -> None:
                 assert "fontColor=#9e9e9e" in style
 
 
+def test_drawio_svg_viewbox_matches_sheet(tmp_path: Path) -> None:
+    """The frame sheet rectangle is the outermost cell, so the SVG canvas
+    equals the ISO sheet (A4 landscape 297x210 mm = 1169x827 px)."""
+    _export(tmp_path)
+    root = ET.parse(tmp_path / ARTIFACT).getroot()
+    view_box = [float(v) for v in (root.get("viewBox") or "").split()]
+    assert view_box[2] == pytest.approx(1169, abs=6)  # + drawio crop margin
+    assert view_box[3] == pytest.approx(827, abs=6)
+
+
 def test_drawio_twisted_pair_band(tmp_path: Path) -> None:
     import copy
 
