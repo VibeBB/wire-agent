@@ -140,8 +140,10 @@ Runtime policy surfaces that the plugin declares but the host executes:
   `# vX.Y.Z` comment; checkout uses `persist-credentials: false` except in
   the image publish job (the lock-update PR needs push credentials); every
   job sets `timeout-minutes`.
-- `dependabot.yml` monitors GitHub Actions and uv weekly (uv with a
-  seven-day cooldown).
+- `dependabot.yml` monitors GitHub Actions weekly. The uv ecosystem is
+  intentionally excluded (Dependabot's bundled uv cannot satisfy
+  `[tool.uv] required-version`), so Python dependency updates stay covered
+  by the weekly check-dependency-updates.yml report.
 
 ## Git
 
