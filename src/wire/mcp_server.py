@@ -100,6 +100,15 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["input_path"],
         "additionalProperties": False,
     },
+    "wire_drawio_lint": {
+        "type": "object",
+        "properties": {
+            "diagram_path": {"type": "string"},
+            "output_path": {"type": "string"},
+        },
+        "required": ["diagram_path"],
+        "additionalProperties": False,
+    },
 }
 
 
@@ -152,6 +161,9 @@ _DESCRIPTIONS: dict[str, str] = {
         "(pdf/svg/png/jpg/xml/html; options pass any extra drawio flags "
         "such as -l, --layout, --theme, --size, -u, -p, -g, -a)."
     ),
+    "wire_drawio_lint": (
+        "Advisory readability lint for a drawio mxfile; JSON report, never a gate verdict."
+    ),
 }
 
 
@@ -174,6 +186,7 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_gates": _anno("Re-run gates", write=False),
     "wire_import": _anno("Import connectivity source", write=False),
     "wire_drawio": _anno("Drawio export", write=True),
+    "wire_drawio_lint": _anno("Drawio lint", write=False),
 }
 
 
@@ -234,6 +247,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 )
             )
         )
+    if name == "wire_drawio_lint":
+        from .drawio_lint import lint_file
+
+        report = lint_file(
+            Path(arguments["diagram_path"]),
+            Path(arguments["output_path"]) if arguments.get("output_path") else None,
+        )
+        return _text(report.model_dump(mode="json"))
     raise ValueError(f"unknown tool {name}")
 
 

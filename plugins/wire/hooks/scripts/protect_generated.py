@@ -32,6 +32,7 @@ ARTIFACT_NAMES = (
     "harness-diagram.svg",
     "harness-diagram.drawio.svg",
     "harness-diagram.drawio",
+    "harness-diagram.drawio_lint.json",
     "harness-diagram.png",
     "harness-diagram.jpg",
     "harness-diagram.pdf",

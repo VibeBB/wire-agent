@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,12 @@ def write_report(
     out_dir: Path,
 ) -> Path:
     report = build_report(contract, gate_report)
+    lint_path = out_dir / "harness-diagram.drawio_lint.json"
+    if lint_path.is_file():
+        with contextlib.suppress(json.JSONDecodeError):
+            report["advisories"] = {
+                "drawio_lint": json.loads(lint_path.read_text(encoding="utf-8"))
+            }
     path = out_dir / "design-report.json"
     path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     md = out_dir / "design-report.md"
@@ -77,5 +84,15 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {check['id']} | {check['subject']} | {check['status']} "
             f"| {measured} | {limit} | {check['detail']} |"
         )
+    lint = report.get("advisories", {}).get("drawio_lint")
+    if lint:
+        lines += [
+            "",
+            "## Diagram lint (advisory)",
+            "",
+            f"- verdict: {lint['verdict']} ({lint['errors']} errors, {lint['warnings']} warnings)",
+        ]
+        for finding in lint["findings"]:
+            lines.append(f"- {finding['severity']}: {finding['type']} — {finding['description']}")
     lines.append("")
     return "\n".join(lines)
