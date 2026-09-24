@@ -247,7 +247,7 @@ def _vision_payload(tmp_path: Path, **overrides: Any) -> dict[str, Any]:
 
 
 def _vision_events(tmp_path: Path) -> list[dict[str, Any]]:
-    path = tmp_path / ".openhands" / "wire" / "vision-tool-events.jsonl"
+    path = tmp_path / "observations" / "wire" / "vision-tool-events.jsonl"
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
@@ -289,7 +289,7 @@ def test_record_vision_tool_event_honors_events_override(tmp_path: Path) -> None
 
     assert result.returncode == 0
     assert len(override.read_text(encoding="utf-8").splitlines()) == 1
-    assert not (tmp_path / ".openhands").exists()
+    assert not (tmp_path / "observations").exists()
 
 
 def test_record_vision_tool_event_skips_non_records(tmp_path: Path) -> None:
@@ -318,7 +318,7 @@ _PNG = bytes.fromhex(
 
 
 def _observations(tmp_path: Path) -> list[dict[str, Any]]:
-    path = tmp_path / ".openhands" / "wire" / "image-observations.jsonl"
+    path = tmp_path / "observations" / "wire" / "image-observations.jsonl"
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
@@ -383,7 +383,7 @@ def test_record_image_observation_honors_observations_override(tmp_path: Path) -
 
     assert result.returncode == 0
     assert len(override.read_text(encoding="utf-8").splitlines()) == 1
-    assert not (tmp_path / ".openhands").exists()
+    assert not (tmp_path / "observations").exists()
 
 
 def test_record_image_observation_skips_non_observations(tmp_path: Path) -> None:

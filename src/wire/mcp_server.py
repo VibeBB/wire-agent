@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -155,7 +154,11 @@ _DESCRIPTIONS: dict[str, str] = {
         "run all gates, write the design report."
     ),
     "wire_gates": "Re-run all deterministic gates on existing artifacts.",
-    "wire_import": "Merge a connectivity or envelope source file into a contract.",
+    "wire_import": (
+        "Merge a connectivity or envelope source file into a contract; writes "
+        "<contract-stem>.merged.contract.json next to the contract when out_path "
+        "is omitted."
+    ),
     "wire_drawio": (
         "Export a drawio/vsdx/csv/mermaid file through drawio-desktop -x "
         "(pdf/svg/png/jpg/xml/html; options pass any extra drawio flags "
@@ -184,7 +187,7 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_intake": _anno("Intake gate", write=False),
     "wire_author": _anno("Author harness design", write=True),
     "wire_gates": _anno("Re-run gates", write=False),
-    "wire_import": _anno("Import connectivity source", write=False),
+    "wire_import": _anno("Import connectivity source", write=True),
     "wire_drawio": _anno("Drawio export", write=True),
     "wire_drawio_lint": _anno("Drawio lint", write=False),
 }
@@ -223,19 +226,24 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
             cmd_gates(_ns(contract=arguments["contract_path"], out=arguments.get("out_dir")))
         )
     if name == "wire_import":
-        with tempfile.TemporaryDirectory() as tmp:
-            out_path = arguments.get("out_path") or str(Path(tmp) / "merged.contract.json")
-            result = cmd_import(
-                _ns(
-                    contract=arguments["contract_path"],
-                    source=arguments["source_path"],
-                    kind=arguments["kind"],
-                    out=out_path,
-                )
+        if arguments.get("out_path"):
+            out_path = Path(arguments["out_path"])
+        else:
+            contract_file = Path(arguments["contract_path"])
+            stem = contract_file.stem.removesuffix(".contract")
+            out_path = contract_file.with_name(f"{stem}.merged.contract.json")
+        result = cmd_import(
+            _ns(
+                contract=arguments["contract_path"],
+                source=arguments["source_path"],
+                kind=arguments["kind"],
+                out=str(out_path),
             )
-            if result.get("verdict") == "pass":
-                result["merged_contract"] = json.loads(Path(out_path).read_text(encoding="utf-8"))
-            return _text(result)
+        )
+        if result.get("verdict") == "pass":
+            result["merged_contract"] = json.loads(out_path.read_text(encoding="utf-8"))
+            result["out_path"] = str(out_path)
+        return _text(result)
     if name == "wire_drawio":
         return _text(
             cmd_drawio(
