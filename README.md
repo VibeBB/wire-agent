@@ -39,6 +39,11 @@ a model says can override a gate verdict.
   records. `--drawio`
   adds png/jpg/pdf/html/svg/xml review renders; `wire_drawio` (MCP) and
   `python -m wire drawio` proxy the full `drawio -x` CLI surface.
+  `wire_author`/`wire_drawio` attach the rendered raster inline as MCP
+  `ImageContent` for vision-capable models, `--baseline` records the
+  image sha256 for deterministic change detection, and vision reviewers
+  write typed `review-visual-<slug>.advisory.json` records (L2
+  advisory only — never gate verdicts).
 - **Plugin cooperation** — imports connectivity from
   electrical-circuit-agent contracts or generic CSV tables, consumes
   envelope anchors from mechanical-agent, and emits artifacts
@@ -116,6 +121,11 @@ wire-agent は要件の会話を機械可読なハーネス契約に変換し、
   sha256 マニフェスト・由来記録付きで出力。`--drawio` で png/jpg/pdf/html/svg/xml の
   レビュー用レンダリングも追加可能。`wire_drawio`（MCP）と
   `python -m wire drawio` は `drawio -x` の全機能をプロキシします。
+  `wire_author`/`wire_drawio` は描画ラスタを MCP `ImageContent` として
+  インライン添付し、`--baseline` が画像 sha256 を記録して決定論的に
+  変化を検出します。vision レビューは型付き
+  `review-visual-<slug>.advisory.json` レコードを書きます（L2
+  アドバイザリのみ — ゲート判定には昇格しません）。
 - **プラグイン連携** — electrical-circuit-agent の契約や汎用 CSV から
   接続情報を取り込み、mechanical-agent のエンベロープアンカー契約を
   参照し、bard-agent が歌にできる成果物を出力。acd-agent への依存は

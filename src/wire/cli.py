@@ -5,6 +5,8 @@ Subcommands:
   intake    validate an intake.json against a contract.json (JSON verdict)
   author    export projections, run all gates, write the report
   export    export projections without gates
+  drawio    proxy a drawio-desktop -x export on a supported input
+  drawio-lint  advisory readability lint for a drawio mxfile
   gates     re-run all gates on existing artifacts
   import    merge a connectivity or envelope source into a contract
 
@@ -60,6 +62,21 @@ def _drawio_formats(args: argparse.Namespace) -> list[str]:
     return [f.strip() for f in getattr(args, "drawio", "").split(",") if f.strip()]
 
 
+def _apply_baseline(
+    args: argparse.Namespace, result: dict[str, Any], image_path: Path
+) -> dict[str, Any]:
+    """Record/compare the sha256 visual baseline for a rendered image."""
+    baseline_arg = getattr(args, "baseline", None)
+    if not baseline_arg or not image_path.is_file():
+        return result
+    from .render import record_or_compare_baseline
+
+    verdict, image_sha = record_or_compare_baseline(image_path, Path(baseline_arg))
+    result["baseline"] = verdict
+    result["baseline_sha256"] = image_sha
+    return result
+
+
 def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
     out_dir = Path(args.out)
     try:
@@ -79,7 +96,7 @@ def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
     report_path = write_report(contract, gate_report, out_dir)
     result = gate_report.to_dict(contract)
     result["report_path"] = str(report_path)
-    return result
+    return _apply_baseline(args, result, out_dir / "harness-diagram.png")
 
 
 def cmd_export(args: argparse.Namespace) -> dict[str, Any]:
@@ -97,11 +114,15 @@ def cmd_export(args: argparse.Namespace) -> dict[str, Any]:
         )
     except (KeyError, RuntimeError) as exc:
         return {"verdict": "fail", "stage": "export", "detail": str(exc)}
-    return {
-        "verdict": "pass",
-        "design": contract.name,
-        "files": [entry["path"] for entry in manifest["files"]],
-    }
+    return _apply_baseline(
+        args,
+        {
+            "verdict": "pass",
+            "design": contract.name,
+            "files": [entry["path"] for entry in manifest["files"]],
+        },
+        out_dir / "harness-diagram.png",
+    )
 
 
 def cmd_drawio(args: argparse.Namespace) -> dict[str, Any]:
@@ -114,6 +135,9 @@ def cmd_drawio(args: argparse.Namespace) -> dict[str, Any]:
         )
     except RuntimeError as exc:
         return {"verdict": "fail", "stage": "drawio", "detail": str(exc)}
+    emitted = Path(result["path"])
+    if emitted.suffix.lower() in {".png", ".jpg", ".jpeg"}:
+        result = _apply_baseline(args, result, emitted)
     return {"verdict": "pass", **result}
 
 
@@ -194,6 +218,12 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FORMATS",
         help=f"comma-separated drawio -x exports: {','.join(drawio_export_formats())}",
     )
+    p.add_argument(
+        "--baseline",
+        default=None,
+        metavar="BASELINE_JSON",
+        help="record/compare harness-diagram.png image_sha256 against this JSON",
+    )
 
     p = sub.add_parser("export")
     p.add_argument("--contract", required=True)
@@ -209,12 +239,24 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FORMATS",
         help=f"comma-separated drawio -x exports: {','.join(drawio_export_formats())}",
     )
+    p.add_argument(
+        "--baseline",
+        default=None,
+        metavar="BASELINE_JSON",
+        help="record/compare harness-diagram.png image_sha256 against this JSON",
+    )
 
     p = sub.add_parser("drawio")
     p.add_argument("--in", dest="input", required=True, help="input file (drawio/vsdx/csv/mermaid)")
     p.add_argument("--out", default=None)
     p.add_argument("--format", default=None)
     p.add_argument("options", nargs=argparse.REMAINDER, help="extra drawio -x flags")
+    p.add_argument(
+        "--baseline",
+        default=None,
+        metavar="BASELINE_JSON",
+        help="record/compare the emitted image's sha256 against this JSON",
+    )
 
     p = sub.add_parser(
         "drawio-lint",

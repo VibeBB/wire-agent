@@ -23,9 +23,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Vision render lane: `wire_author` and `wire_drawio` (MCP) now attach the
+  rendered PNG/JPG inline as `ImageContent` so vision-capable models see the
+  drawing directly in the tool result.
+- `--baseline` (CLI) / `baseline_path` (MCP) on `author`, `export`, and
+  `drawio`: records `image_sha256` on first run and reports
+  `match`/`diff` afterwards — a deterministic diagram-change detector
+  (`src/wire/render.py`).
+- Typed visual review records: `src/wire/advisory.py` ports the circuit
+  `AdvisoryResult`/`VisualReviewDetail` contract for
+  `review-visual-<slug>.advisory.json`; `wire-review` documents the
+  convention (ADR-0006).
+- `scripts/e2e_authoring.py` requests the PNG render and reports
+  `renders`/`render_status` (fail-open when drawio-desktop is absent).
 - `post_tool_use` provenance hooks (ported from mechanical-agent):
   `record-vision-tool-event` on `inspect_image_with_vision` and
-  `record-image-observation` on `file_editor|wire_drawio|wire_export`, writing
+  `record-image-observation` on `file_editor|wire_drawio|wire_author`, writing
   hashed observation records to `.openhands/wire/vision-tool-events.jsonl` and
   `.openhands/wire/image-observations.jsonl`. `wire-review` now declares its
   required hooks in frontmatter (plugin hooks do not propagate to sub-agents).
@@ -35,6 +48,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `record-image-observation` matcher now targets `wire_author` (which emits
+  the rendered diagram paths) — the previous `wire_export` entry named a
+  tool that does not exist, so author-side renders were never logged.
 - `scripts/check_plugin_load.py` now renders the OK summary from the actual
   expected asset sets instead of a hardcoded string that could drift.
 

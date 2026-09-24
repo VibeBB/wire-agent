@@ -47,10 +47,15 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
 2. Topology review: read `harness-diagram.drawio.svg` — or for a true
    vision pass, run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py"
    export --contract <file> --out <dir> --png` and open
-   `harness-diagram.png` (drawio-desktop renders it). When your model is
-   vision-capable the FileEditorTool sends the raster to it directly
-   (the SDK advertises image viewing only then); when it is not there is
-   no vision fallback for the workspace file —
+   `harness-diagram.png` (drawio-desktop renders it). The `wire_author`
+   and `wire_drawio` MCP tools attach the rendered PNG/JPG inline as
+   ImageContent, so a vision-capable model sees the drawing directly in
+   the tool result; `--baseline <file>` (or `baseline_path`) records
+   `image_sha256` on first run and reports `match`/`diff` afterwards — a
+   deterministic "did the diagram change?" answer that needs no model.
+   When your model is vision-capable the FileEditorTool also sends the
+   raster to it directly (the SDK advertises image viewing only then);
+   when it is not there is no vision fallback for the workspace file —
    `inspect_image_with_vision` (declared as `VisionInspectTool`; it
    consults a saved vision-capable LLM profile) inspects only images
    attached to the latest user message — so fall back to decoding the
@@ -69,3 +74,39 @@ directory (containing `harness-diagram.drawio.svg`, `wire-list.csv`, `bom.*`,
    orchestrator folds findings back through the contract and reruns
    `wire_author`. A failed gate is a fact, not a suggestion — quote it
    verbatim with the measured value and limit.
+
+Visual review records: when you review a rendered image, write
+`review-visual-<slug>.advisory.json` next to `design-report.json` with
+the typed contract (`src/wire/advisory.py`):
+
+```json
+{
+  "tool": "vision_review",
+  "stage": "review",
+  "status": "ok",
+  "summary": "harness diagram top view",
+  "artifacts": ["<out>/harness-diagram.png"],
+  "detail": {
+    "image_path": "<out>/harness-diagram.png",
+    "image_sha256": "<sha256>",
+    "model": "<model>",
+    "checklist": "harness_diagram",
+    "findings": [
+      {"category": "label_collision", "severity": "warning",
+       "note": "...", "bbox": [x, y, w, h]}
+    ]
+  }
+}
+```
+
+`checklist` is `harness_diagram` or `intake_image`; finding categories are
+`missing_connection`, `wrong_connector`, `routing_anomaly`,
+`label_collision`, `text_outside_frame`, `dimension_legibility`,
+`datasheet_mismatch`, `other`; severity is `error`/`warning`/`info`; `bbox`
+is optional normalized `[x, y, w, h]`. `parse_visual_review` validates the
+detail — malformed records validate to `None` and are discarded, never
+read as verdicts. The post_tool_use hooks already log every viewed image
+path plus sha256 to `.openhands/wire/image-observations.jsonl`
+(`wire_drawio`/`wire_author` results and `file_editor view`), and every
+`inspect_image_with_vision` call to `vision-tool-events.jsonl` — the
+review record binds the judgment to those provenance entries.
