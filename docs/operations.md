@@ -58,6 +58,21 @@ surface; see `plugins/wire/commands/export.md` for the flag cheat sheet
 (layer selection, `--size page` print PDFs, `-u` uncompressed XML,
 `--theme`, `--layout`).
 
+## Intake attachments and evidence binding
+
+User-attached images are materialized to `<workspace>/intake/attachments/`
+by the `intake-attachments` hook (session_start, user_prompt_submit, stop;
+ADR-0005). The hook scans the agent-canvas event store
+`~/.openhands/agent-canvas/dev_conversations/<session_id>/events/` —
+override with `$WIRE_AGENT_EVENTS_DIR` — decodes each `data:` image to
+`<sha256[:12]>.<ext>`, and appends provenance to `manifest.jsonl`; the
+output dir is overridable via `$WIRE_INTAKE_ATTACHMENTS_DIR`. When the
+events directory is unreachable (remote runtimes) the hook exits quietly
+and the fallback is dropping files into `intake/` manually. `Assumption`
+and `OpenQuestion` records may bind such a file with an `evidence` field
+(`kind`, `path`, `sha256`, `note`); `check_intake` verifies existence and
+hash — fail-closed, same as the `contract_sha256` binding.
+
 ## Releases
 
 - Versions follow semver; `plugin.json`, `pyproject.toml`, and the skill

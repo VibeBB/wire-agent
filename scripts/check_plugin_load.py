@@ -24,9 +24,10 @@ EXPECTED_SKILLS = {
     "wire-workflow",
 }
 EXPECTED_COMMANDS = {"design", "doctor", "export", "gates"}
-EXPECTED_STOP_HOOKS = {"report-design-status"}
+EXPECTED_SESSION_START_HOOKS = {"wire-doctor", "intake-attachments"}
+EXPECTED_USER_PROMPT_SUBMIT_HOOKS = {"intake-attachments"}
 EXPECTED_PRE_TOOL_USE_HOOKS = {"protect-generated"}
-EXPECTED_SESSION_START_HOOKS = {"wire-doctor"}
+EXPECTED_STOP_HOOKS = {"report-design-status", "intake-attachments"}
 EXPECTED_POST_TOOL_USE_HOOKS = {"record-image-observation", "record-vision-tool-event"}
 
 
@@ -83,6 +84,7 @@ def check_plugin(plugin_dir: Path) -> list[str]:
     if plugin.hooks is not None:
         collected: dict[str, set[str]] = {
             "session_start": set(),
+            "user_prompt_submit": set(),
             "pre_tool_use": set(),
             "stop": set(),
             "post_tool_use": set(),
@@ -93,25 +95,18 @@ def check_plugin(plugin_dir: Path) -> list[str]:
                 hooks: list[Any] = list(group.hooks)
                 names = [h.name for h in hooks if h.name is not None]
                 collected[event_name].update(names)
-        if collected["session_start"] != EXPECTED_SESSION_START_HOOKS:
-            reasons.append(
-                f"session_start hooks {sorted(collected['session_start'])} != "
-                f"{sorted(EXPECTED_SESSION_START_HOOKS)}"
-            )
-        if collected["pre_tool_use"] != EXPECTED_PRE_TOOL_USE_HOOKS:
-            reasons.append(
-                f"pre_tool_use hooks {sorted(collected['pre_tool_use'])} != "
-                f"{sorted(EXPECTED_PRE_TOOL_USE_HOOKS)}"
-            )
-        if collected["stop"] != EXPECTED_STOP_HOOKS:
-            reasons.append(
-                f"stop hooks {sorted(collected['stop'])} != {sorted(EXPECTED_STOP_HOOKS)}"
-            )
-        if collected["post_tool_use"] != EXPECTED_POST_TOOL_USE_HOOKS:
-            reasons.append(
-                f"post_tool_use hooks {sorted(collected['post_tool_use'])} != "
-                f"{sorted(EXPECTED_POST_TOOL_USE_HOOKS)}"
-            )
+        expected_hooks = {
+            "session_start": EXPECTED_SESSION_START_HOOKS,
+            "user_prompt_submit": EXPECTED_USER_PROMPT_SUBMIT_HOOKS,
+            "pre_tool_use": EXPECTED_PRE_TOOL_USE_HOOKS,
+            "stop": EXPECTED_STOP_HOOKS,
+            "post_tool_use": EXPECTED_POST_TOOL_USE_HOOKS,
+        }
+        for event_name, expected in expected_hooks.items():
+            if collected[event_name] != expected:
+                reasons.append(
+                    f"{event_name} hooks {sorted(collected[event_name])} != {sorted(expected)}"
+                )
 
     registered = _registered_tools()
     for agent in plugin.agents:
@@ -133,6 +128,7 @@ def main() -> int:
         return 1
     all_hooks = (
         EXPECTED_SESSION_START_HOOKS
+        | EXPECTED_USER_PROMPT_SUBMIT_HOOKS
         | EXPECTED_PRE_TOOL_USE_HOOKS
         | EXPECTED_STOP_HOOKS
         | EXPECTED_POST_TOOL_USE_HOOKS

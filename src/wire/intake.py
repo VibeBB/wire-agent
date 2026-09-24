@@ -27,12 +27,27 @@ class Requirement(BaseModel):
     speaker: str = Field(min_length=1)
 
 
+class EvidenceRef(BaseModel):
+    """Provenance binding to an intake evidence file (image, document, CAD file).
+
+    `path` resolves relative to the intake file's directory when not absolute.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["image", "document", "cad_file"]
+    path: Path
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    note: str = Field(default="")
+
+
 class Assumption(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(pattern=r"^A[0-9]+$")
     text: str = Field(min_length=1)
     rationale: str = Field(min_length=1)
+    evidence: EvidenceRef | None = None
 
 
 class OpenQuestion(BaseModel):
@@ -40,6 +55,7 @@ class OpenQuestion(BaseModel):
 
     id: str = Field(pattern=r"^Q[0-9]+$")
     text: str = Field(min_length=1)
+    evidence: EvidenceRef | None = None
 
 
 class Intake(BaseModel):
@@ -72,6 +88,7 @@ class IntakeReport(BaseModel):
     unknown_sources: dict[str, list[str]]
     assumption_only_elements: list[str]
     open_questions: list[OpenQuestion]
+    evidence_errors: list[str]
     verdict: Literal["ready", "blocked"]
     reasons: list[str]
 
@@ -145,6 +162,8 @@ def check_intake(
         reasons.append(f"elements backed only by assumptions/questions: {sorted(assumption_only)}")
     if intake.open_questions:
         reasons.append(f"open questions: {', '.join(q.id for q in intake.open_questions)}")
+    evidence_errors = check_evidence(intake, intake_path=intake_path)
+    reasons.extend(evidence_errors)
 
     verdict: Literal["ready", "blocked"] = "ready" if not reasons else "blocked"
     return IntakeReport(
@@ -158,6 +177,27 @@ def check_intake(
         unknown_sources=unknown_sources,
         assumption_only_elements=sorted(assumption_only),
         open_questions=intake.open_questions,
+        evidence_errors=evidence_errors,
         verdict=verdict,
         reasons=reasons,
     )
+
+
+def check_evidence(intake: Intake, *, intake_path: Path) -> list[str]:
+    """Verify every declared evidence file exists and matches its sha256."""
+    errors: list[str] = []
+    base = intake_path.resolve().parent
+    for record in [*intake.assumptions, *intake.open_questions]:
+        evidence = record.evidence
+        if evidence is None:
+            continue
+        path = evidence.path if evidence.path.is_absolute() else base / evidence.path
+        label = f"{record.id} evidence {evidence.path}"
+        try:
+            data = path.read_bytes()
+        except OSError:
+            errors.append(f"{label}: file missing")
+            continue
+        if hashlib.sha256(data).hexdigest() != evidence.sha256:
+            errors.append(f"{label}: sha256 mismatch")
+    return errors

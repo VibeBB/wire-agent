@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -428,3 +429,120 @@ def test_record_image_observation_skips_non_observations(tmp_path: Path) -> None
         assert _run_hook(OBSERVE_SCRIPT, payload).returncode == 0, payload
     assert _run_hook(OBSERVE_SCRIPT, "{not-json").returncode == 0
     assert _observations(tmp_path) == []
+
+
+ATTACH_SCRIPT = (
+    Path(__file__).parents[1] / "plugins" / "wire" / "hooks" / "scripts" / "intake_attachments.py"
+)
+
+
+def _write_event(events: Path, name: str, source: str, urls: list[str]) -> None:
+    event = {
+        "id": name,
+        "source": source,
+        "llm_message": {
+            "role": "user",
+            "content": (
+                [{"type": "image", "image_urls": urls}]
+                if urls
+                else [{"type": "text", "text": "hi"}]
+            ),
+        },
+    }
+    (events / name).write_text(json.dumps(event), encoding="utf-8")
+
+
+def _run_attach_hook(
+    payload: dict[str, Any], events_dir: Path | None
+) -> subprocess.CompletedProcess[str]:
+    env = dict(os.environ)
+    if events_dir is not None:
+        env["WIRE_AGENT_EVENTS_DIR"] = str(events_dir)
+    else:
+        env.pop("WIRE_AGENT_EVENTS_DIR", None)
+    return subprocess.run(
+        [sys.executable, str(ATTACH_SCRIPT)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+
+def test_intake_attachments_materializes_user_images(tmp_path: Path) -> None:
+    events = tmp_path / "events"
+    events.mkdir()
+    encoded = "data:image/png;base64," + base64.b64encode(_PNG).decode()
+    _write_event(events, "event-1.json", "user", [encoded])
+    _write_event(events, "event-2.json", "agent", [encoded])
+    _write_event(events, "event-3.json", "user", [])
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    payload = {"working_dir": str(workdir)}
+    result = _run_attach_hook(payload, events)
+
+    assert result.returncode == 0
+    attachments = workdir / "intake" / "attachments"
+    images = list(attachments.glob("*.png"))
+    assert len(images) == 1
+    assert images[0].read_bytes() == _PNG
+    records = [
+        json.loads(line)
+        for line in (attachments / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) == 1
+    assert records[0]["sha256"] == hashlib.sha256(_PNG).hexdigest()
+    assert records[0]["materialized"] is True
+    # second run is a no-op
+    assert _run_attach_hook(payload, events).returncode == 0
+    assert len(list(attachments.glob("*.png"))) == 1
+    assert len((attachments / "manifest.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_intake_attachments_records_non_data_urls(tmp_path: Path) -> None:
+    events = tmp_path / "events"
+    events.mkdir()
+    _write_event(events, "event-1.json", "user", ["https://example.com/board.png"])
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    result = _run_attach_hook({"working_dir": str(workdir)}, events)
+
+    assert result.returncode == 0
+    manifest = workdir / "intake" / "attachments" / "manifest.jsonl"
+    record = json.loads(manifest.read_text(encoding="utf-8").splitlines()[0])
+    assert record["materialized"] is False
+    assert record["reason"] == "non-data-url"
+
+
+def test_intake_attachments_fails_open_without_events_dir(tmp_path: Path) -> None:
+    result = _run_attach_hook({"working_dir": str(tmp_path)}, None)
+    assert result.returncode == 0
+    assert not (tmp_path / "intake").exists()
+
+
+def test_intake_attachments_uses_session_default_path(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    events = home / ".openhands" / "agent-canvas" / "dev_conversations" / "session-9" / "events"
+    events.mkdir(parents=True)
+    encoded = "data:image/png;base64," + base64.b64encode(_PNG).decode()
+    _write_event(events, "event-1.json", "user", [encoded])
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    env = dict(os.environ)
+    env.pop("WIRE_AGENT_EVENTS_DIR", None)
+    env["HOME"] = str(home)
+    result = subprocess.run(
+        [sys.executable, str(ATTACH_SCRIPT)],
+        input=json.dumps({"working_dir": str(workdir), "session_id": "session-9"}),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    assert list((workdir / "intake" / "attachments").glob("*.png"))

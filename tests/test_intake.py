@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -91,3 +92,49 @@ def test_intake_file_roundtrip(tmp_path: Path) -> None:
     intake = Intake.model_validate(json.loads(path.read_text(encoding="utf-8")))
     contract = HarnessContract.model_validate(example_contract_data())
     assert check_intake(contract, intake, CP, path).verdict == "ready"
+
+
+def _evidence_intake(tmp_path: Path) -> tuple[Intake, Path]:
+    payload = b"pretend photo"
+    image = tmp_path / "attachments" / "abcd1234abcd.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(payload)
+    data = example_intake_data()
+    data["assumptions"][0]["evidence"] = {
+        "kind": "image",
+        "path": str(image.relative_to(tmp_path)),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "note": "connector photo from the user",
+    }
+    intake = Intake.model_validate(data)
+    return intake, tmp_path / "c.intake.json"
+
+
+def test_evidence_ref_valid_passes(tmp_path: Path) -> None:
+    intake, intake_path = _evidence_intake(tmp_path)
+    contract = HarnessContract.model_validate(example_contract_data())
+    report = check_intake(contract, intake, CP, intake_path)
+    assert report.verdict == "ready"
+    assert report.evidence_errors == []
+
+
+def test_evidence_missing_file_blocks(tmp_path: Path) -> None:
+    intake, intake_path = _evidence_intake(tmp_path)
+    (tmp_path / "attachments" / "abcd1234abcd.png").unlink()
+    contract = HarnessContract.model_validate(example_contract_data())
+    report = check_intake(contract, intake, CP, intake_path)
+    assert report.verdict == "blocked"
+    assert report.evidence_errors == [
+        f"{intake.assumptions[0].id} evidence attachments/abcd1234abcd.png: file missing"
+    ]
+
+
+def test_evidence_sha_mismatch_blocks(tmp_path: Path) -> None:
+    intake, intake_path = _evidence_intake(tmp_path)
+    (tmp_path / "attachments" / "abcd1234abcd.png").write_bytes(b"tampered")
+    contract = HarnessContract.model_validate(example_contract_data())
+    report = check_intake(contract, intake, CP, intake_path)
+    assert report.verdict == "blocked"
+    assert report.evidence_errors == [
+        f"{intake.assumptions[0].id} evidence attachments/abcd1234abcd.png: sha256 mismatch"
+    ]
