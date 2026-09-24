@@ -57,6 +57,7 @@ class _Cell:
     edge: bool
     source: str | None
     target: str | None
+    floating: bool
     x: float | None
     y: float | None
     width: float | None
@@ -68,7 +69,10 @@ def _cells(root: ET.Element) -> list[_Cell]:
     for cell in root.iter("mxCell"):
         geo = cell.find("mxGeometry")
         x = y = width = height = None
+        floating = False
         if geo is not None:
+            points = {p.get("as") for p in geo.findall("mxPoint")}
+            floating = {"sourcePoint", "targetPoint"} <= points
             try:
                 x = float(geo.get("x", "0") or 0)
                 y = float(geo.get("y", "0") or 0)
@@ -85,6 +89,7 @@ def _cells(root: ET.Element) -> list[_Cell]:
                 edge=cell.get("edge") == "1",
                 source=cell.get("source"),
                 target=cell.get("target"),
+                floating=floating,
                 x=x,
                 y=y,
                 width=width,
@@ -126,6 +131,10 @@ def lint_text(text: str, *, source: Path) -> DrawioLintReport:
         if not cell.edge:
             continue
         if not cell.source or not cell.target:
+            # Floating edges anchor to absolute mxPoints, not cells
+            # (e.g. twist-pair bands): valid drawio, not missing endpoints.
+            if cell.floating:
+                continue
             findings.append(
                 DrawioLintFinding(
                     type="edge_missing_endpoints",
@@ -252,7 +261,10 @@ def lint_text(text: str, *, source: Path) -> DrawioLintReport:
                 )
             )
 
-    if page_w and page_h and len(boxes) >= 2:
+    # A framed sheet deliberately holds whitespace for the drawing frame,
+    # zone grid, and title block — coverage rules do not apply to it.
+    framed = any(cell.id == "frame" and cell.parent == "0" for cell in cells)
+    if page_w and page_h and len(boxes) >= 2 and not framed:
         xs = [b[0] for b in boxes.values()]
         ys = [b[1] for b in boxes.values()]
         x2 = [b[0] + b[2] for b in boxes.values()]

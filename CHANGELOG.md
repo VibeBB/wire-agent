@@ -43,6 +43,13 @@ All notable changes to this project are documented here. The format follows
   `missing_dimension`, `missing_manufacturing_info`, `design_intent`.
 - `scripts/e2e_authoring.py` requests the PNG render and reports
   `renders`/`render_status` (fail-open when drawio-desktop is absent).
+- `harness-diagram.drawio.svg` now projects onto an ISO 5457 / JIS Z 8311
+  drawing frame (ADR-0007): the smallest A-series landscape sheet
+  (A4–A0, then elongated A0x2 / A0x3, custom beyond) that holds the pin
+  table plus the title block, with 20/10 mm borders, centring marks, the
+  50 mm zone grid, the size designation, and an ISO 7200 title block on a
+  bottom `frame` layer. All title-block values derive from the contract —
+  `Date of issue` is `—` because artifacts stay byte-deterministic.
 - `post_tool_use` provenance hooks (ported from mechanical-agent):
   `record-vision-tool-event` on `inspect_image_with_vision` and
   `record-image-observation` on `file_editor|wire_drawio|wire_author`, writing
@@ -58,6 +65,10 @@ All notable changes to this project are documented here. The format follows
 - `record-image-observation` matcher now targets `wire_author` (which emits
   the rendered diagram paths) — the previous `wire_export` entry named a
   tool that does not exist, so author-side renders were never logged.
+- `drawio_lint` no longer reports floating edges (mxPoint
+  `sourcePoint`/`targetPoint` anchors without cell endpoints — the
+  twist-pair bands) as `edge_missing_endpoints`, and skips the
+  `page_underutilized` warning when a `frame` layer is present.
 - `scripts/check_plugin_load.py` now renders the OK summary from the actual
   expected asset sets instead of a hardcoded string that could drift.
 

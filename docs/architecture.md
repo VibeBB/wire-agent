@@ -34,7 +34,7 @@ conversation ──▶ <name>.contract.json + <name>.intake.json   (truth)
    (L1 verdict)    wire-list.csv       .json / .md
                    cut-table.csv
                    bom.json/.csv
-                   harness-diagram.drawio.svg
+                   harness-diagram.drawio.svg (ISO 5457 frame + ISO 7200 title block)
                    harness-diagram.drawio_lint.json (advisory)
                    manifest.json / provenance.json
 ```

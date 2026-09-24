@@ -34,7 +34,9 @@ a model says can override a gate verdict.
 - **Manufacturing projections** — `wire-list.csv`, `cut-table.csv`,
   `bom.json/.csv`, and `harness-diagram.drawio.svg` — a WireViz-style
   pin-table diagram rendered by drawio-desktop (shipped in the pinned
-  wire-tools image; the export fails closed without it), viewable as SVG and
+  wire-tools image; the export fails closed without it) on an ISO 5457 /
+  JIS Z 8311 sheet frame with an ISO 7200 title block (ADR-0007),
+  viewable as SVG and
   editable in diagrams.net — with sha256 manifest and provenance
   records. `--drawio`
   adds png/jpg/pdf/html/svg/xml review renders; `wire_drawio` (MCP) and
@@ -115,7 +117,8 @@ wire-agent は要件の会話を機械可読なハーネス契約に変換し、
   ディレーティング）・電圧降下・絶縁定格・曲げ半径・信号分離・
   端子適合・コネクタ定格を L1 ゲートで検査。`unknown` は失敗扱い。
 - **製造投影** — `wire-list.csv` `cut-table.csv` `bom.json/.csv`
-  `harness-diagram.drawio.svg`（WireViz 風ピンテーブル図。digest 固定の
+  `harness-diagram.drawio.svg`（WireViz 風ピンテーブル図を ISO 5457 /
+  JIS Z 8311 の図枠 + ISO 7200 標題欄付きシート上に投影。digest 固定の
   wire-tools イメージ同梱の drawio-desktop で描画され、SVG として表示でき、
   diagrams.net で編集可能。drawio 不在時はエクスポートが fail-closed で失敗）を
   sha256 マニフェスト・由来記録付きで出力。`--drawio` で png/jpg/pdf/html/svg/xml の

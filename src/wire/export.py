@@ -227,6 +227,120 @@ def _num(value: float) -> str:
     return f"{value:g}"
 
 
+# --- Drawing sheet frame: ISO 5457 (= JIS Z 8311) + ISO 7200 title block ---
+#
+# Drawio page units are pixels at 100 px per inch (its A-series page formats
+# are 827x1169, 1169x1654, ...), so millimetre geometry maps cleanly with
+# _mm(). The frame, zone system, centring marks, and title block are drawn
+# as ordinary cells on a bottom "frame" layer, which keeps the artifact
+# editable in drawio and renders identically in `drawio -x` exports (the
+# SVG viewBox follows the union of cell bounds — the sheet rect therefore
+# defines the rendered canvas).
+_PX_PER_MM = 100.0 / 25.4
+
+# ISO 5457 A-series landscape sheets (trimmed size, mm), smallest first —
+# A0 to A3 are horizontal-only; A4 may be either and we use horizontal so
+# the title block sits bottom-right. JIS Z 8311 elongated sheets extend the
+# short side for content past A0.
+_SHEETS: tuple[tuple[str, float, float], ...] = (
+    ("A4", 297.0, 210.0),
+    ("A3", 420.0, 297.0),
+    ("A2", 594.0, 420.0),
+    ("A1", 841.0, 594.0),
+    ("A0", 1189.0, 841.0),
+    ("A0x2", 1189.0, 1682.0),
+    ("A0x3", 1189.0, 2523.0),
+)
+_BORDER_LEFT_MM = 20.0  # filing margin (ISO 5457 §4.2)
+_BORDER_MM = 10.0  # other three sides
+_FRAME_STROKE_MM = 0.7  # drawing-space frame line
+_GRID_STROKE_MM = 0.35  # grid-reference tick lines
+_ZONE_FIELD_MM = 50.0  # nominal zone field length
+_ZONE_TEXT_MM = 3.5  # zone letter/numeral height
+_CENTRE_REACH_MM = 10.0  # centring mark reach past the drawing frame
+_TITLE_BLOCK_W_MM = 180.0  # ISO 7200 recommended title-block width
+_TITLE_ROW_MM = 13.0
+_TITLE_ROWS = 3
+_TITLE_GAP_MM = 8.0  # clearance between content and the title block
+_ZONE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"  # I and O excluded (ISO 5457 §4.4)
+
+
+def _zone_letter(index: int) -> str:
+    """Zone letter for a vertical-border field: A..Z, then AA, AB, ..."""
+    if index < len(_ZONE_LETTERS):
+        return _ZONE_LETTERS[index]
+    over = index - len(_ZONE_LETTERS)
+    return _ZONE_LETTERS[over // len(_ZONE_LETTERS)] + _ZONE_LETTERS[over % len(_ZONE_LETTERS)]
+
+
+def _mm(value: float) -> float:
+    """Millimetres to drawio units (drawio maps 100 px per inch on pages)."""
+    return value * _PX_PER_MM
+
+
+def _zone_spans(half: float) -> list[tuple[float, float]]:
+    """Field spans on one half-side: ~50 mm fields outward from the sheet's
+    symmetry axis; the corner field absorbs the remainder (ISO 5457 §4.4).
+    The resulting counts reproduce ISO 5457 Table 2 on every A-size."""
+    n = max(1, round((half / _PX_PER_MM) / _ZONE_FIELD_MM))
+    bounds = [min(_mm(_ZONE_FIELD_MM) * i, half) for i in range(n)]
+    bounds.append(half)
+    return [(bounds[i], bounds[i + 1]) for i in range(n)]
+
+
+def _zone_segments(center: float, half: float) -> list[tuple[float, float]]:
+    """All field segments across a side, ordered edge to edge."""
+    spans = _zone_spans(half)
+    left = [(center - b, center - a) for a, b in reversed(spans)]
+    right = [(center + a, center + b) for a, b in spans]
+    return left + right
+
+
+def _zone_ticks(center: float, half: float) -> list[float]:
+    """Internal field boundaries (the symmetry axis takes the centring mark)."""
+    spans = _zone_spans(half)
+    return [center - a for a, _b in spans if a > 0] + [center + a for a, _b in spans if a > 0]
+
+
+def _frame_geometry(content_w: float, content_h: float) -> dict[str, Any]:
+    """ISO 5457 sheet + frame layout for the pin-table content.
+
+    Picks the smallest sheet whose drawing space (sheet minus the 20 mm
+    filing border and 10 mm borders) holds the content plus the ISO 7200
+    title block, which anchors bottom-right; when the sheet is wide enough
+    the title block may share the bottom row without a reserved strip.
+    Content taller than A0x3 falls back to a custom sheet sized the same
+    way — the frame marks are identical, only the size designation differs.
+    """
+    lm = _mm(_BORDER_LEFT_MM)
+    tm = bm = rm = _mm(_BORDER_MM)
+    tb_w = _mm(_TITLE_BLOCK_W_MM)
+    tb_h = _TITLE_ROWS * _mm(_TITLE_ROW_MM)
+    gap = _mm(_TITLE_GAP_MM)
+
+    def fits(sheet_w: float, sheet_h: float) -> bool:
+        ds_w, ds_h = sheet_w - lm - rm, sheet_h - tm - bm
+        side_by_side = content_w + tb_w + gap <= ds_w
+        need_h = content_h + (0.0 if side_by_side else tb_h + gap)
+        return ds_w >= max(content_w, tb_w) and ds_h >= need_h
+
+    name, sheet_w, sheet_h = "", 0.0, 0.0
+    for sheet_name, w_mm, h_mm in _SHEETS:
+        w, h = round(_mm(w_mm)), round(_mm(h_mm))
+        if fits(w, h):
+            name, sheet_w, sheet_h = sheet_name, w, h
+            break
+    if not name:
+        ds_w, ds_h = max(content_w, tb_w), content_h + tb_h + gap
+        sheet_w, sheet_h = ds_w + lm + rm, ds_h + tm + bm
+        # No A-series designation exists; the corner still needs a size
+        # designation, so carry the real millimetre dimensions.
+        name = f"{round(sheet_w / _PX_PER_MM)}x{round(sheet_h / _PX_PER_MM)}"
+    ds = (lm, tm, sheet_w - lm - rm, sheet_h - tm - bm)
+    tb = (sheet_w - rm - tb_w, sheet_h - bm - tb_h, tb_w, tb_h)
+    return {"name": name, "w": sheet_w, "h": sheet_h, "ds": ds, "tb": tb}
+
+
 def _connector_height(connector: HarnessConnector) -> float:
     return _HEADER_H + len(connector.cavities) * _ROW_H
 
@@ -317,9 +431,171 @@ def _splice_positions(
     }
 
 
+def _frame_cells(frame: dict[str, Any]) -> list[str]:
+    """mxCell fragments for the frame layer: sheet edge, drawing-space
+    frame, centring marks, the grid-reference zone system, the sheet-size
+    designation, and the ISO 7200 title block."""
+    sw, sh = frame["w"], frame["h"]
+    ds_x, ds_y, ds_w, ds_h = frame["ds"]
+    tb_x, tb_y, tb_w, tb_h = frame["tb"]
+    rm, bm = _mm(_BORDER_MM), _mm(_BORDER_MM)
+    grid = _mm(_GRID_STROKE_MM)
+    thick = _mm(_FRAME_STROKE_MM)
+    reach = _mm(_CENTRE_REACH_MM)
+    cx, cy = sw / 2, sh / 2
+
+    def rect(cid: str, x: float, y: float, w: float, h: float, style: str) -> str:
+        return (
+            f'<mxCell id="{cid}" value="" style="{style}" vertex="1" parent="frame">'
+            f'<mxGeometry x="{_num(x)}" y="{_num(y)}" width="{_num(w)}" '
+            f'height="{_num(h)}" as="geometry" /></mxCell>'
+        )
+
+    def text(cid: str, value: str, x: float, y: float, w: float, h: float, extra: str) -> str:
+        return (
+            f'<mxCell id="{cid}" value="{value}" '
+            f'style="text;html=1;strokeColor=none;fillColor=none;align=center;'
+            f'verticalAlign=middle;fontFamily=monospace;{extra}" '
+            f'vertex="1" parent="frame">'
+            f'<mxGeometry x="{_num(x)}" y="{_num(y)}" width="{_num(w)}" '
+            f'height="{_num(h)}" as="geometry" /></mxCell>'
+        )
+
+    fill = "rounded=0;html=1;fillColor=#000000;strokeColor=none;"
+    frame_style = f"rounded=0;html=1;fillColor=none;strokeColor=#000000;strokeWidth={_num(thick)};"
+    sheet_style = "rounded=0;html=1;fillColor=none;strokeColor=#000000;strokeWidth=0.5;"
+    parts = [
+        rect("frame-sheet", 0.0, 0.0, sw, sh, sheet_style),
+        # Centring marks: at the ends of the sheet's symmetry axes, reaching
+        # 10 mm past the drawing frame into the drawing space (§4.3).
+        rect("frame-cmark-left", 0.0, cy - thick / 2, ds_x + reach, thick, fill),
+        rect("frame-cmark-right", sw - rm - reach, cy - thick / 2, rm + reach, thick, fill),
+        rect("frame-cmark-top", cx - thick / 2, 0.0, thick, ds_y + reach, fill),
+        rect("frame-cmark-bottom", cx - thick / 2, sh - bm - reach, thick, bm + reach, fill),
+        # Drawing-space frame (0.7 mm).
+        rect("frame-border", ds_x, ds_y, ds_w, ds_h, frame_style),
+    ]
+
+    # Grid-reference system (§4.4): numerals left→right on the top and
+    # bottom borders, capital letters top→bottom on both side borders.
+    label_h = _mm(_ZONE_TEXT_MM)
+    tick_style = fill
+    for axis, strip_y0, strip_h in (("t", 0.0, ds_y), ("b", sh - bm, bm)):
+        for i, pos in enumerate(_zone_ticks(cx, sw / 2)):
+            parts.append(
+                rect(
+                    f"frame-tick-{axis}{i}",
+                    pos - grid / 2,
+                    strip_y0,
+                    grid,
+                    strip_h,
+                    tick_style,
+                )
+            )
+        for i, (x0, x1) in enumerate(_zone_segments(cx, sw / 2)):
+            parts.append(
+                text(
+                    f"frame-lab-{axis}{i}",
+                    str(i + 1),
+                    x0,
+                    strip_y0,
+                    x1 - x0,
+                    strip_h,
+                    f"fontSize={_num(label_h)};",
+                )
+            )
+    for axis, strip_x0, strip_w in (("l", 0.0, ds_x), ("r", sw - rm, rm)):
+        for i, pos in enumerate(_zone_ticks(cy, sh / 2)):
+            parts.append(
+                rect(
+                    f"frame-tick-{axis}{i}",
+                    strip_x0,
+                    pos - grid / 2,
+                    strip_w,
+                    grid,
+                    tick_style,
+                )
+            )
+        for i, (y0, y1) in enumerate(_zone_segments(cy, sh / 2)):
+            parts.append(
+                text(
+                    f"frame-lab-{axis}{i}",
+                    _zone_letter(i),
+                    strip_x0,
+                    y0,
+                    strip_w,
+                    y1 - y0,
+                    f"fontSize={_num(label_h)};",
+                )
+            )
+
+    # Size designation in the bottom border at the right corner (§5).
+    parts.append(
+        text(
+            "frame-size",
+            _esc(frame["name"]),
+            sw - _mm(46.0),
+            sh - bm,
+            _mm(42.0),
+            bm,
+            "fontSize=10;fontStyle=1;align=right;",
+        )
+    )
+
+    # ISO 7200 title block, bottom-right of the drawing space. Fields are
+    # contract-derived only — no wall-clock data, so the artifact stays
+    # byte-deterministic; "Date of issue" is an em dash placeholder.
+    fields = [
+        [
+            ("Legal owner", "VibeBB"),
+            ("Title", _esc(frame["title"])),
+            ("Drawing no.", _esc(frame["drawing_no"])),
+            ("Rev.", _esc(frame["revision"])),
+        ],
+        [
+            ("Scale", "NTS"),
+            ("Sheet", "1/1"),
+            ("Size", _esc(frame["name"])),
+            ("IPC class", str(frame["ipc_class"])),
+        ],
+        [
+            ("Drawn by", _esc(frame["drawn_by"])),
+            ("Document type", "wire harness pin table"),
+            ("Date of issue", "—"),
+            ("Units", "px"),
+        ],
+    ]
+    col_w, row_h = tb_w / 4, _mm(_TITLE_ROW_MM)
+    for row, entries in enumerate(fields):
+        for col, (label, value) in enumerate(entries):
+            html = (
+                f"&lt;font style='font-size:6px'&gt;{label}&lt;/font&gt;"
+                f"&lt;br&gt;&lt;b&gt;{value}&lt;/b&gt;"
+            )
+            parts.append(
+                f'<mxCell id="tb-{row}{col}" value="{html}" '
+                'style="rounded=0;html=1;whiteSpace=wrap;strokeColor=#000000;'
+                "strokeWidth=1;fillColor=none;fontFamily=monospace;fontSize=10;"
+                'align=left;verticalAlign=top;spacingLeft=4;spacingTop=2;" '
+                'vertex="1" parent="frame">'
+                f'<mxGeometry x="{_num(tb_x + col * col_w)}" y="{_num(tb_y + row * row_h)}" '
+                f'width="{_num(col_w)}" height="{_num(row_h)}" as="geometry" /></mxCell>'
+            )
+    parts.append(rect("tb-outer", tb_x, tb_y, tb_w, tb_h, frame_style))
+    return parts
+
+
 def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
     """Shared geometry for the SVG body and the embedded drawio model."""
     positions, column_of, page_w, page_h = _diagram_geometry(contract)
+    frame = _frame_geometry(page_w, page_h)
+    frame["title"] = contract.name
+    frame["drawing_no"] = contract.contract_id
+    frame["revision"] = contract.revision
+    frame["ipc_class"] = contract.ipc_class
+    frame["drawn_by"] = f"wire-agent/{__version__}"
+    offset_x, offset_y = frame["ds"][0], frame["ds"][1]
+    positions = {cid: (x + offset_x, y + offset_y) for cid, (x, y) in positions.items()}
     connectors = contract.connector_map()
     cavity_y: dict[tuple[str, str], float] = {}
     for connector in contract.connectors:
@@ -345,6 +621,7 @@ def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
         "column_of": column_of,
         "page_w": page_w,
         "page_h": page_h,
+        "frame": frame,
         "cavity_y": cavity_y,
         "splice_pos": splice_pos,
         "used_cavities": used,
@@ -459,25 +736,27 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
     Drawio features used: container swimlanes (cavity rows move with the
     connector), a separate wires layer (toggleable/lockable), edges bound
     to cavity/splice cells, pinned exit/entry sides, dashed shielded
-    strokes, and floating dashed twist-pair bands.
+    strokes, floating dashed twist-pair bands, and a bottom "frame" layer
+    drawing the ISO 5457/JIS Z 8311 sheet frame and ISO 7200 title block.
     """
     positions = layout["positions"]
     column_of = layout["column_of"]
     used = layout["used_cavities"]
-    page_w = layout["page_w"]
-    page_h = layout["page_h"]
+    frame = layout["frame"]
     parts = [
         '<mxGraphModel dx="0" dy="0" grid="1" gridSize="10" guides="1" '
         'tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" '
-        f'pageWidth="{_num(page_w)}" pageHeight="{_num(page_h)}" math="0" shadow="0">',
+        f'pageWidth="{_num(frame["w"])}" pageHeight="{_num(frame["h"])}" math="0" shadow="0">',
         "<root>",
         '<mxCell id="0" />',
+        '<mxCell id="frame" value="frame" parent="0" />',
         '<mxCell id="1" value="harness" parent="0" />',
         '<mxCell id="wires" value="wires" parent="0" />',
+        *_frame_cells(frame),
         f'<mxCell id="title" value="{_esc(_diagram_title(contract))}" '
         'style="text;html=1;align=left;fontSize=14;fontFamily=monospace;" vertex="1" parent="1">'
-        f'<mxGeometry x="{_num(_COL_X[0])}" y="40" '
-        f'width="{_num(page_w - 2 * _COL_X[0])}" height="24" as="geometry" /></mxCell>',
+        f'<mxGeometry x="{_num(frame["ds"][0] + _COL_X[0])}" y="{_num(frame["ds"][1] + 40)}" '
+        f'width="{_num(layout["page_w"] - 2 * _COL_X[0])}" height="24" as="geometry" /></mxCell>',
     ]
     for connector in sorted(contract.connectors, key=lambda c: c.id):
         x, y = positions[connector.id]
