@@ -1,7 +1,7 @@
 ARG UV_VERSION=0.12.18
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
-FROM ubuntu:26.04
+FROM debian:13-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG UV_VERSION=0.12.18
@@ -24,14 +24,7 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 ARG DRAWIO_DESKTOP_VERSION=31.4.5
 ARG DRAWIO_DESKTOP_SHA256=296729ee18f781dc82deb757de2b3399fbe04fe0ddad3093909013e707ee2ae4
 
-# Serve every suite from the master archive: it carries the same -security
-# pocket, while security.ubuntu.com can briefly publish an index ahead of its
-# pool and 404 packages the index still lists.
-RUN grep -q "^URIs: http://security\.ubuntu\.com/ubuntu" \
-        /etc/apt/sources.list.d/ubuntu.sources \
-    && sed -i "s|^URIs: http://security\.ubuntu\.com/ubuntu/|URIs: http://archive.ubuntu.com/ubuntu/|" \
-        /etc/apt/sources.list.d/ubuntu.sources \
-    && apt-get -o Acquire::Retries=5 update \
+RUN apt-get -o Acquire::Retries=5 update \
     && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
         ca-certificates \
         curl \
@@ -39,6 +32,7 @@ RUN grep -q "^URIs: http://security\.ubuntu\.com/ubuntu" \
         git \
         libasound2t64 \
         xvfb \
+        xauth \
     && curl -fsSL -o /tmp/drawio.deb \
         "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
     && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \

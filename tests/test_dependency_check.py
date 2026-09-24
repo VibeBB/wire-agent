@@ -56,7 +56,7 @@ def test_docker_arg_matches_uv_pin():
 
 def test_docker_base_image_parsed():
     base = docker_base_image(ROOT)
-    assert base == ("ubuntu", "26.04")
+    assert base == ("debian", "13-slim")
 
 
 def test_render_markdown_groups_by_surface():
@@ -64,7 +64,7 @@ def test_render_markdown_groups_by_surface():
         DependencyStatus("pypi", "pydantic", "2.13.5", "2.13.5", "pyproject.toml", False),
         DependencyStatus("pypi", "mcp", "1.30.0", "2.2.0", "pyproject.toml", True),
         DependencyStatus(
-            "docker-base", "ubuntu", "26.04", "26.04", "docker/wire-tools.Dockerfile", False
+            "docker-base", "debian", "13-slim", "13-slim", "docker/wire-tools.Dockerfile", False
         ),
     ]
     markdown = render_markdown(statuses)
