@@ -56,7 +56,7 @@ src/wire/
 ├── report.py             # design-report.json/md
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
-├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import}
+├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import,review-record}
 └── mcp_server.py         # stdio MCP boundary
 plugins/wire/
 ├── .plugin/plugin.json

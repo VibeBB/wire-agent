@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `wire review-record`: writes `review-visual-<slug>.advisory.json` for a
+  reviewed image — computes the image sha256, fills the `vision_review`
+  envelope, and validates the detail against `advisory.py` (fail-closed),
+  replacing hand-assembled review JSON.
+- Harness diagram: connector headers and `bom.json` carry `keying` so
+  identical housings are distinguishable on the drawing and the order.
+- Harness diagram: pale insulation strokes (white, pale yellow) get a dark
+  underlay edge so wires stay visible on the white sheet; LEGEND documents
+  the halo and the keying marker.
+- `drawio_lint`: `label_on_connector` warning when a wire label's
+  estimated box overlaps a connector swimlane.
+
+### Changed
+
+- `cut-table.csv` now lists both ends (`strip_a_mm`/`terminal_a` +
+  `strip_b_mm`/`terminal_b`); wires only share a row when both sides match.
+- Harness diagram: labels of same-column and loop wires are pushed into
+  the routing channel instead of anchoring on the connector boundary.
+- Title block Units field reports `px = 0.254 mm` instead of bare `px`.
+
 ### Changed
 
 - Docker-only runtime: `wire_launcher.py` no longer falls back to a local

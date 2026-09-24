@@ -11,6 +11,7 @@ It never promotes a verdict: errors mean the emitted model is broken
 from __future__ import annotations
 
 import argparse
+import contextlib
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,10 +59,12 @@ class _Cell:
     source: str | None
     target: str | None
     floating: bool
+    style: str
     x: float | None
     y: float | None
     width: float | None
     height: float | None
+    label_offset: tuple[float, float]
 
 
 def _cells(root: ET.Element) -> list[_Cell]:
@@ -70,9 +73,17 @@ def _cells(root: ET.Element) -> list[_Cell]:
         geo = cell.find("mxGeometry")
         x = y = width = height = None
         floating = False
+        label_offset = (0.0, 0.0)
         if geo is not None:
             points = {p.get("as") for p in geo.findall("mxPoint")}
             floating = {"sourcePoint", "targetPoint"} <= points
+            for p in geo.findall("mxPoint"):
+                if p.get("as") == "offset":
+                    with contextlib.suppress(ValueError):
+                        label_offset = (
+                            float(p.get("x", "0") or 0),
+                            float(p.get("y", "0") or 0),
+                        )
             try:
                 x = float(geo.get("x", "0") or 0)
                 y = float(geo.get("y", "0") or 0)
@@ -90,10 +101,12 @@ def _cells(root: ET.Element) -> list[_Cell]:
                 source=cell.get("source"),
                 target=cell.get("target"),
                 floating=floating,
+                style=cell.get("style", "") or "",
                 x=x,
                 y=y,
                 width=width,
                 height=height,
+                label_offset=label_offset,
             )
         )
     return cells
@@ -239,6 +252,71 @@ def lint_text(text: str, *, source: Path) -> DrawioLintReport:
                         f"({cell.y + cell.height:.0f} > {parent.height:.0f}px)"
                     ),
                     items=[cell.id, parent.id],
+                )
+            )
+
+    # Wire-edge labels render at the edge midpoint plus their mxPoint
+    # offset; a label that lands on a connector swimlane prints over the
+    # cavity rows/header. Estimate each label box (monospace ~6 px/char)
+    # and warn when it overlaps a connector block.
+    _LABEL_CHAR_W = 6.0
+    _LABEL_H = 14.0
+
+    def _style_float(style: str, key: str, default: float) -> float:
+        for item in style.split(";"):
+            if item.startswith(key + "="):
+                try:
+                    return float(item.split("=", 1)[1])
+                except ValueError:
+                    return default
+        return default
+
+    def _attach_box(cell_id: str) -> tuple[float, float, float, float] | None:
+        cell = by_id.get(cell_id)
+        if cell is None or cell.x is None or cell.y is None:
+            return None
+        if cell.parent in boxes:
+            px, py, pw, _ph = boxes[cell.parent]
+            return px + cell.x, py + cell.y, cell.width or pw, cell.height or 0.0
+        return (cell.x, cell.y, cell.width or 0.0, cell.height or 0.0)
+
+    def _attach_point(cell_id: str, side_key: str, edge_style: str) -> tuple[float, float] | None:
+        box = _attach_box(cell_id)
+        if box is None:
+            return None
+        x, y, w, h = box
+        frac = _style_float(edge_style, side_key, 0.5)
+        return x + frac * w, y + h / 2
+
+    for cell in cells:
+        if not cell.edge or not cell.value.strip() or cell.floating:
+            continue
+        if not cell.id.startswith("wire-") or cell.source is None or cell.target is None:
+            continue
+        a = _attach_point(cell.source, "exitX", cell.style)
+        b = _attach_point(cell.target, "entryX", cell.style)
+        if a is None or b is None:
+            continue
+        mid_x = a[0] if a[0] == b[0] else (a[0] + b[0]) / 2
+        mid_y = (a[1] + b[1]) / 2
+        off_x, off_y = cell.label_offset
+        label_w = len(cell.value) * _LABEL_CHAR_W
+        lx, ly = mid_x + off_x - label_w / 2, mid_y + off_y - _LABEL_H / 2
+        label_box = (lx, ly, label_w, _LABEL_H)
+        hit = next(
+            (cid for cid, cbox in boxes.items() if _overlap(label_box, cbox) > _OVERLAP_EPSILON),
+            None,
+        )
+        if hit is not None:
+            findings.append(
+                DrawioLintFinding(
+                    type="label_on_connector",
+                    severity="warning",
+                    description=(
+                        f"edge {cell.id} label '{cell.value[:40]}' overlaps {hit}; "
+                        "shift the label into the routing channel"
+                    ),
+                    items=[cell.id, hit],
                 )
             )
 

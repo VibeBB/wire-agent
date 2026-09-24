@@ -88,13 +88,19 @@ def _wire_list_csv(contract: HarnessContract) -> str:
 
 
 def _cut_table_csv(contract: HarnessContract) -> str:
-    """Cut/strip/crimp data per wire, grouped identical lengths together."""
+    """Cut/strip/crimp data per wire, grouped identical lengths together.
+
+    Both ends are listed: the A and B sides may need different strip
+    lengths and terminals, so wires only share a row when both sides
+    match (B-side defaults to the wire-type name like A always did)."""
     header = [
         "wire_type",
         "gauge_mm2",
         "length_m",
-        "strip_mm",
-        "terminal",
+        "strip_a_mm",
+        "terminal_a",
+        "strip_b_mm",
+        "terminal_b",
         "wires",
         "quantity",
     ]
@@ -108,10 +114,13 @@ def _cut_table_csv(contract: HarnessContract) -> str:
             wire.length_m,
             wire.strip_a_mm,
             wire.terminal_a or wtype.name,
+            wire.strip_b_mm,
+            wire.terminal_b or wtype.name,
         )
         groups.setdefault(key, []).append(wire.id)
     rows = [
-        [*key[:-1], key[-1], ",".join(sorted(ids)), len(ids)] for key, ids in sorted(groups.items())
+        [*key[:-2], key[-2], key[-1], ",".join(sorted(ids)), len(ids)]
+        for key, ids in sorted(groups.items())
     ]
     return _csv_text(header, rows)
 
@@ -123,6 +132,7 @@ def _bom(contract: HarnessContract) -> dict[str, Any]:
             "family": c.family,
             "housing": c.housing or c.family,
             "cavities": len(c.cavities),
+            **({"keying": c.keying} if c.keying is not None else {}),
         }
         for c in sorted(contract.connectors, key=lambda c: c.id)
     ]
@@ -388,6 +398,17 @@ def _wire_stroke(wire: HarnessWire, net: HarnessNet) -> tuple[str, str | None]:
     return _SIGNAL_COLORS[net.signal_class], None
 
 
+# Insulation colors whose strokes wash out on the white sheet get a dark
+# underlay edge so the wire stays visible (WH white, YE pale yellow).
+_PALE_LUMINANCE = 0.65
+
+
+def _stroke_luminance(hex_color: str) -> float:
+    c = hex_color.lstrip("#")
+    r, g, b = (int(c[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
 def _wire_label(wire: HarnessWire, wtype: WireType, net: HarnessNet) -> str:
     color = f"{wire.color} " if wire.color else ""
     label = (
@@ -407,11 +428,13 @@ def _doc_legend_rows() -> list[str]:
         "wire stroke = insulation color",
         "  RD/BK = red base, black stripe",
         "  uncolored = signal-class color",
+        "dark halo  = pale insulation (edge)",
         "dashed wire = shielded wire type",
         "grey cavity = unused cavity",
         "black dot   = splice (kind label)",
         "grey band   = twisted-pair link",
         "edge bump   = same-connector loop",
+        "key <x>    = connector keying",
         "label = id·color type·net/class·m",
     ]
 
@@ -646,7 +669,7 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
             ("Drawn by", _esc(frame["drawn_by"])),
             ("Document type", "wire harness pin table"),
             ("Date of issue", "—"),
-            ("Units", "px"),
+            ("Units", "px = 0.254 mm"),
         ],
     ]
     col_w, row_h = tb_w / 4, _mm(_TITLE_ROW_MM)
@@ -825,6 +848,36 @@ def _loop_points(bump: tuple[float, float] | None) -> str:
     return f'<Array as="points"><mxPoint x="{_num(bump[0])}" y="{_num(bump[1])}" /></Array>'
 
 
+def _label_channel_offset(
+    wire: HarnessWire, layout: dict[str, Any], bump: tuple[float, float] | None
+) -> float:
+    """Horizontal label offset pushing a wire label off the connector edge
+    into the routing channel.
+
+    A label anchors at its edge midpoint: for loops and for wires between
+    connectors in the same column that midpoint sits on the connector
+    boundary, so the text prints over the connector (the observed W4-C3
+    collision). Cross-column wires already anchor in the channel and keep
+    offset 0.
+    """
+    column_of = layout["column_of"]
+    fa, ta = wire.from_endpoint, wire.to_endpoint
+    if bump is not None:
+        conn = fa.connector
+        if conn is None:
+            return 0.0
+        return (1.0 if column_of[conn] == 0 else -1.0) * 120.0
+    if (
+        fa.connector is None
+        or ta.connector is None
+        or column_of[fa.connector] != column_of[ta.connector]
+    ):
+        return 0.0
+    col: int = column_of[fa.connector]
+    x_edge: float = _COL_X[col] + (_CONN_W if col == 0 else 0.0)
+    return _MID_CHANNEL_X - x_edge
+
+
 def _endpoint_cell_id(endpoint: Endpoint) -> str:
     if endpoint.splice is not None:
         return f"splice-{endpoint.splice}"
@@ -892,6 +945,8 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
     for connector in sorted(contract.connectors, key=lambda c: c.id):
         x, y = positions[connector.id]
         header = f"{connector.id} · {connector.family} · {len(connector.cavities)}p"
+        if connector.keying is not None:
+            header += f" · key {connector.keying}"
         parts.append(
             f'<mxCell id="conn-{connector.id}" value="{_esc(header)}" '
             f'style="swimlane;startSize={_num(_HEADER_H)};html=1;whiteSpace=wrap;'
@@ -950,6 +1005,25 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         # Loop bumps sit at the connector edge; drop their labels below the
         # bump into open channel space instead of overlapping the frame.
         label_y = 30.0 if bump is not None else label_offsets[wire.id]
+        label_x = _label_channel_offset(wire, layout, bump)
+        label_offset = f'<mxPoint x="{_num(label_x)}" y="{_num(label_y)}" as="offset" />'
+        # A pale insulation stroke (white, pale yellow) disappears on the
+        # white sheet — give it a dark underlay edge first so the wire
+        # keeps a visible silhouette (see LEGEND).
+        if _stroke_luminance(color) >= _PALE_LUMINANCE:
+            parts.append(
+                f'<mxCell id="wire-{wire.id}-halo" value="" '
+                'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
+                "jettySize=auto;strokeWidth=4.5;strokeColor=#3a3a3a;opacity=100;"
+                f"{_endpoint_side(wire.from_endpoint, 'exit', column_of)}"
+                f'{_endpoint_side(wire.to_endpoint, "entry", column_of)}" '
+                'edge="1" parent="wires" '
+                f'source="{_endpoint_cell_id(wire.from_endpoint)}" '
+                f'target="{_endpoint_cell_id(wire.to_endpoint)}">'
+                '<mxGeometry relative="1" as="geometry">'
+                + _loop_points(bump)
+                + "</mxGeometry></mxCell>"
+            )
         parts.append(
             f'<mxCell id="wire-{wire.id}" value="{_esc(_wire_label(wire, wtype, net))}" '
             'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
@@ -961,7 +1035,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
             f'source="{_endpoint_cell_id(wire.from_endpoint)}" '
             f'target="{_endpoint_cell_id(wire.to_endpoint)}">'
             '<mxGeometry x="0" relative="1" as="geometry">'
-            f'<mxPoint y="{_num(label_y)}" as="offset" />'
+            + label_offset
             + _loop_points(bump)
             + "</mxGeometry></mxCell>"
         )
