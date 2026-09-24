@@ -1,4 +1,4 @@
-# ADR-0006: ISO 5457 drawing frame on the drawio diagram
+# ADR-0007: ISO 5457 drawing frame on the drawio diagram
 
 - Status: Accepted
 - Date: 2026-09-24
