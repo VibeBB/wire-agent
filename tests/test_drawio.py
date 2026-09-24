@@ -1,36 +1,41 @@
 """harness diagram tests: the mxfile model behind the drawio projection.
 
-The rendered artifact is ``harness-diagram.drawio.svg`` when drawio-desktop
-is installed (its ``content`` attribute embeds the mxfile) and falls back to
-a plain ``harness-diagram.drawio`` mxfile without it; both decode to the same
-mxGraphModel.
+The rendered artifact is ``harness-diagram.drawio.svg``: drawio-desktop's own
+render with the editable mxfile embedded in its ``content`` attribute. The
+export fails closed when drawio is absent, so every test here requires the
+wire-tools image's drawio-desktop + xvfb.
 """
 
 from __future__ import annotations
 
+import shutil
 import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import pytest
 
 from helpers import example_contract_data
 from wire.contract import HarnessContract
 from wire.export import export_design
 
+DRAWIO_PRESENT = shutil.which("drawio") is not None and shutil.which("xvfb-run") is not None
+pytestmark = pytest.mark.skipif(
+    not DRAWIO_PRESENT,
+    reason="export needs drawio-desktop + xvfb (both ship in the wire-tools image)",
+)
+
 ARTIFACT = "harness-diagram.drawio.svg"
-FALLBACK = "harness-diagram.drawio"
 
 
 def _mxfile(out_dir: Path) -> ET.Element:
     svg_path = out_dir / ARTIFACT
-    if svg_path.is_file():
-        content = ET.parse(svg_path).getroot().get("content")
-        assert content is not None
-        try:
-            mxfile = ET.fromstring(content)
-        except ET.ParseError:
-            mxfile = ET.fromstring(urllib.parse.unquote(content))
-    else:
-        mxfile = ET.parse(out_dir / FALLBACK).getroot()
+    content = ET.parse(svg_path).getroot().get("content")
+    assert content is not None
+    try:
+        mxfile = ET.fromstring(content)
+    except ET.ParseError:
+        mxfile = ET.fromstring(urllib.parse.unquote(content))
     assert mxfile.tag == "mxfile"
     return mxfile
 
@@ -55,14 +60,10 @@ def _export(tmp_path: Path) -> HarnessContract:
 def test_drawio_projection_written(tmp_path: Path) -> None:
     _export(tmp_path)
     rendered = tmp_path / ARTIFACT
-    if rendered.is_file():
-        # drawio-desktop render: svg with the mxfile embedded in `content`.
-        root = ET.parse(rendered).getroot()
-        assert root.tag == "{http://www.w3.org/2000/svg}svg"
-        assert "mxfile" in (root.get("content") or "")
-    else:
-        assert (tmp_path / FALLBACK).is_file()
-        assert _mxfile(tmp_path).get("host") == "wire-agent"
+    # drawio-desktop render: svg with the mxfile embedded in `content`.
+    root = ET.parse(rendered).getroot()
+    assert root.tag == "{http://www.w3.org/2000/svg}svg"
+    assert "mxfile" in (root.get("content") or "")
 
 
 def test_drawio_embedded_model_skeleton(tmp_path: Path) -> None:

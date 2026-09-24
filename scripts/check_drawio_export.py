@@ -4,8 +4,11 @@ Runs ``wire export --drawio png,pdf,xml`` on the example contract and asserts
 the canonical artifacts exist and are well-formed — proof that drawio itself
 loads the mxfile we generate (stronger than self-asserted XML validity).
 
-Usage: ``uv run python scripts/check_drawio_export.py`` (needs drawio-desktop
-and xvfb on PATH, e.g. the wire-tools image).
+Usage: ``uv run python scripts/check_drawio_export.py`` on a host that has
+drawio-desktop + xvfb, or — the canonical route — inside the locked image:
+``uv run python scripts/run_in_locked_image.py -- python
+scripts/check_drawio_export.py`` (``verify_all.py --stage drawio`` does the
+same).
 """
 
 from __future__ import annotations
@@ -25,15 +28,16 @@ EXAMPLE = ROOT / "examples/sensor-harness/sensor-harness.contract.json"
 def main() -> int:
     failures: list[str] = []
     if shutil.which("drawio") is None or shutil.which("xvfb-run") is None:
-        print("SKIP: drawio-desktop/xvfb not installed (wire-tools image provides them)")
+        print(
+            "SKIP: drawio-desktop/xvfb not installed; run inside the locked "
+            "image via scripts/run_in_locked_image.py"
+        )
         return 0
     with tempfile.TemporaryDirectory(prefix="wire-drawio-check-") as tmp:
         out = Path(tmp) / "out"
         result = subprocess.run(
             [
-                "uv",
-                "run",
-                "python",
+                sys.executable,
                 "-m",
                 "wire",
                 "export",

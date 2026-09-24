@@ -65,11 +65,16 @@ jobs:
           cache-suffix: e2e
       - name: Sync dependencies
         run: uv sync --locked
-      - name: Author example harness end to end
+      - name: Author example harness end to end (inside locked image)
         run: |
-          uv run python scripts/e2e_authoring.py \
+          uv run python scripts/run_in_locked_image.py -- \
+            python scripts/e2e_authoring.py \
             --contract examples/sensor-harness/sensor-harness.contract.json \
             --out out/ci/sensor-harness
+      - name: drawio export check (inside locked image)
+        run: |
+          uv run python scripts/run_in_locked_image.py -- \
+            python scripts/check_drawio_export.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wire-sensor-harness

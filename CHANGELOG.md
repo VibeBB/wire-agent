@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Docker-only runtime: `wire_launcher.py` no longer falls back to a local
+  `docker build` when no pinned image resolves — `$WIRE_TOOLS_IMAGE` or a
+  digest lock (`tools-image.json` / `docker/image-digests.json`) is now
+  required, and a failed pull is an error (ADR-0003 revision).
+- `export_design` fails closed when drawio-desktop/xvfb are absent instead
+  of degrading to a raw `harness-diagram.drawio` mxfile — the drawio-rendered
+  `.drawio.svg` is the only diagram artifact (drawio ships in the pinned
+  wire-tools image). `check_drawio_export.py` and the e2e authoring step run
+  inside the locked image via `scripts/run_in_locked_image.py` (also used by
+  `verify_all.py --stage drawio`/`standard` and the CI e2e job).
+- Drawio-dependent tests skip on hosts without drawio-desktop + xvfb; the
+  in-image runs keep the coverage.
+
 ### Added
 
 - `post_tool_use` provenance hooks (ported from mechanical-agent):

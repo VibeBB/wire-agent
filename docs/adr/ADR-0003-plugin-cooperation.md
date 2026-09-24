@@ -86,8 +86,9 @@ Plugin package code runs inside each plugin's pinned tools image; the
 per-plugin launcher (`plugins/<p>/scripts/<p>_launcher.py`) is the single
 exec point for `hooks.json` and `.mcp.json`, and resolves the image in
 order `$<PKG>_TOOLS_IMAGE` → digest lock (`tools-image.json` /
-`docker/image-digests.json`) → a local build of the repo-cached
-Dockerfile. The resolved source tree is mounted read-only at
+`docker/image-digests.json`) → error (revised: the earlier local-build
+fallback was removed — docker and a resolvable pin are now required).
+The resolved source tree is mounted read-only at
 `/plugin-src`; the workspace is mounted at its own path so file paths are
 identical inside and outside the container. Host Python is never the
 plugin runtime — it only has to exec `docker`.

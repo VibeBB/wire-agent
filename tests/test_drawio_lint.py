@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,13 @@ def _lint(body: str, **kwargs: int) -> DrawioLintReport:
     return lint_text(_mxfile(body, **kwargs), source=Path("d.drawio"))
 
 
+requires_drawio = pytest.mark.skipif(
+    shutil.which("drawio") is None or shutil.which("xvfb-run") is None,
+    reason="export needs drawio-desktop + xvfb (both ship in the wire-tools image)",
+)
+
+
+@requires_drawio
 def test_generated_diagram_lints_clean(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())
     export_design(contract, tmp_path)
@@ -141,6 +149,7 @@ def test_page_underutilized_warns() -> None:
     assert any(f.type == "page_underutilized" for f in report.findings)
 
 
+@requires_drawio
 def test_design_report_embeds_lint_advisory(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())
     export_design(contract, tmp_path)

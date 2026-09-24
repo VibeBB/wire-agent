@@ -82,7 +82,9 @@ docs/adr/  docs/research/
   functions `python -m wire` uses). It contains no agent logic.
 - `plugins/wire/scripts/wire_launcher.py` is the single exec point for
   hooks and the MCP server: it runs `python -m wire` inside the pinned
-  `wire-tools` image. Any argument other than `mcp_server`/`prewarm` is
+  `wire-tools` image, resolved from `$WIRE_TOOLS_IMAGE` or the digest lock
+  (no local build fallback — docker and a resolvable pin are required). Any
+  argument other than `mcp_server`/`prewarm` is
   forwarded to `wire.cli`, so docs write `python3 <launcher> <args>`.
 - Skills use `triggers:` (`KeywordTrigger`). A `paths:` glob list makes
   a skill a path-triggered rule instead (deterministic injection when a
