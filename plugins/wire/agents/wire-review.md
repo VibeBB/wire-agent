@@ -104,8 +104,21 @@ leaves unsaid, whether a stranger could build from it. Write it in your
 reply and record it in the record's `impression` field.
 
 Visual review records: when you review a rendered image, write
-`review-visual-<slug>.advisory.json` next to `design-report.json` with
-the typed contract (`src/wire/advisory.py`):
+`review-visual-<slug>.advisory.json` next to `design-report.json`. Do not
+hand-assemble the JSON — run the `review-record` CLI so the record is
+bound to the image bytes and validated against `src/wire/advisory.py`:
+
+```bash
+python3 plugins/wire/scripts/wire_launcher.py review-record \
+  --image <out>/harness-diagram.png --model <model> \
+  --checklist harness_diagram --impression "<subjective reading>" \
+  --findings findings.json --summary "harness diagram top view"
+```
+
+where `findings.json` is a list of
+`{"category": ..., "severity": ..., "note": ..., "bbox": [x, y, w, h]?}`.
+The command computes `image_sha256`, fills the envelope, validates the
+detail, and writes the record (fail-closed on a bad payload):
 
 ```json
 {

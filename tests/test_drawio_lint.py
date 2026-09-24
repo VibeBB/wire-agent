@@ -173,6 +173,47 @@ def test_floating_edge_is_not_missing_endpoints() -> None:
     assert not any(f.type == "edge_missing_endpoints" for f in report.findings)
 
 
+def _connector_column() -> str:
+    """Two stacked connectors in one column with one cavity each."""
+    conns = _vertex("conn-C1", 60, 100, w=200, h=70) + _vertex("conn-C3", 60, 170, w=200, h=70)
+    cav1 = (
+        '<mxCell id="cav-C1:1" value="1" vertex="1" parent="conn-C1">'
+        '<mxGeometry y="26" width="200" height="22" as="geometry" /></mxCell>'
+    )
+    cav3 = (
+        '<mxCell id="cav-C3:1" value="1" vertex="1" parent="conn-C3">'
+        '<mxGeometry y="26" width="200" height="22" as="geometry" /></mxCell>'
+    )
+    return conns + cav1 + cav3
+
+
+def _labeled_wire(value: str, offset_x: float = 0.0) -> str:
+    return (
+        f'<mxCell id="wire-W4" value="{value}" edge="1" parent="wires" '
+        'source="cav-C1:1" target="cav-C3:1" '
+        'style="exitX=1;exitY=0.5;entryX=1;entryY=0.5;">'
+        '<mxGeometry relative="1" as="geometry">'
+        f'<mxPoint x="{offset_x}" y="10" as="offset" />'
+        "</mxGeometry></mxCell>"
+    )
+
+
+def test_wire_label_on_connector_warns() -> None:
+    """A same-column wire's label anchors on the connector boundary —
+    it must be pushed into the channel or it prints over the block."""
+    report = _lint(_connector_column() + _labeled_wire("W4 · WH FLRY-B 0.35"))
+    assert any(
+        f.type == "label_on_connector" and f.items == ["wire-W4", "conn-C3"]
+        for f in report.findings
+    )
+
+
+def test_wire_label_in_channel_lints_clean() -> None:
+    """A channel-shifted label clears every connector block."""
+    report = _lint(_connector_column() + _labeled_wire("W4 · WH FLRY-B 0.35", offset_x=180))
+    assert not any(f.type == "label_on_connector" for f in report.findings)
+
+
 @requires_drawio
 def test_design_report_embeds_lint_advisory(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())

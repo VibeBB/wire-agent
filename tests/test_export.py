@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """Export determinism, manifest, and provenance tests."""
 
 from __future__ import annotations
@@ -6,6 +7,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pytest import TempPathFactory
@@ -110,6 +112,93 @@ def test_cut_table_groups_identical_wires(tmp_path: Path) -> None:
     rows = (out / "cut-table.csv").read_text(encoding="utf-8").splitlines()
     assert rows[0].startswith("wire_type,")
     assert len(rows) == 3  # header + 2 groups
+
+
+def _same_column_contract() -> dict[str, Any]:
+    """C1+C3 land in the left column; W4 is a white C1->C3 wire."""
+    data = example_contract_data()
+    c3 = json.loads(json.dumps(data["connectors"][0]))
+    c3["id"] = "C3"
+    c3["keying"] = "C"  # identical housing needs distinct keying
+    data["connectors"].append(c3)
+    data["wires"].append(
+        {
+            "id": "W4",
+            "wire_type": "WT2",
+            "net": "N3",
+            "color": "WH",
+            "from_endpoint": {"connector": "C1", "cavity": "3"},
+            "to_endpoint": {"connector": "C3", "cavity": "1"},
+            "length_m": 0.6,
+            "strip_b_mm": 5.5,
+            "terminal_b": "OTHER-T",
+        }
+    )
+    return data
+
+
+def test_cut_table_lists_both_ends() -> None:
+    """Strip/terminal data belongs to both ends; the B side must not be
+    silently folded into the A side's values."""
+    from wire.export import _cut_table_csv
+
+    contract = HarnessContract.model_validate(_same_column_contract())
+    rows = _cut_table_csv(contract).splitlines()
+    assert rows[0] == (
+        "wire_type,gauge_mm2,length_m,strip_a_mm,terminal_a,strip_b_mm,terminal_b,wires,quantity"
+    )
+    w4 = next(row for row in rows[1:] if "W4" in row)
+    assert ",5.5,OTHER-T," in w4
+
+
+def test_keying_on_connector_headers_and_bom() -> None:
+    """Keying distinguishes identical housings on the drawing and BOM —
+    the shop picks 'the XH keyed B', not 'the other XH'."""
+    from wire.export import _bom, _harness_mxfile
+
+    contract = HarnessContract.model_validate(example_contract_data())
+    mx = _harness_mxfile(contract)
+    assert 'conn-C1" value="C1 · JST XH · 4p · key A"' in mx
+    assert 'conn-C2" value="C2 · JST XH · 4p · key B"' in mx
+    assert "key &lt;x&gt;    = connector keying" in mx
+    bom = _bom(contract)
+    keyings = {c["connector"]: c.get("keying") for c in bom["connectors"]}
+    assert keyings == {"C1": "A", "C2": "B"}
+
+
+def test_pale_insulation_gets_dark_halo() -> None:
+    """White/pale strokes vanish on the white sheet — a dark underlay
+    edge keeps the wire visible (LEGEND documents the halo)."""
+    from wire.export import _harness_mxfile
+
+    contract = HarnessContract.model_validate(_same_column_contract())
+    mx = _harness_mxfile(contract)
+    assert 'id="wire-W4-halo"' in mx and "strokeColor=#3a3a3a" in mx
+    assert 'id="wire-W1-halo"' not in mx  # dark strokes need no halo
+    assert "dark halo  = pale insulation (edge)" in mx
+
+
+def test_same_column_label_offsets_into_channel() -> None:
+    """A label anchored on the connector boundary is pushed into the
+    routing channel; cross-column labels keep their channel anchor."""
+    import re
+
+    from wire.export import _harness_mxfile
+
+    contract = HarnessContract.model_validate(_same_column_contract())
+    mx = _harness_mxfile(contract)
+    w4 = re.search(r'id="wire-W4"[^>]*>.*?</mxCell>', mx, re.S)
+    assert w4 is not None
+    assert '<mxPoint x="180" ' in w4.group(0)
+    w1 = re.search(r'id="wire-W1"[^>]*>.*?</mxCell>', mx, re.S)
+    assert w1 is not None and '<mxPoint x="0" ' in w1.group(0)
+
+
+def test_title_block_reports_real_units() -> None:
+    from wire.export import _harness_mxfile
+
+    contract = HarnessContract.model_validate(example_contract_data())
+    assert "px = 0.254 mm" in _harness_mxfile(contract)
 
 
 @requires_drawio

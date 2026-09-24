@@ -9,6 +9,7 @@ Subcommands:
   drawio-lint  advisory readability lint for a drawio mxfile
   gates     re-run all gates on existing artifacts
   import    merge a connectivity or envelope source into a contract
+  review-record  write a validated visual-review advisory JSON for an image
 
 All commands print a JSON verdict to stdout; the verdict is fail-closed.
 """
@@ -19,7 +20,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .contract import HarnessContract, load_contract
 from .doctor import run_doctor
@@ -160,6 +161,42 @@ def cmd_gates(args: argparse.Namespace) -> dict[str, Any]:
     return gate_report.to_dict(contract)
 
 
+def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:
+    """Write `review-visual-<slug>.advisory.json` for a reviewed image.
+
+    The reviewer supplies impression/findings as JSON; this command binds
+    them to the image bytes (sha256), validates the detail against the
+    typed schema, and writes the record deterministically — instead of a
+    hand-assembled JSON that could drift from `advisory.py`.
+    """
+    from .advisory import write_review_record
+
+    image = Path(args.image)
+    try:
+        raw: Any = json.loads(Path(args.findings).read_text(encoding="utf-8"))
+        raw_list = cast(list[Any], raw) if isinstance(raw, list) else None
+        if raw_list is None or not all(isinstance(item, dict) for item in raw_list):
+            raise ValueError("findings JSON must be a list of objects")
+        findings = cast(list[dict[str, Any]], raw_list)
+        impression = (
+            Path(args.impression_file).read_text(encoding="utf-8").strip()
+            if args.impression_file
+            else (args.impression or "").strip()
+        )
+        path = write_review_record(
+            image,
+            model=args.model,
+            checklist=args.checklist,
+            impression=impression,
+            findings=findings,
+            summary=args.summary or "",
+            out_dir=Path(args.out) if args.out else None,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {"verdict": "fail", "stage": "review-record", "detail": str(exc)}
+    return {"verdict": "pass", "record": str(path)}
+
+
 def cmd_import(args: argparse.Namespace) -> dict[str, Any]:
     try:
         contract = _load(args.contract)
@@ -278,7 +315,31 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         choices=["circuit-json", "csv", "mech-envelope"],
     )
-    p.add_argument("--out", default=None)
+
+    p = sub.add_parser(
+        "review-record",
+        help="write a validated review-visual-<slug>.advisory.json for an image",
+    )
+    p.add_argument("--image", required=True, help="the image the review read")
+    p.add_argument("--model", required=True, help="reviewer model name")
+    p.add_argument(
+        "--checklist",
+        required=True,
+        choices=["harness_diagram", "intake_image"],
+    )
+    p.add_argument("--impression", default=None, help="subjective reading (required)")
+    p.add_argument(
+        "--impression-file",
+        default=None,
+        help="text file with the subjective reading (alternative to --impression)",
+    )
+    p.add_argument(
+        "--findings",
+        required=True,
+        help="JSON file: list of {category, severity, note, bbox?}",
+    )
+    p.add_argument("--summary", default=None)
+    p.add_argument("--out", default=None, help="output dir (default: image dir)")
 
     args = parser.parse_args(argv)
     if args.command == "doctor":
@@ -291,6 +352,7 @@ def main(argv: list[str] | None = None) -> int:
         "drawio-lint": cmd_drawio_lint,
         "gates": cmd_gates,
         "import": cmd_import,
+        "review-record": cmd_review_record,
     }
     return _emit(handlers[args.command](args))
 
