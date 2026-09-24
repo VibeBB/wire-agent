@@ -56,7 +56,10 @@ user-provided harness photos, not workspace renders like
 - **Diagram review**: `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" export --png` writes
   `harness-diagram.png`, a drawio-desktop render the FileEditorTool can
   send to the vision model. Check legibility and topology against the
-  legend in `plugins/wire/agents/wire-review.md`. `--drawio` takes more
+  legend in `plugins/wire/agents/wire-review.md`, plus its
+  drawing-quality axes (baseline fidelity, manufacturing completeness,
+  design intent) and the mandatory `impression` on every record.
+  `--drawio` takes more
   formats (jpg, pdf, html, svg, xml); `wire_drawio` / `python -m wire
   drawio` expose the full `drawio -x` surface for arbitrary inputs.
 - **Manufactured-harness crosscheck**: a photo of a built harness vs the
