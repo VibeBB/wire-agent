@@ -17,7 +17,11 @@ from wire.gates import run_gates
 from wire.report import write_report
 
 DRAWIO_PRESENT = shutil.which("drawio") is not None and shutil.which("xvfb-run") is not None
-DIAGRAM_ARTIFACT = "harness-diagram.drawio.svg" if DRAWIO_PRESENT else "harness-diagram.drawio"
+requires_drawio = pytest.mark.skipif(
+    not DRAWIO_PRESENT,
+    reason="export needs drawio-desktop + xvfb (both ship in the wire-tools image)",
+)
+DIAGRAM_ARTIFACT = "harness-diagram.drawio.svg"
 EXPECTED_ARTIFACTS = {
     "bom.csv",
     "bom.json",
@@ -42,11 +46,13 @@ def _hashes(out_dir: Path) -> dict[str, str]:
     }
 
 
+@requires_drawio
 def test_export_writes_expected_artifacts(tmp_path: Path) -> None:
     _, out = _export(tmp_path)
     assert {p.name for p in out.iterdir()} == EXPECTED_ARTIFACTS
 
 
+@requires_drawio
 def test_export_is_deterministic(tmp_path: Path, tmp_path_factory: TempPathFactory) -> None:
     other = tmp_path_factory.mktemp("other")
     _export(tmp_path)
@@ -54,6 +60,7 @@ def test_export_is_deterministic(tmp_path: Path, tmp_path_factory: TempPathFacto
     assert _hashes(tmp_path) == _hashes(other)
 
 
+@requires_drawio
 def test_manifest_records_artifact_shas(tmp_path: Path) -> None:
     contract, out = _export(tmp_path)
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -66,6 +73,7 @@ def test_manifest_records_artifact_shas(tmp_path: Path) -> None:
         assert artifact["sha256"] == digest
 
 
+@requires_drawio
 def test_provenance_records_contract_and_sources(tmp_path: Path) -> None:
     contract, out = _export(tmp_path)
     provenance = json.loads((out / "provenance.json").read_text(encoding="utf-8"))
@@ -74,6 +82,7 @@ def test_provenance_records_contract_and_sources(tmp_path: Path) -> None:
     assert provenance["schema_version"] == 1
 
 
+@requires_drawio
 def test_report_written(tmp_path: Path) -> None:
     contract, out = _export(tmp_path)
     report = run_gates(contract, out)
@@ -85,6 +94,7 @@ def test_report_written(tmp_path: Path) -> None:
     )
 
 
+@requires_drawio
 def test_corrupted_artifact_fails_manifest(tmp_path: Path) -> None:
     contract, out = _export(tmp_path)
     (out / "wire-list.csv").write_text("tampered\n", encoding="utf-8")
@@ -94,6 +104,7 @@ def test_corrupted_artifact_fails_manifest(tmp_path: Path) -> None:
     assert report.verdict == "fail"
 
 
+@requires_drawio
 def test_cut_table_groups_identical_wires(tmp_path: Path) -> None:
     _, out = _export(tmp_path)
     rows = (out / "cut-table.csv").read_text(encoding="utf-8").splitlines()
@@ -101,6 +112,7 @@ def test_cut_table_groups_identical_wires(tmp_path: Path) -> None:
     assert len(rows) == 3  # header + 2 groups
 
 
+@requires_drawio
 def test_bom_counts_wire_terminations(tmp_path: Path) -> None:
     """BOM terminals count actual wire ends, not declared cavities —
     spare connector positions must not inflate purchasing quantities."""
@@ -110,6 +122,7 @@ def test_bom_counts_wire_terminations(tmp_path: Path) -> None:
     assert terminals == {"SXH-001T-P0.6": 6}  # 3 wires x 2 ends; pin 4 spare on both sides
 
 
+@requires_drawio
 def test_bom_falls_back_to_cavity_terminal(tmp_path: Path) -> None:
     """A connector endpoint without an explicit wire terminal uses the
     cavity's declared terminal series."""
@@ -124,11 +137,10 @@ def test_bom_falls_back_to_cavity_terminal(tmp_path: Path) -> None:
     assert terminals == {"SXH-001T-P0.6": 6}
 
 
+@requires_drawio
 def test_export_drawio_renders(tmp_path: Path, tmp_path_factory: TempPathFactory) -> None:
     """--png/--drawio add drawio-desktop renders; drawio/font versions may
     shift their bytes across hosts, so the manifest records actual hashes."""
-    if not DRAWIO_PRESENT:
-        pytest.skip("drawio-desktop/xvfb not installed")
     contract = HarnessContract.model_validate(example_contract_data())
     manifest = export_design(contract, tmp_path, png=True, drawio=["pdf", "xml"])
     png = tmp_path / "harness-diagram.png"
@@ -149,10 +161,10 @@ def test_export_drawio_renders(tmp_path: Path, tmp_path_factory: TempPathFactory
     assert (other / "harness-diagram.png").read_bytes() == png.read_bytes()
 
 
-def test_export_drawio_render_requires_drawio(tmp_path: Path) -> None:
-    """Without drawio-desktop the --png/--drawio renders fail closed."""
+def test_export_fails_closed_without_drawio(tmp_path: Path) -> None:
+    """Without drawio-desktop the export itself fails closed (no degrade)."""
     if DRAWIO_PRESENT:
         pytest.skip("drawio-desktop present")
     contract = HarnessContract.model_validate(example_contract_data())
-    with pytest.raises(RuntimeError):
-        export_design(contract, tmp_path, png=True)
+    with pytest.raises(RuntimeError, match="drawio-desktop and xvfb"):
+        export_design(contract, tmp_path)

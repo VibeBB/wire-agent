@@ -33,8 +33,8 @@ coverage — installed in `docker/wire-tools.Dockerfile` from the
 pinned, sha256-verified upstream `.deb` (`DRAWIO_DESKTOP_VERSION` /
 `DRAWIO_DESKTOP_SHA256` ARGs) and invoked as a subprocess behind an
 adapter, keeping Electron's code out of the import set; without it the
-`--png`/`--drawio` flags fail the export step cleanly and the diagram
-falls back to a raw `harness-diagram.drawio` mxfile. When adding or removing a
+export fails closed — a missing drawio produces no partial diagram
+artifact. When adding or removing a
 dependency, update the checker targets in
 `scripts/check_dependency_updates.py` and this document in the same change.
 The weekly `check-dependency-updates` workflow reports candidates to a

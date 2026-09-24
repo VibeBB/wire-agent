@@ -46,10 +46,16 @@ STAGES: dict[str, tuple[Command, ...]] = {
         Command(("uv", "run", "pyright")),
         Command(("uv", "run", "pytest")),
         Command(("uv", "run", "python", "scripts/check_plugin_load.py")),
+        # e2e runs inside the digest-pinned wire-tools image (drawio-desktop
+        # lives there); the checkout is bind-mounted so it exercises the
+        # working tree's code.
         Command(
             (
                 "uv",
                 "run",
+                "python",
+                "scripts/run_in_locked_image.py",
+                "--",
                 "python",
                 "scripts/e2e_authoring.py",
                 "--contract",
@@ -63,7 +69,17 @@ STAGES: dict[str, tuple[Command, ...]] = {
     ),
     "drawio": (
         Command(("uv", "sync", "--locked"), barrier=True),
-        Command(("uv", "run", "python", "scripts/check_drawio_export.py")),
+        Command(
+            (
+                "uv",
+                "run",
+                "python",
+                "scripts/run_in_locked_image.py",
+                "--",
+                "python",
+                "scripts/check_drawio_export.py",
+            )
+        ),
     ),
 }
 

@@ -17,8 +17,8 @@ Image resolution order (first hit wins):
   1. $WIRE_TOOLS_IMAGE (full ref, e.g. ghcr.io/.../wire-tools@sha256:...)
   2. <plugin>/tools-image.json or repo-cache docker/image-digests.json
      (image + digest, falling back to image + tag)
-  3. local build of the repo-cache docker/wire-tools.Dockerfile,
-     tagged openhands-wire-tools:<dockerfile sha256[:12]>
+  3. none resolvable, or the pinned ref cannot be pulled -> error
+     (docker-only: the launcher never falls back to a local build)
 
 Usage: mcp_server | prewarm | <wire cli args...>. Any argument other
 than mcp_server/prewarm is forwarded to `python -m wire.cli` inside the
@@ -28,7 +28,6 @@ image resolution prints a warning and exits 0.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -124,89 +123,43 @@ def _image_from_lock(plugin_root: Path) -> str | None:
     return None
 
 
-def _dockerfile(plugin_root: Path) -> Path | None:
-    for repo_dir in _repo_dirs(plugin_root):
-        candidate = repo_dir / "docker" / "wire-tools.Dockerfile"
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _local_tag(dockerfile: Path) -> str:
-    digest = hashlib.sha256(dockerfile.read_bytes()).hexdigest()[:12]
-    return f"openhands-wire-tools:{digest}"
-
-
 def _docker() -> str | None:
     return shutil.which("docker")
 
 
 def _ensure_image(plugin_root: Path) -> str:
-    """Resolve the tools image ref, building from the cache as last resort."""
+    """Resolve the pinned tools image ref; fail when none is available."""
     docker = _docker()
     if docker is None:
         raise RuntimeError("docker not found on PATH (wire runs docker-only)")
 
     ref = os.environ.get("WIRE_TOOLS_IMAGE") or _image_from_lock(plugin_root)
-    if ref:
-        if (
-            subprocess.run(
-                [docker, "image", "inspect", ref],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            ).returncode
-            == 0
-        ):
-            return ref
-        print(f"wire_launcher: pulling tools image {ref}", file=sys.stderr)
-        if (
-            subprocess.run(
-                [docker, "pull", ref],
-                check=False,
-                stdout=subprocess.DEVNULL,
-            ).returncode
-            == 0
-        ):
-            return ref
-        print(f"wire_launcher: pull failed for {ref}", file=sys.stderr)
-
-    dockerfile = _dockerfile(plugin_root)
-    if dockerfile is None:
+    if ref is None:
         raise RuntimeError(
-            "no wire tools image resolvable and no docker/wire-tools.Dockerfile found to build one"
+            "no wire tools image resolvable: set WIRE_TOOLS_IMAGE or pin "
+            "image+digest in tools-image.json / docker/image-digests.json"
         )
-    tag = _local_tag(dockerfile)
     if (
         subprocess.run(
-            [docker, "image", "inspect", tag],
+            [docker, "image", "inspect", ref],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
         ).returncode
         == 0
     ):
-        return tag
-    print(
-        f"wire_launcher: building tools image {tag} from {dockerfile}",
-        file=sys.stderr,
-    )
-    result = subprocess.run(
-        [
-            docker,
-            "build",
-            "--tag",
-            tag,
-            "--file",
-            str(dockerfile),
-            str(dockerfile.parent.parent),
-        ],
-        check=False,
-        stdout=subprocess.DEVNULL,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"docker build failed for {tag}")
-    return tag
+        return ref
+    print(f"wire_launcher: pulling tools image {ref}", file=sys.stderr)
+    if (
+        subprocess.run(
+            [docker, "pull", ref],
+            check=False,
+            stdout=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    ):
+        return ref
+    raise RuntimeError(f"wire tools image {ref} not present locally and pull failed")
 
 
 def _docker_argv(image: str, source: Path | None, inner_argv: list[str]) -> list[str]:

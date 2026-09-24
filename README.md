@@ -33,9 +33,10 @@ a model says can override a gate verdict.
   compatibility, and connector ratings. `unknown` fails closed.
 - **Manufacturing projections** — `wire-list.csv`, `cut-table.csv`,
   `bom.json/.csv`, and `harness-diagram.drawio.svg` — a WireViz-style
-  pin-table diagram rendered by drawio-desktop, viewable as SVG and
-  editable in diagrams.net (a raw `.drawio` mxfile when drawio is
-  absent) — with sha256 manifest and provenance records. `--drawio`
+  pin-table diagram rendered by drawio-desktop (shipped in the pinned
+  wire-tools image; the export fails closed without it), viewable as SVG and
+  editable in diagrams.net — with sha256 manifest and provenance
+  records. `--drawio`
   adds png/jpg/pdf/html/svg/xml review renders; `wire_drawio` (MCP) and
   `python -m wire drawio` proxy the full `drawio -x` CLI surface.
 - **Plugin cooperation** — imports connectivity from
@@ -109,10 +110,10 @@ wire-agent は要件の会話を機械可読なハーネス契約に変換し、
   ディレーティング）・電圧降下・絶縁定格・曲げ半径・信号分離・
   端子適合・コネクタ定格を L1 ゲートで検査。`unknown` は失敗扱い。
 - **製造投影** — `wire-list.csv` `cut-table.csv` `bom.json/.csv`
-  `harness-diagram.drawio.svg`（WireViz 風ピンテーブル図。drawio-desktop
-  で描画され、SVG として表示でき、diagrams.net で編集可能。
-  drawio 不在時は生の `.drawio` mxfile を出力）を sha256 マニフェスト・
-  由来記録付きで出力。`--drawio` で png/jpg/pdf/html/svg/xml の
+  `harness-diagram.drawio.svg`（WireViz 風ピンテーブル図。digest 固定の
+  wire-tools イメージ同梱の drawio-desktop で描画され、SVG として表示でき、
+  diagrams.net で編集可能。drawio 不在時はエクスポートが fail-closed で失敗）を
+  sha256 マニフェスト・由来記録付きで出力。`--drawio` で png/jpg/pdf/html/svg/xml の
   レビュー用レンダリングも追加可能。`wire_drawio`（MCP）と
   `python -m wire drawio` は `drawio -x` の全機能をプロキシします。
 - **プラグイン連携** — electrical-circuit-agent の契約や汎用 CSV から

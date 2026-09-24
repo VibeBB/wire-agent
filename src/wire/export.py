@@ -600,10 +600,12 @@ def _harness_mxfile(contract: HarnessContract) -> str:
     )
 
 
-def _drawio_cli() -> list[str] | None:
-    """Headless drawio-desktop export prefix, or None when unavailable."""
+def _drawio_cli() -> list[str]:
+    """Headless drawio-desktop export prefix; fails closed when unavailable."""
     if shutil.which("drawio") is None or shutil.which("xvfb-run") is None:
-        return None
+        raise RuntimeError(
+            "drawio export needs drawio-desktop and xvfb (both ship in the wire-tools image)"
+        )
     return [
         "xvfb-run",
         "-a",
@@ -626,10 +628,6 @@ def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
     rather than byte-stable projections.
     """
     cmd = _drawio_cli()
-    if cmd is None:
-        raise RuntimeError(
-            "drawio export needs drawio-desktop and xvfb (both ship in the wire-tools image)"
-        )
     with tempfile.TemporaryDirectory(prefix="wire-drawio-") as tmp:
         src = Path(tmp) / "harness.drawio"
         out = Path(tmp) / "out"
@@ -673,10 +671,6 @@ def run_drawio_export(
     vsdx, csv, or mermaid files.
     """
     cmd = _drawio_cli()
-    if cmd is None:
-        raise RuntimeError(
-            "drawio export needs drawio-desktop and xvfb (both ship in the wire-tools image)"
-        )
     argv = [*cmd, "-x"]
     if fmt is not None:
         argv += ["-f", fmt]
@@ -700,9 +694,9 @@ def export_design(
 ) -> dict[str, Any]:
     """Write every projection plus manifest.json and provenance.json.
 
-    The diagram is rendered by drawio-desktop when it is installed (canonical
-    rendering, embedded model round-trips); without it the raw mxfile is
-    written as ``harness-diagram.drawio`` so the design stays editable.
+    The diagram is rendered by drawio-desktop (canonical rendering,
+    embedded model round-trips); it ships in the wire-tools image, and a
+    missing drawio/xvfb fails the export rather than degrading the artifact.
     ``png=True`` is a shorthand for ``drawio=["png"]`` — ``drawio`` lists
     extra formats (png, jpg, pdf, html, xml) rendered through ``drawio -x``
     for vision-capable reviewers (the OpenHands FileEditorTool auto-sends
@@ -715,14 +709,9 @@ def export_design(
         "cut-table.csv": _cut_table_csv(contract),
         "bom.csv": _bom_csv(contract),
     }
-    diagram_source = "drawio-desktop"
-    try:
-        artifacts["harness-diagram.drawio.svg"] = _drawio_render(
-            mxfile, ["-f", "svg", "-e"]
-        ).decode("utf-8")
-    except RuntimeError:
-        diagram_source = "mxfile"
-        artifacts["harness-diagram.drawio"] = mxfile + "\n"
+    artifacts["harness-diagram.drawio.svg"] = _drawio_render(mxfile, ["-f", "svg", "-e"]).decode(
+        "utf-8"
+    )
     bom_json = json.dumps(_bom(contract), indent=2, sort_keys=True) + "\n"
     artifacts["bom.json"] = bom_json
 
@@ -783,7 +772,7 @@ def export_design(
             for s in contract.imported_sources
         ],
         "tool_versions": {"python": platform.python_version()},
-        "diagram_renderer": diagram_source,
+        "diagram_renderer": "drawio-desktop",
     }
     provenance_text = json.dumps(provenance, indent=2, sort_keys=True) + "\n"
     (out_dir / "provenance.json").write_text(provenance_text, encoding="utf-8")

@@ -7,6 +7,7 @@ pass/fail authority.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,11 @@ from helpers import example_contract_data
 from wire.contract import HarnessContract
 from wire.export import export_design
 from wire.gates import run_gates
+
+requires_drawio = pytest.mark.skipif(
+    shutil.which("drawio") is None or shutil.which("xvfb-run") is None,
+    reason="export needs drawio-desktop + xvfb (both ship in the wire-tools image)",
+)
 
 
 def _verdict(
@@ -29,6 +35,7 @@ def _verdict(
     return contract, by_id, report.verdict
 
 
+@requires_drawio
 def test_golden_contract_passes(tmp_path: Path) -> None:
     contract, _, _ = _verdict(example_contract_data(), tmp_path)
     export_design(contract, tmp_path)
@@ -166,6 +173,7 @@ def test_manifest_unknown_without_export() -> None:
 
 
 @pytest.mark.xdist_group("example_out")
+@requires_drawio
 def test_manifest_passes_after_export(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())
     export_design(contract, tmp_path)
