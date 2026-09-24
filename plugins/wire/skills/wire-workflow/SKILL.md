@@ -79,6 +79,10 @@ user-provided harness photos, not workspace renders like
   (`.drawio.svg` rendered by drawio-desktop, `.drawio` mxfile without
   it, plus `--drawio` png/jpg/pdf/html/svg/xml review renders),
   manifest + provenance — deterministic projections of the contract.
+  The diagram is self-documenting: ISO 5457 frame + ISO 7200 title block,
+  a LEGEND block (wire colors, shield dashes, splices, twist bands), and
+  a numbered NOTES block (IPC class, units, route/bend/protection
+  instructions, splices, service life) generated from the contract.
 
 ## Boundaries
 

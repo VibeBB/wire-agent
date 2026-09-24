@@ -222,6 +222,17 @@ _GAP_Y = 48.0
 _MID_CHANNEL_X = (_COL_X[0] + _CONN_W + _COL_X[1]) / 2
 _SPLICE_R = 5.0
 
+# Documentation strip: legend and manufacturing notes side by side below the
+# pin table, inside the drawing space (bordered blocks of monospace rows).
+_DOC_LEGEND_X = _COL_X[0]
+_DOC_LEGEND_W = 360.0
+_DOC_NOTES_X = _COL_X[0] + _DOC_LEGEND_W + 40.0
+_DOC_NOTES_W = _COL_X[1] + _CONN_W - _DOC_NOTES_X
+_DOC_HEADER_H = 20.0
+_DOC_ROW_H = 16.0
+_DOC_PAD_BOTTOM = 4.0
+_DOC_GAP_TOP = 36.0
+
 
 def _num(value: float) -> str:
     return f"{value:g}"
@@ -389,6 +400,79 @@ def _wire_label(wire: HarnessWire, wtype: WireType, net: HarnessNet) -> str:
 
 def _diagram_title(contract: HarnessContract) -> str:
     return f"{contract.name} · {contract.contract_id} · rev {contract.revision}"
+
+
+def _doc_legend_rows() -> list[str]:
+    return [
+        "wire stroke = insulation color",
+        "  RD/BK = red base, black stripe",
+        "  uncolored = signal-class color",
+        "dashed wire = shielded wire type",
+        "grey cavity = unused cavity",
+        "black dot   = splice (kind label)",
+        "grey band   = twisted-pair link",
+        "edge bump   = same-connector loop",
+        "label = id·color type·net/class·m",
+    ]
+
+
+def _doc_notes_rows(contract: HarnessContract, unused_cavities: int) -> list[str]:
+    """Manufacturing notes the shop floor needs without design context."""
+    lines = [
+        f"build+inspect: IPC-A-620 cl.{contract.ipc_class}",
+        f"ambient service {_num(contract.ambient_temperature_c)} °C",
+        "units: wire m, strip mm, cavity mm2",
+        "wire list: wire-list.csv",
+        "cut/strip/crimp: cut-table.csv",
+        "parts list: bom.csv",
+    ]
+    for route in sorted(contract.routes, key=lambda r: r.id):
+        total = sum(seg.length_m for seg in route.segments)
+        parts = [route.id, f"{len(route.segments)}seg", f"{_num(total)}m", route.protection]
+        bends = [
+            seg.min_bend_radius_mm for seg in route.segments if seg.min_bend_radius_mm is not None
+        ]
+        if bends:
+            parts.append(f"bend>={_num(min(bends))}mm")
+        if route.flex_required:
+            parts.append("flex")
+        if route.anchors:
+            parts.append("anchors " + ",".join(sorted(route.anchors)))
+        lines.append("route " + " · ".join(parts))
+    for splice in sorted(contract.splices, key=lambda s: s.id):
+        lines.append(f"splice {splice.id} {splice.kind}")
+    nets = contract.net_map()
+    for net in sorted(contract.nets, key=lambda n: n.id):
+        peer = net.twisted_pair_with
+        if peer is not None and peer >= net.id and peer in nets:
+            lines.append(f"twisted {net.id}⇄{peer}")
+        if net.shield_required:
+            lines.append(f"net {net.id} shielded")
+    if contract.service is not None:
+        service: list[str] = []
+        if contract.service.mating_cycles is not None:
+            service.append(f"{contract.service.mating_cycles} mating")
+        if contract.service.flex_cycles is not None:
+            service.append(f"{contract.service.flex_cycles} flex")
+        if service:
+            lines.append("service " + " / ".join(service) + " cycles")
+    if unused_cavities:
+        lines.append(f"{unused_cavities} cav. unused (grey); seal per spec")
+    return [f"{i}. {line}" for i, line in enumerate(lines, start=1)]
+
+
+def _doc_block(
+    block_id: str, header: str, rows: list[str], x: float, y: float, w: float
+) -> dict[str, Any]:
+    return {
+        "id": block_id,
+        "header": header,
+        "rows": rows,
+        "x": x,
+        "y": y,
+        "w": w,
+        "h": _DOC_HEADER_H + len(rows) * _DOC_ROW_H + _DOC_PAD_BOTTOM,
+    }
 
 
 def _diagram_geometry(
@@ -588,7 +672,35 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
 def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
     """Shared geometry for the SVG body and the embedded drawio model."""
     positions, column_of, page_w, page_h = _diagram_geometry(contract)
-    frame = _frame_geometry(page_w, page_h)
+    used = {
+        (endpoint.connector, endpoint.cavity)
+        for wire in contract.wires
+        for endpoint in (wire.from_endpoint, wire.to_endpoint)
+        if endpoint.connector is not None
+    }
+    all_cavities = {
+        (connector.id, cavity.id)
+        for connector in contract.connectors
+        for cavity in connector.cavities
+    }
+    # The legend/notes strip is drawing content: it must be measured before
+    # the frame picks a sheet, then shifted into the drawing space with the
+    # pin table. It sits in the strip below the table (the notes position on
+    # a conventional drawing).
+    doc_y = page_h - 60.0 + _DOC_GAP_TOP
+    doc_blocks = [
+        _doc_block("doc-legend", "LEGEND", _doc_legend_rows(), _DOC_LEGEND_X, doc_y, _DOC_LEGEND_W),
+        _doc_block(
+            "doc-notes",
+            "NOTES",
+            _doc_notes_rows(contract, len(all_cavities - used)),
+            _DOC_NOTES_X,
+            doc_y,
+            _DOC_NOTES_W,
+        ),
+    ]
+    content_h = max(page_h, doc_y + max(block["h"] for block in doc_blocks) + 40.0)
+    frame = _frame_geometry(page_w, content_h)
     frame["title"] = contract.name
     frame["drawing_no"] = contract.contract_id
     frame["revision"] = contract.revision
@@ -596,6 +708,9 @@ def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
     frame["drawn_by"] = f"wire-agent/{__version__}"
     offset_x, offset_y = frame["ds"][0], frame["ds"][1]
     positions = {cid: (x + offset_x, y + offset_y) for cid, (x, y) in positions.items()}
+    for block in doc_blocks:
+        block["x"] += offset_x
+        block["y"] += offset_y
     connectors = contract.connector_map()
     cavity_y: dict[tuple[str, str], float] = {}
     for connector in contract.connectors:
@@ -603,12 +718,6 @@ def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
         for idx, cavity in enumerate(connector.cavities):
             cavity_y[(connector.id, cavity.id)] = y + _HEADER_H + idx * _ROW_H + _ROW_H / 2
     splice_pos = _splice_positions(contract, cavity_y)
-    used = {
-        (endpoint.connector, endpoint.cavity)
-        for wire in contract.wires
-        for endpoint in (wire.from_endpoint, wire.to_endpoint)
-        if endpoint.connector is not None
-    }
     loop_bumps: dict[str, int] = {}
     seen_loops: dict[str, int] = {}
     for wire in sorted(contract.wires, key=lambda w: w.id):
@@ -620,8 +729,9 @@ def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
         "positions": positions,
         "column_of": column_of,
         "page_w": page_w,
-        "page_h": page_h,
+        "page_h": content_h,
         "frame": frame,
+        "doc_blocks": doc_blocks,
         "cavity_y": cavity_y,
         "splice_pos": splice_pos,
         "used_cavities": used,
@@ -758,6 +868,27 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         f'<mxGeometry x="{_num(frame["ds"][0] + _COL_X[0])}" y="{_num(frame["ds"][1] + 40)}" '
         f'width="{_num(layout["page_w"] - 2 * _COL_X[0])}" height="24" as="geometry" /></mxCell>',
     ]
+    for block in layout["doc_blocks"]:
+        parts.append(
+            f'<mxCell id="{block["id"]}" value="{_esc(block["header"])}" '
+            f'style="swimlane;startSize={_num(_DOC_HEADER_H)};html=1;whiteSpace=wrap;'
+            "fillColor=#ffffff;strokeColor=#333333;fontFamily=monospace;fontSize=11;"
+            'fontStyle=1;align=center;collapsible=0;container=1;recursiveResize=0;" '
+            'vertex="1" parent="1">'
+            f'<mxGeometry x="{_num(block["x"])}" y="{_num(block["y"])}" '
+            f'width="{_num(block["w"])}" height="{_num(block["h"])}" '
+            'as="geometry" /></mxCell>'
+        )
+        for i, row in enumerate(block["rows"]):
+            parts.append(
+                f'<mxCell id="{block["id"]}-r{i}" value="{_esc(row)}" '
+                'style="text;html=1;align=left;verticalAlign=middle;spacingLeft=8;'
+                'fontFamily=monospace;fontSize=10;" vertex="1" '
+                f'parent="{block["id"]}">'
+                f'<mxGeometry y="{_num(_DOC_HEADER_H + i * _DOC_ROW_H)}" '
+                f'width="{_num(block["w"])}" height="{_num(_DOC_ROW_H)}" '
+                'as="geometry" /></mxCell>'
+            )
     for connector in sorted(contract.connectors, key=lambda c: c.id):
         x, y = positions[connector.id]
         header = f"{connector.id} · {connector.family} · {len(connector.cavities)}p"
