@@ -23,4 +23,5 @@ specifications and design decisions.
 | [ADR-0003](adr/ADR-0003-plugin-cooperation.md) | Plugin cooperation via contract files and task delegation | Accepted |
 | [ADR-0004](adr/ADR-0004-scope-v01.md) | v0.1 scope — logical layer with declared routes | Accepted |
 | [ADR-0005](adr/ADR-0005-intake-attachment-materialization-and-evidence-binding.md) | Intake attachment materialization and evidence binding | Accepted |
-| [ADR-0006](adr/ADR-0006-drawio-sheet-frame.md) | ISO 5457 drawing frame + ISO 7200 title block on the drawio diagram | Accepted |
+| [ADR-0006](adr/ADR-0006-vision-render-and-review-records.md) | Vision render lane, visual baseline, and typed review records | Accepted |
+| [ADR-0007](adr/ADR-0007-drawio-sheet-frame.md) | ISO 5457 drawing frame + ISO 7200 title block on the drawio diagram | Accepted |

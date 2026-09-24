@@ -79,7 +79,7 @@
       ]
     },
     {
-      "matcher": "file_editor|wire_drawio|wire_export",
+      "matcher": "file_editor|wire_drawio|wire_author",
       "hooks": [
         {
           "type": "command",

@@ -23,8 +23,28 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Vision render lane: `wire_author` and `wire_drawio` (MCP) now attach the
+  rendered PNG/JPG inline as `ImageContent` so vision-capable models see the
+  drawing directly in the tool result.
+- `--baseline` (CLI) / `baseline_path` (MCP) on `author`, `export`, and
+  `drawio`: records `image_sha256` on first run and reports
+  `match`/`diff` afterwards — a deterministic diagram-change detector
+  (`src/wire/render.py`).
+- Typed visual review records: `src/wire/advisory.py` ports the circuit
+  `AdvisoryResult`/`VisualReviewDetail` contract for
+  `review-visual-<slug>.advisory.json`; `wire-review` documents the
+  convention (ADR-0006).
+- Drawing-quality review: `wire-review` now reviews rendered drawings on
+  baseline fidelity (accurate, legible, unambiguous), manufacturing
+  completeness (self-sufficient for a no-context shop floor), and design
+  intent (dimensioning, layout, linework, topology). `VisualReviewDetail`
+  gains a required `impression` field — the reviewer's subjective reading
+  of the drawing — and four shared categories: `ambiguous_notation`,
+  `missing_dimension`, `missing_manufacturing_info`, `design_intent`.
+- `scripts/e2e_authoring.py` requests the PNG render and reports
+  `renders`/`render_status` (fail-open when drawio-desktop is absent).
 - `harness-diagram.drawio.svg` now projects onto an ISO 5457 / JIS Z 8311
-  drawing frame (ADR-0006): the smallest A-series landscape sheet
+  drawing frame (ADR-0007): the smallest A-series landscape sheet
   (A4–A0, then elongated A0x2 / A0x3, custom beyond) that holds the pin
   table plus the title block, with 20/10 mm borders, centring marks, the
   50 mm zone grid, the size designation, and an ISO 7200 title block on a
@@ -32,7 +52,7 @@ All notable changes to this project are documented here. The format follows
   `Date of issue` is `—` because artifacts stay byte-deterministic.
 - `post_tool_use` provenance hooks (ported from mechanical-agent):
   `record-vision-tool-event` on `inspect_image_with_vision` and
-  `record-image-observation` on `file_editor|wire_drawio|wire_export`, writing
+  `record-image-observation` on `file_editor|wire_drawio|wire_author`, writing
   hashed observation records to `.openhands/wire/vision-tool-events.jsonl` and
   `.openhands/wire/image-observations.jsonl`. `wire-review` now declares its
   required hooks in frontmatter (plugin hooks do not propagate to sub-agents).
@@ -42,6 +62,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `record-image-observation` matcher now targets `wire_author` (which emits
+  the rendered diagram paths) — the previous `wire_export` entry named a
+  tool that does not exist, so author-side renders were never logged.
 - `drawio_lint` no longer reports floating edges (mxPoint
   `sourcePoint`/`targetPoint` anchors without cell endpoints — the
   twist-pair bands) as `edge_missing_endpoints`, and skips the

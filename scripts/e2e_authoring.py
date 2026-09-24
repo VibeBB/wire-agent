@@ -42,11 +42,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    export_design(contract, out_dir)
+    renders: list[str] = []
+    render_status = "ok"
+    try:
+        export_design(contract, out_dir, png=True)
+        png_path = out_dir / "harness-diagram.png"
+        if png_path.is_file():
+            renders.append(str(png_path))
+    except RuntimeError as exc:
+        # drawio-desktop unavailable — the vision lane degrades, never blocks.
+        render_status = f"skipped: {exc}"
+        export_design(contract, out_dir)
     report = run_gates(contract, out_dir)
     report_path = write_report(contract, report, out_dir)
     payload = report.to_dict(contract)
     payload["report_path"] = str(report_path)
+    payload["renders"] = renders
+    payload["render_status"] = render_status
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0 if report.verdict == "pass" else 2
 
