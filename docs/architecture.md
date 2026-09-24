@@ -35,6 +35,7 @@ conversation ──▶ <name>.contract.json + <name>.intake.json   (truth)
                    cut-table.csv
                    bom.json/.csv
                    harness-diagram.drawio.svg
+                   harness-diagram.drawio_lint.json (advisory)
                    manifest.json / provenance.json
 ```
 
@@ -51,10 +52,11 @@ src/wire/
 ├── standards.py          # wire specs, derating, bend factors, families
 ├── gates.py              # authoritative gate runner
 ├── export.py             # projections + manifest/provenance
+├── drawio_lint.py        # advisory drawio readability lint (never a verdict)
 ├── report.py             # design-report.json/md
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
-├── cli.py                # python -m wire {doctor,intake,author,gates,export,import}
+├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import}
 └── mcp_server.py         # stdio MCP boundary
 plugins/wire/
 ├── .plugin/plugin.json

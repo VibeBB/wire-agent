@@ -117,6 +117,16 @@ def cmd_drawio(args: argparse.Namespace) -> dict[str, Any]:
     return {"verdict": "pass", **result}
 
 
+def cmd_drawio_lint(args: argparse.Namespace) -> dict[str, Any]:
+    from .drawio_lint import lint_file
+
+    report = lint_file(
+        Path(args.diagram),
+        Path(args.out) if args.out else None,
+    )
+    return report.model_dump(mode="json")
+
+
 def cmd_gates(args: argparse.Namespace) -> dict[str, Any]:
     try:
         contract = _load(args.contract)
@@ -206,6 +216,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--format", default=None)
     p.add_argument("options", nargs=argparse.REMAINDER, help="extra drawio -x flags")
 
+    p = sub.add_parser(
+        "drawio-lint",
+        help="advisory readability lint for a drawio mxfile (never a gate verdict)",
+    )
+    p.add_argument("--in", dest="diagram", required=True, help="drawio mxfile to lint")
+    p.add_argument("--out", default=None, help="optional report output path")
+
     p = sub.add_parser("gates")
     p.add_argument("--contract", required=True)
     p.add_argument("--out", default=None)
@@ -229,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         "author": cmd_author,
         "export": cmd_export,
         "drawio": cmd_drawio,
+        "drawio-lint": cmd_drawio_lint,
         "gates": cmd_gates,
         "import": cmd_import,
     }

@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from . import __version__
+from . import __version__, drawio_lint
 from .contract import (
     CavitySpec,
     Endpoint,
@@ -737,6 +737,17 @@ def export_design(
                 "bytes": len(artifacts[name].encode("utf-8")),
             }
         )
+
+    lint_report = drawio_lint.lint_text(mxfile, source=Path("harness-diagram.drawio"))
+    lint_text_out = lint_report.model_dump_json(indent=2) + "\n"
+    (out_dir / "harness-diagram.drawio_lint.json").write_text(lint_text_out, encoding="utf-8")
+    files.append(
+        {
+            "path": "harness-diagram.drawio_lint.json",
+            "sha256": hashlib.sha256(lint_text_out.encode("utf-8")).hexdigest(),
+            "bytes": len(lint_text_out.encode("utf-8")),
+        }
+    )
 
     extra = set(drawio)
     if png:

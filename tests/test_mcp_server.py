@@ -14,6 +14,7 @@ EXPECTED = {
     "wire_gates": False,
     "wire_import": False,
     "wire_drawio": True,
+    "wire_drawio_lint": False,
 }
 
 
