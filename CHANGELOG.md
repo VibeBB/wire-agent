@@ -50,6 +50,17 @@ All notable changes to this project are documented here. The format follows
   50 mm zone grid, the size designation, and an ISO 7200 title block on a
   bottom `frame` layer. All title-block values derive from the contract —
   `Date of issue` is `—` because artifacts stay byte-deterministic.
+- The diagram now carries a documentation strip below the pin table: a
+  LEGEND block explaining the drawing's marks (insulation-color strokes,
+  shielded/uncolored wires, unused cavities, splices, twisted-pair bands,
+  same-connector loop bumps, wire-label fields) and a numbered NOTES block
+  with the manufacturing context a no-context shop floor needs — IPC-A-620
+  class, ambient service temperature, units, companion artifacts
+  (wire-list/cut-table/bom CSVs), per-route instructions (segment count,
+  total length, protection, worst-case bend radius, flex, anchors),
+  splices, twisted pairs, shielded nets, service-life cycles, and an
+  unused-cavity seal note. All note rows derive from the contract, so the
+  strip stays byte-deterministic and always current.
 - `post_tool_use` provenance hooks (ported from mechanical-agent):
   `record-vision-tool-event` on `inspect_image_with_vision` and
   `record-image-observation` on `file_editor|wire_drawio|wire_author`, writing

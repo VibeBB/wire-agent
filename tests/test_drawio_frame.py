@@ -187,6 +187,88 @@ def test_size_designation_in_bottom_border() -> None:
     assert size[0] + size[2] < PX_A4[0]
 
 
+def _doc_rows(cells: dict[str, ET.Element], block_id: str) -> list[str]:
+    rows: list[str] = []
+    i = 0
+    while f"{block_id}-r{i}" in cells:
+        rows.append(cells[f"{block_id}-r{i}"].get("value") or "")
+        i += 1
+    return rows
+
+
+def test_doc_blocks_present_below_pin_table() -> None:
+    cells = _cells(_model())
+    for block_id in ("doc-legend", "doc-notes"):
+        assert block_id in cells, block_id
+        cell = cells[block_id]
+        assert cell.get("parent") == "1"
+        assert "swimlane" in (cell.get("style") or "")
+        assert (cell.get("value") or "").strip()
+        # The strip sits below the connector columns inside the frame.
+        x, y, w, h = _geo(cell)
+        fx, fy, fw, fh = _geo(cells["frame-border"])
+        assert fx <= x and x + w <= fx + fw + 0.5
+        assert fy <= y and y + h <= fy + fh + 0.5
+        conn_bottom = max(
+            _geo(c)[1] + _geo(c)[3] for cid, c in cells.items() if cid.startswith("conn-")
+        )
+        assert y > conn_bottom
+
+
+def test_doc_legend_explains_markings() -> None:
+    rows = _doc_rows(_cells(_model()), "doc-legend")
+    assert rows
+    text = " ".join(rows)
+    for phrase in (
+        "insulation color",
+        "shielded",
+        "unused cavity",
+        "splice",
+        "twisted-pair",
+    ):
+        assert phrase in text, phrase
+
+
+def test_doc_notes_carry_manufacturing_context() -> None:
+    contract = _contract()
+    rows = _doc_rows(_cells(_model()), "doc-notes")
+    text = " ".join(rows)
+    assert f"IPC-A-620 cl.{contract.ipc_class}" in text
+    assert f"{contract.ambient_temperature_c:g} °C" in text
+    # Companion artifacts a no-context shop floor needs, named on the sheet.
+    for artifact in ("wire-list.csv", "cut-table.csv", "bom.csv"):
+        assert artifact in text, artifact
+    # Route instructions: ids, protection, and worst-case bend radius.
+    for route in contract.routes:
+        assert route.id in text
+    assert "bend>=12mm" in text and "bend>=10mm" in text
+    # Service life and unused cavities (seal note).
+    assert "30 mating" in text
+    assert "cav. unused" in text
+
+
+def test_doc_notes_cover_declared_features() -> None:
+    import copy
+
+    data = copy.deepcopy(example_contract_data())
+    data["splices"] = [{"id": "SP1", "kind": "crimp"}]
+    data["wires"][0]["to_endpoint"] = {"splice": "SP1"}
+    data["nets"][0]["twisted_pair_with"] = data["nets"][1]["id"]
+    data["nets"][2]["shield_required"] = True
+    data["routes"][0]["flex_required"] = True
+    data["routes"][0]["anchors"] = ["B1", "A2"]
+    data["service"]["flex_cycles"] = 500
+    contract = HarnessContract.model_validate(data)
+    model = ET.fromstring(_harness_mxfile(contract)).find("diagram/mxGraphModel")
+    assert model is not None
+    text = " ".join(_doc_rows(_cells(model), "doc-notes"))
+    assert "splice SP1 crimp" in text
+    assert f"twisted {data['nets'][0]['id']}⇄{data['nets'][1]['id']}" in text
+    assert f"net {data['nets'][2]['id']} shielded" in text
+    assert "flex" in text and "anchors A2,B1" in text
+    assert "500 flex" in text
+
+
 def test_mxfile_is_deterministic_and_well_formed() -> None:
     a = _harness_mxfile(_contract())
     b = _harness_mxfile(_contract())
