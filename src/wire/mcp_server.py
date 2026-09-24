@@ -8,6 +8,7 @@ authority beyond what the wrapped function returns.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import tempfile
 from pathlib import Path
@@ -65,6 +66,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             "out_dir": {"type": "string"},
             "png": {"type": "boolean"},
             "drawio": {"type": "array", "items": {"type": "string"}},
+            "baseline_path": {"type": "string"},
         },
         "required": ["contract_path", "out_dir"],
         "additionalProperties": False,
@@ -96,6 +98,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             "output_path": {"type": "string"},
             "format": {"type": "string"},
             "options": {"type": "array", "items": {"type": "string"}},
+            "baseline_path": {"type": "string"},
         },
         "required": ["input_path"],
         "additionalProperties": False,
@@ -120,12 +123,27 @@ def _validate_contract(payload: dict[str, Any]) -> dict[str, Any]:
     return {"verdict": "pass", "design": contract.name, "elements": len(contract.element_ids())}
 
 
-def _text(payload: Any) -> list[types.TextContent]:
+def _text(payload: Any) -> list[types.ContentBlock]:
     return [
         types.TextContent(
             type="text", text=json.dumps(payload, indent=2, sort_keys=True, default=str)
         )
     ]
+
+
+_IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+def image_content(path: Path) -> types.ImageContent | None:
+    """Attach a rendered image so vision models see it inline."""
+    mime = _IMAGE_MIME.get(path.suffix.lower())
+    if mime is None or not path.is_file():
+        return None
+    return types.ImageContent(
+        type="image",
+        data=base64.b64encode(path.read_bytes()).decode("ascii"),
+        mimeType=mime,
+    )
 
 
 def tool_specs() -> list[types.Tool]:
@@ -190,8 +208,7 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
 }
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
+async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
     from .cli import cmd_author, cmd_drawio, cmd_gates, cmd_import, cmd_intake
 
     if name == "wire_doctor":
@@ -208,16 +225,20 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
             cmd_intake(_ns(contract=arguments["contract_path"], intake=arguments["intake_path"]))
         )
     if name == "wire_author":
-        return _text(
-            cmd_author(
-                _ns(
-                    contract=arguments["contract_path"],
-                    out=arguments["out_dir"],
-                    png=arguments.get("png", False),
-                    drawio=",".join(arguments.get("drawio", [])),
-                )
+        result = cmd_author(
+            _ns(
+                contract=arguments["contract_path"],
+                out=arguments["out_dir"],
+                png=arguments.get("png", False),
+                drawio=",".join(arguments.get("drawio", [])),
+                baseline=arguments.get("baseline_path"),
             )
         )
+        content: list[types.ContentBlock] = list(_text(result))
+        image = image_content(Path(arguments["out_dir"]) / "harness-diagram.png")
+        if image is not None:
+            content.append(image)
+        return content
     if name == "wire_gates":
         return _text(
             cmd_gates(_ns(contract=arguments["contract_path"], out=arguments.get("out_dir")))
@@ -237,16 +258,22 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 result["merged_contract"] = json.loads(Path(out_path).read_text(encoding="utf-8"))
             return _text(result)
     if name == "wire_drawio":
-        return _text(
-            cmd_drawio(
-                _ns(
-                    input=arguments["input_path"],
-                    out=arguments.get("output_path"),
-                    format=arguments.get("format"),
-                    options=arguments.get("options", []),
-                )
+        result = cmd_drawio(
+            _ns(
+                input=arguments["input_path"],
+                out=arguments.get("output_path"),
+                format=arguments.get("format"),
+                options=arguments.get("options", []),
+                baseline=arguments.get("baseline_path"),
             )
         )
+        drawio_content: list[types.ContentBlock] = list(_text(result))
+        emitted = result.get("path")
+        if isinstance(emitted, str):
+            image = image_content(Path(emitted))
+            if image is not None:
+                drawio_content.append(image)
+        return drawio_content
     if name == "wire_drawio_lint":
         from .drawio_lint import lint_file
 
@@ -256,6 +283,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
         )
         return _text(report.model_dump(mode="json"))
     raise ValueError(f"unknown tool {name}")
+
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
+    return await dispatch_tool(name, arguments)
 
 
 def _ns(**kwargs: Any) -> Any:

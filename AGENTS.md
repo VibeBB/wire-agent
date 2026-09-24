@@ -20,6 +20,8 @@ src/wire/                 # deterministic wire-harness core
 ├── standards.py          # wire specs, derating, bend factors, connector families
 ├── gates.py              # authoritative gate runner
 ├── export.py             # wire list/cut table/BOM/diagram + manifest/provenance
+├── render.py             # sha256 visual baseline for rendered images
+├── advisory.py           # typed L2 visual-review records (never verdicts)
 ├── report.py             # design-report.json/md
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
