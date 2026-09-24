@@ -12,7 +12,7 @@ EXPECTED = {
     "wire_intake": False,
     "wire_author": True,
     "wire_gates": False,
-    "wire_import": False,
+    "wire_import": True,
     "wire_drawio": True,
     "wire_drawio_lint": False,
 }

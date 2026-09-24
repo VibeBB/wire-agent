@@ -97,4 +97,6 @@ user-provided harness photos, not workspace renders like
 - `wire_import` (and `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" import --from circuit-json|csv|
   mech-envelope`) merges validated source files into the contract and
   records them as `I*` imported sources with sha256. Cite I* ids in the
-  intake instead of duplicating imported values as R*/A*.
+  intake instead of duplicating imported values as R*/A*. Without
+  `out_path`, the merged contract is written to
+  `<contract-stem>.merged.contract.json` next to the contract.
