@@ -129,11 +129,22 @@ def _bom(contract: HarnessContract) -> dict[str, Any]:
     housing_qty: dict[str, int] = {}
     for c in contract.connectors:
         housing_qty[c.housing or c.family] = housing_qty.get(c.housing or c.family, 0) + 1
-    terminal_qty: dict[str, int] = {}
+    cavity_terminal: dict[tuple[str, str], str] = {}
     for c in contract.connectors:
         for cavity in c.cavities:
             if cavity.terminal:
-                terminal_qty[cavity.terminal] = terminal_qty.get(cavity.terminal, 0) + 1
+                cavity_terminal[(c.id, cavity.id)] = cavity.terminal
+    terminal_qty: dict[str, int] = {}
+    for wire in contract.wires:
+        for endpoint, declared in (
+            (wire.from_endpoint, wire.terminal_a),
+            (wire.to_endpoint, wire.terminal_b),
+        ):
+            name = declared
+            if name is None and endpoint.connector is not None and endpoint.cavity is not None:
+                name = cavity_terminal.get((endpoint.connector, endpoint.cavity))
+            if name is not None:
+                terminal_qty[name] = terminal_qty.get(name, 0) + 1
     wire_qty = [
         {
             "wire_type": t.id,

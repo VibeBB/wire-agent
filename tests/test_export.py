@@ -100,6 +100,29 @@ def test_cut_table_groups_identical_wires(tmp_path: Path) -> None:
     assert len(rows) == 3  # header + 2 groups
 
 
+def test_bom_counts_wire_terminations(tmp_path: Path) -> None:
+    """BOM terminals count actual wire ends, not declared cavities —
+    spare connector positions must not inflate purchasing quantities."""
+    _, out = _export(tmp_path)
+    bom = json.loads((out / "bom.json").read_text(encoding="utf-8"))
+    terminals = {entry["terminal"]: entry["quantity"] for entry in bom["terminals"]}
+    assert terminals == {"SXH-001T-P0.6": 6}  # 3 wires x 2 ends; pin 4 spare on both sides
+
+
+def test_bom_falls_back_to_cavity_terminal(tmp_path: Path) -> None:
+    """A connector endpoint without an explicit wire terminal uses the
+    cavity's declared terminal series."""
+    data = example_contract_data()
+    for wire in data["wires"]:
+        wire.pop("terminal_a", None)
+        wire.pop("terminal_b", None)
+    contract = HarnessContract.model_validate(data)
+    export_design(contract, tmp_path)
+    bom = json.loads((tmp_path / "bom.json").read_text(encoding="utf-8"))
+    terminals = {entry["terminal"]: entry["quantity"] for entry in bom["terminals"]}
+    assert terminals == {"SXH-001T-P0.6": 6}
+
+
 def test_export_drawio_renders(tmp_path: Path, tmp_path_factory: TempPathFactory) -> None:
     """--png/--drawio add drawio-desktop renders; drawio/font versions may
     shift their bytes across hosts, so the manifest records actual hashes."""
