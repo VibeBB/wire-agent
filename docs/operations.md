@@ -87,9 +87,12 @@ Runtime policy surfaces that the plugin declares but the host executes:
 - `model:` resolves through `LLMProfileStore` (`~/.openhands/profiles/`).
   Authoring sub-agents (wire-brief, wire-design) use `vibebb-author`;
   wire-review uses `vibebb-review`. A missing profile raises `ValueError`
-  at task spawn — create the profiles (canvas LLM settings or
-  `LLMProfileStore.save`) before invoking the agents. To fall back to the
-  conversation model, set `model: inherit` locally.
+  at task spawn, so the `session_start` hook
+  `hooks/scripts/ensure_llm_profiles.py` clones the conversation's
+  `active_profile` into `vibebb-author.json`/`vibebb-review.json` when
+  they are absent — edit those files afterwards to route the authoring
+  or review lane at a different model. To fall back to the conversation
+  model, set `model: inherit` locally.
 - Secrets: `${VAR}` / `${VAR:-default}` in `mcp_config` expands through
   the conversation `SecretRegistry` before env, and `wire_launcher.py`
   forwards `OPENHANDS_*`/`WIRE_*` env into the tools container — a
