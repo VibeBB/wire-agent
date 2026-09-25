@@ -492,6 +492,33 @@ def _check_terminal_compatibility(contract: HarnessContract) -> list[GateCheck]:
     return checks
 
 
+def _check_housing_compatibility(contract: HarnessContract) -> list[GateCheck]:
+    """Harness-side housing must exist and differ from the part it mates to."""
+    checks: list[GateCheck] = []
+    for connector in contract.connectors:
+        problems: list[str] = []
+        unknowns: list[str] = []
+        if connector.mate is not None:
+            if connector.housing is None:
+                problems.append(f"no harness housing for mate {connector.mate}")
+            elif connector.housing == connector.mate:
+                problems.append("housing duplicates mate (mate is not a harness part)")
+        elif connector.housing is None and any(
+            cavity.terminal is not None for cavity in connector.cavities
+        ):
+            unknowns.append("terminals declared but no housing or mate")
+        status: CheckStatus = "fail" if problems else ("unknown" if unknowns else "pass")
+        checks.append(
+            GateCheck(
+                "housing_compatibility",
+                connector.id,
+                status,
+                detail="; ".join(problems + unknowns),
+            )
+        )
+    return checks
+
+
 def _check_connector_rating(contract: HarnessContract) -> list[GateCheck]:
     checks: list[GateCheck] = []
     connectors = contract.connector_map()
@@ -651,6 +678,7 @@ def run_gates(contract: HarnessContract, out_dir: Path | None = None) -> GateRep
     checks.extend(_wrap("segregation", _check_segregation, contract))
     checks.extend(_wrap("terminal_compatibility", _check_terminal_compatibility, contract))
     checks.extend(_wrap("connector_rating", _check_connector_rating, contract))
+    checks.extend(_wrap("housing_compatibility", _check_housing_compatibility, contract))
     checks.extend(_wrap("anchor_resolution", _check_anchor_resolution, contract))
     checks.extend(_wrap("manifest_integrity", _check_manifest, contract, out_dir))
     verdict: Literal["pass", "fail"] = "pass" if all(c.status == "pass" for c in checks) else "fail"

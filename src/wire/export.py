@@ -52,6 +52,7 @@ def _wire_list_csv(contract: HarnessContract) -> str:
         "gauge_mm2",
         "color",
         "net",
+        "net_ref",
         "from_connector",
         "from_cavity",
         "to_connector",
@@ -64,6 +65,7 @@ def _wire_list_csv(contract: HarnessContract) -> str:
         "terminal_b",
     ]
     types = contract.wire_type_map()
+    nets = contract.net_map()
     rows = [
         [
             wire.id,
@@ -71,6 +73,7 @@ def _wire_list_csv(contract: HarnessContract) -> str:
             types[wire.wire_type].gauge_mm2,
             wire.color or "",
             wire.net,
+            nets[wire.net].ref or "",
             wire.from_endpoint.connector or wire.from_endpoint.splice or "",
             wire.from_endpoint.cavity or "",
             wire.to_endpoint.connector or wire.to_endpoint.splice or "",
@@ -131,6 +134,7 @@ def _bom(contract: HarnessContract) -> dict[str, Any]:
             "connector": c.id,
             "family": c.family,
             "housing": c.housing or c.family,
+            **({"mate": c.mate} if c.mate is not None else {}),
             "cavities": len(c.cavities),
             **({"keying": c.keying} if c.keying is not None else {}),
         }
@@ -139,6 +143,10 @@ def _bom(contract: HarnessContract) -> dict[str, Any]:
     housing_qty: dict[str, int] = {}
     for c in contract.connectors:
         housing_qty[c.housing or c.family] = housing_qty.get(c.housing or c.family, 0) + 1
+    mate_qty: dict[str, list[str]] = {}
+    for c in contract.connectors:
+        if c.mate is not None:
+            mate_qty.setdefault(c.mate, []).append(c.id)
     cavity_terminal: dict[tuple[str, str], str] = {}
     for c in contract.connectors:
         for cavity in c.cavities:
@@ -172,6 +180,7 @@ def _bom(contract: HarnessContract) -> dict[str, Any]:
         "connector_housings": [
             {"housing": k, "quantity": v} for k, v in sorted(housing_qty.items())
         ],
+        "board_mates": [{"mate": k, "connectors": ids} for k, ids in sorted(mate_qty.items())],
         "connectors": connectors,
         "terminals": [{"terminal": k, "quantity": v} for k, v in sorted(terminal_qty.items())],
         "wire_types": wire_qty,
@@ -183,6 +192,15 @@ def _bom_csv(contract: HarnessContract) -> str:
     rows: list[list[Any]] = []
     for entry in bom["connector_housings"]:
         rows.append(["connector_housing", entry["housing"], entry["quantity"], ""])
+    for entry in bom["board_mates"]:
+        rows.append(
+            [
+                "board_mate",
+                entry["mate"],
+                len(entry["connectors"]),
+                "mates " + ",".join(entry["connectors"]),
+            ]
+        )
     for entry in bom["terminals"]:
         rows.append(["terminal", entry["terminal"], entry["quantity"], ""])
     for entry in bom["wire_types"]:
@@ -409,10 +427,15 @@ def _stroke_luminance(hex_color: str) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+def _net_label(net: HarnessNet) -> str:
+    return f"{net.id} ({net.ref})" if net.ref else net.id
+
+
 def _wire_label(wire: HarnessWire, wtype: WireType, net: HarnessNet) -> str:
     color = f"{wire.color} " if wire.color else ""
     label = (
-        f"{wire.id} · {color}{wtype.name} · {net.id}/{net.signal_class} · {_num(wire.length_m)}m"
+        f"{wire.id} · {color}{wtype.name} · "
+        f"{_net_label(net)}/{net.signal_class} · {_num(wire.length_m)}m"
     )
     if net.twisted_pair_with is not None:
         label += f" · TP\u21c4{net.twisted_pair_with}"
@@ -468,9 +491,9 @@ def _doc_notes_rows(contract: HarnessContract, unused_cavities: int) -> list[str
     for net in sorted(contract.nets, key=lambda n: n.id):
         peer = net.twisted_pair_with
         if peer is not None and peer >= net.id and peer in nets:
-            lines.append(f"twisted {net.id}⇄{peer}")
+            lines.append(f"twisted {_net_label(net)}⇄{_net_label(nets[peer])}")
         if net.shield_required:
-            lines.append(f"net {net.id} shielded")
+            lines.append(f"net {_net_label(net)} shielded")
     if contract.service is not None:
         service: list[str] = []
         if contract.service.mating_cycles is not None:

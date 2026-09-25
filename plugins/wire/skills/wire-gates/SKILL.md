@@ -40,6 +40,7 @@ limit.
 | `segregation` | incompatible signal classes sharing route/connector | separate routes or connectors |
 | `terminal_compatibility` | gauge outside `accepts_mm2`; terminal mismatch | matching terminal/cavity or wire gauge |
 | `connector_rating` | current/voltage/mating/ambient vs housing rating; identical housings need distinct keying | higher-rated housing, keying values, fewer mates |
+| `housing_compatibility` | `mate` declared without a harness `housing`, or `housing` duplicating `mate`; undeclared housing while cavities carry terminals | set `housing` to the receptacle the terminals crimp into; keep `mate` for the board-side part only |
 | `anchor_resolution` | declared anchors vs imported mech envelope | import `*.envelope.json`, or drop/fix anchor names |
 | `manifest_integrity` | artifact sha256 vs manifest | regenerate via `wire_author`; never edit artifacts |
 

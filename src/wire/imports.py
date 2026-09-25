@@ -131,11 +131,16 @@ def import_connectivity(
     for conn in source.connectors:
         cid = _next_id("C", used_c)
         used_c.add(cid)
+        # Generic families (Connector_Generic:* or none) describe what the
+        # connector mates to, not a harness-side housing: keep them as `mate`
+        # and leave `housing` for the authoring designer to fill.
+        generic_family = not conn.family_hint or conn.family_hint.startswith("Connector_Generic")
         data["connectors"].append(
             {
                 "id": cid,
                 "family": conn.family_hint or "imported",
-                "housing": conn.housing,
+                "housing": None if generic_family else conn.housing,
+                "mate": conn.housing if generic_family else None,
                 "rated_current_a": conn.rated_current_a,
                 "rated_voltage_v": conn.rated_voltage_v,
                 "cavities": [{"id": cavity} for cavity in conn.cavities],
@@ -152,6 +157,7 @@ def import_connectivity(
         data["nets"].append(
             {
                 "id": nid,
+                "ref": net.ref,
                 "signal_class": net.signal_class,
                 "voltage_v": net.voltage_v,
                 "current_a": net.current_a,
