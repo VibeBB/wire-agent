@@ -11,6 +11,7 @@ identical artifact bytes.
 from __future__ import annotations
 
 import csv
+import functools
 import hashlib
 import io
 import json
@@ -1144,6 +1145,36 @@ _DRAWIO_TIMEOUT_SECONDS = 300
 _DRAWIO_SUBPROCESS_TIMEOUT = _DRAWIO_TIMEOUT_SECONDS + 120
 
 
+@functools.lru_cache(maxsize=1)
+def _drawio_supports_timeout() -> bool:
+    """Probe the installed drawio for the ``--timeout`` export flag.
+
+    drawio-desktop 31.5.2 added ``--timeout``; older pinned images would
+    treat the seconds value as an input file and fail the export. Probe
+    ``--help`` through the same xvfb wrapper the export uses so detection
+    only runs where the export itself can run, and cache the answer.
+    """
+    try:
+        probe = subprocess.run(
+            ["xvfb-run", "-a", "drawio", "--no-sandbox", "--help"],
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    out = probe.stdout.decode("utf-8", errors="replace")
+    return probe.returncode == 0 and "--timeout" in out
+
+
+def _drawio_export_prefix() -> list[str]:
+    """``drawio -x`` prefix, adding ``--timeout`` only where supported."""
+    prefix = ["-x"]
+    if _drawio_supports_timeout():
+        prefix += ["--timeout", str(_DRAWIO_TIMEOUT_SECONDS)]
+    return prefix
+
+
 def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
     """Render the mxfile through ``drawio -x`` and return the output bytes.
 
@@ -1163,9 +1194,7 @@ def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
             result = subprocess.run(
                 [
                     *cmd,
-                    "-x",
-                    "--timeout",
-                    str(_DRAWIO_TIMEOUT_SECONDS),
+                    *_drawio_export_prefix(),
                     *fmt_args,
                     "-o",
                     str(out),
@@ -1213,7 +1242,7 @@ def run_drawio_export(
     vsdx, csv, or mermaid files.
     """
     cmd = _drawio_cli()
-    argv = [*cmd, "-x", "--timeout", str(_DRAWIO_TIMEOUT_SECONDS)]
+    argv = [*cmd, *_drawio_export_prefix()]
     if fmt is not None:
         argv += ["-f", fmt]
     if output_path is not None:

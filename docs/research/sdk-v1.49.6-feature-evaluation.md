@@ -39,7 +39,7 @@ boundary over the deterministic `python -m wire` entry points.
 
 | Change | Decision | Rationale |
 | --- | --- | --- |
-| `--timeout` CLI flag (fails an export exceeding N seconds, continues with the next file) | **adopted** | Every `drawio -x` invocation in `src/wire/export.py` now passes `--timeout 300`, and the subprocess gains a matching outer bound (`timeout=420`). A hung export or a stuck Electron boot now ends as `RuntimeError` instead of blocking the run — fail-closed. |
+| `--timeout` CLI flag (fails an export exceeding N seconds, continues with the next file) | **adopted** | `drawio -x` calls in `src/wire/export.py` pass `--timeout 300`, gated by a cached `--help` probe (`_drawio_supports_timeout`) so the locked 31.4.5 image keeps working until the republished digest lands; the subprocess also gains an outer bound (`timeout=420`). A hung export or a stuck Electron boot now ends as `RuntimeError` instead of blocking the run — fail-closed. |
 | CLI exports fail with exit 1 instead of hanging on a dialog (invalid Mermaid, unknown/invalid `--layout`, crashed export or Visio import, unreadable file); empty Mermaid/CSV refused for HTML export | inherent | Removes the main headless-hang class; strengthens fail-closed with no code change. |
 | `--normalize` CLI flag (repairs generated diagrams: mis-parented edges, edges without geometry, containers clipping children) | not adopted into the render path | Auto-repair would mask defects the generator or `drawio-lint` should surface. It stays reachable for user-supplied inputs through the `wire drawio` options passthrough. |
 | Local-path shape libraries accepted again ("Path not authorized" regression since 31.4.4) | n/a | wire declares no custom library configuration. |
