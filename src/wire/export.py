@@ -561,16 +561,16 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
     def text(cid: str, value: str, x: float, y: float, w: float, h: float, extra: str) -> str:
         return (
             f'<mxCell id="{cid}" value="{value}" '
-            f'style="text;html=1;strokeColor=none;fillColor=none;align=center;'
+            f'style="text;strokeColor=none;fillColor=none;align=center;'
             f'verticalAlign=middle;fontFamily=monospace;{extra}" '
             f'vertex="1" parent="frame">'
             f'<mxGeometry x="{_num(x)}" y="{_num(y)}" width="{_num(w)}" '
             f'height="{_num(h)}" as="geometry" /></mxCell>'
         )
 
-    fill = "rounded=0;html=1;fillColor=#000000;strokeColor=none;"
-    frame_style = f"rounded=0;html=1;fillColor=none;strokeColor=#000000;strokeWidth={_num(thick)};"
-    sheet_style = "rounded=0;html=1;fillColor=none;strokeColor=#000000;strokeWidth=0.5;"
+    fill = "rounded=0;fillColor=#000000;strokeColor=none;"
+    frame_style = f"rounded=0;fillColor=none;strokeColor=#000000;strokeWidth={_num(thick)};"
+    sheet_style = "rounded=0;fillColor=none;strokeColor=#000000;strokeWidth=0.5;"
     parts = [
         rect("frame-sheet", 0.0, 0.0, sw, sh, sheet_style),
         # Centring marks: at the ends of the sheet's symmetry axes, reaching
@@ -673,20 +673,33 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
         ],
     ]
     col_w, row_h = tb_w / 4, _mm(_TITLE_ROW_MM)
+    lab_h = row_h * 0.45
     for row, entries in enumerate(fields):
         for col, (label, value) in enumerate(entries):
-            html = (
-                f"&lt;font style='font-size:6px'&gt;{label}&lt;/font&gt;"
-                f"&lt;br&gt;&lt;b&gt;{value}&lt;/b&gt;"
+            x, y = tb_x + col * col_w, tb_y + row * row_h
+            cell_id = f"tb-{row}{col}"
+            # Plain-text caption/value pairs keep the model free of HTML
+            # labels so drawio exports SVG text instead of foreignObjects.
+            parts.append(
+                f'<mxCell id="{cell_id}" value="" '
+                'style="rounded=0;whiteSpace=wrap;strokeColor=#000000;'
+                'strokeWidth=1;fillColor=none;" vertex="1" parent="frame">'
+                f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
+                f'width="{_num(col_w)}" height="{_num(row_h)}" as="geometry" /></mxCell>'
             )
             parts.append(
-                f'<mxCell id="tb-{row}{col}" value="{html}" '
-                'style="rounded=0;html=1;whiteSpace=wrap;strokeColor=#000000;'
-                "strokeWidth=1;fillColor=none;fontFamily=monospace;fontSize=10;"
-                'align=left;verticalAlign=top;spacingLeft=4;spacingTop=2;" '
-                'vertex="1" parent="frame">'
-                f'<mxGeometry x="{_num(tb_x + col * col_w)}" y="{_num(tb_y + row * row_h)}" '
-                f'width="{_num(col_w)}" height="{_num(row_h)}" as="geometry" /></mxCell>'
+                f'<mxCell id="{cell_id}-lab" value="{label}" '
+                'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
+                'fontFamily=monospace;fontSize=6;" vertex="1" parent="frame">'
+                f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
+                f'width="{_num(col_w)}" height="{_num(lab_h)}" as="geometry" /></mxCell>'
+            )
+            parts.append(
+                f'<mxCell id="{cell_id}-val" value="{value}" '
+                'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
+                'fontFamily=monospace;fontSize=10;fontStyle=1;" vertex="1" parent="frame">'
+                f'<mxGeometry x="{_num(x)}" y="{_num(y + lab_h)}" '
+                f'width="{_num(col_w)}" height="{_num(row_h - lab_h)}" as="geometry" /></mxCell>'
             )
     parts.append(rect("tb-outer", tb_x, tb_y, tb_w, tb_h, frame_style))
     return parts
@@ -917,14 +930,14 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         '<mxCell id="wires" value="wires" parent="0" />',
         *_frame_cells(frame),
         f'<mxCell id="title" value="{_esc(_diagram_title(contract))}" '
-        'style="text;html=1;align=left;fontSize=14;fontFamily=monospace;" vertex="1" parent="1">'
+        'style="text;align=left;fontSize=14;fontFamily=monospace;" vertex="1" parent="1">'
         f'<mxGeometry x="{_num(frame["ds"][0] + _COL_X[0])}" y="{_num(frame["ds"][1] + 40)}" '
         f'width="{_num(layout["page_w"] - 2 * _COL_X[0])}" height="24" as="geometry" /></mxCell>',
     ]
     for block in layout["doc_blocks"]:
         parts.append(
             f'<mxCell id="{block["id"]}" value="{_esc(block["header"])}" '
-            f'style="swimlane;startSize={_num(_DOC_HEADER_H)};html=1;whiteSpace=wrap;'
+            f'style="swimlane;startSize={_num(_DOC_HEADER_H)};whiteSpace=wrap;'
             "fillColor=#ffffff;strokeColor=#333333;fontFamily=monospace;fontSize=11;"
             'fontStyle=1;align=center;collapsible=0;container=1;recursiveResize=0;" '
             'vertex="1" parent="1">'
@@ -935,7 +948,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         for i, row in enumerate(block["rows"]):
             parts.append(
                 f'<mxCell id="{block["id"]}-r{i}" value="{_esc(row)}" '
-                'style="text;html=1;align=left;verticalAlign=middle;spacingLeft=8;'
+                'style="text;align=left;verticalAlign=middle;spacingLeft=8;'
                 'fontFamily=monospace;fontSize=10;" vertex="1" '
                 f'parent="{block["id"]}">'
                 f'<mxGeometry y="{_num(_DOC_HEADER_H + i * _DOC_ROW_H)}" '
@@ -949,7 +962,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
             header += f" · key {connector.keying}"
         parts.append(
             f'<mxCell id="conn-{connector.id}" value="{_esc(header)}" '
-            f'style="swimlane;startSize={_num(_HEADER_H)};html=1;whiteSpace=wrap;'
+            f'style="swimlane;startSize={_num(_HEADER_H)};whiteSpace=wrap;'
             "fillColor=#eef2ff;strokeColor=#333333;fontFamily=monospace;fontSize=11;"
             'align=left;spacingLeft=8;collapsible=0;container=1;recursiveResize=0;" '
             'vertex="1" parent="1">'
@@ -970,7 +983,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
             parts.append(
                 f'<mxCell id="cav-{connector.id}:{cavity.id}" '
                 f'value="{_esc(_cavity_label(cavity))}" '
-                f'style="rounded=0;html=1;whiteSpace=wrap;{free}'
+                f'style="rounded=0;whiteSpace=wrap;{free}'
                 "strokeColor=#bbbbbb;fontFamily=monospace;fontSize=10;align=left;"
                 f'spacingLeft=6;" vertex="1" parent="conn-{connector.id}">'
                 f'<mxGeometry y="{_num(row_y)}" width="{_num(_CONN_W)}" '
@@ -980,7 +993,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         sx, sy = layout["splice_pos"][splice.id]
         parts.append(
             f'<mxCell id="splice-{splice.id}" value="{_esc(splice.id)} · {splice.kind}" '
-            'style="ellipse;html=1;fillColor=#333333;strokeColor=none;'
+            'style="ellipse;fillColor=#333333;strokeColor=none;'
             "fontFamily=monospace;fontSize=9;fontColor=#616161;"
             'verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=#ffffff;" '
             'vertex="1" parent="wires">'
@@ -1013,7 +1026,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         if _stroke_luminance(color) >= _PALE_LUMINANCE:
             parts.append(
                 f'<mxCell id="wire-{wire.id}-halo" value="" '
-                'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
+                'style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;'
                 "jettySize=auto;strokeWidth=4.5;strokeColor=#3a3a3a;opacity=100;"
                 f"{_endpoint_side(wire.from_endpoint, 'exit', column_of)}"
                 f'{_endpoint_side(wire.to_endpoint, "entry", column_of)}" '
@@ -1026,7 +1039,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
             )
         parts.append(
             f'<mxCell id="wire-{wire.id}" value="{_esc(_wire_label(wire, wtype, net))}" '
-            'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
+            'style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;'
             f"jettySize=auto;strokeWidth=1.5;strokeColor={color};{dashed}"
             "fontFamily=monospace;fontSize=10;labelBackgroundColor=#ffffff;"
             f"{_endpoint_side(wire.from_endpoint, 'exit', column_of)}"
@@ -1042,7 +1055,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         if stripe is not None:
             parts.append(
                 f'<mxCell id="wire-{wire.id}-stripe" value="" '
-                'style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;orthogonalLoop=1;'
+                'style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;'
                 f"jettySize=auto;strokeWidth=1;dashed=1;strokeColor={stripe};"
                 f"{_endpoint_side(wire.from_endpoint, 'exit', column_of)}"
                 f'{_endpoint_side(wire.to_endpoint, "entry", column_of)}" '
@@ -1056,7 +1069,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
     for idx, (a, b, label) in enumerate(_twist_links(contract, layout)):
         parts.append(
             f'<mxCell id="twist-{idx}" value="{_esc(label)}" '
-            'style="endArrow=none;html=1;rounded=0;dashed=1;strokeColor=#616161;'
+            'style="endArrow=none;rounded=0;dashed=1;strokeColor=#616161;'
             "strokeWidth=1;fontFamily=monospace;fontSize=8;fontColor=#616161;"
             'labelBackgroundColor=#ffffff;" edge="1" parent="wires">'
             '<mxGeometry relative="1" as="geometry">'
