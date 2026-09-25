@@ -550,9 +550,7 @@ def test_intake_attachments_uses_session_default_path(tmp_path: Path) -> None:
 
 def test_record_vision_tool_event_records_actor(tmp_path: Path) -> None:
     """When the payload carries agent/tool-call identity it lands on the record."""
-    payload = _vision_payload(
-        tmp_path, agent_name="wire-review", tool_call_id="call-42"
-    )
+    payload = _vision_payload(tmp_path, agent_name="wire-review", tool_call_id="call-42")
 
     assert _run_hook(VISION_SCRIPT, payload).returncode == 0
 

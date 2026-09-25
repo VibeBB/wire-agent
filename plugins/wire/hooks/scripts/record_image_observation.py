@@ -160,9 +160,7 @@ def main() -> int:
                     "recorded_at": datetime.now(UTC).isoformat(),
                     "session_id": payload.get("session_id"),
                     "actor": _actor(cast(dict[str, Any], payload)),
-                    "tool_call_id": (
-                        payload.get("tool_call_id") or payload.get("action_id")
-                    ),
+                    "tool_call_id": (payload.get("tool_call_id") or payload.get("action_id")),
                 }
                 stream.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
                 stream.write("\n")
