@@ -546,3 +546,41 @@ def test_intake_attachments_uses_session_default_path(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert list((workdir / "intake" / "attachments").glob("*.png"))
+
+
+def test_record_vision_tool_event_records_actor(tmp_path: Path) -> None:
+    """When the payload carries agent/tool-call identity it lands on the record."""
+    payload = _vision_payload(tmp_path, agent_name="wire-review", tool_call_id="call-42")
+
+    assert _run_hook(VISION_SCRIPT, payload).returncode == 0
+
+    record = _vision_events(tmp_path)[0]
+    assert record["actor"] == {"agent_name": "wire-review", "tool_call_id": "call-42"}
+    assert record["tool_call_id"] == "call-42"
+
+
+def test_record_vision_tool_event_actor_absent(tmp_path: Path) -> None:
+    assert _run_hook(VISION_SCRIPT, _vision_payload(tmp_path)).returncode == 0
+    record = _vision_events(tmp_path)[0]
+    assert record["actor"] is None
+    assert record["tool_call_id"] is None
+
+
+def test_record_image_observation_records_actor(tmp_path: Path) -> None:
+    image = tmp_path / "diagram.png"
+    image.write_bytes(_PNG)
+    payload = {
+        "working_dir": str(tmp_path),
+        "tool_name": "wire_export",
+        "tool_input": {},
+        "tool_response": {"content": [{"type": "text", "text": f"wrote {image}"}]},
+        "session_id": "s1",
+        "subagent_type": "wire-design",
+        "action_id": "act-9",
+    }
+
+    assert _run_hook(OBSERVE_SCRIPT, payload).returncode == 0
+
+    record = _observations(tmp_path)[0]
+    assert record["actor"] == {"action_id": "act-9", "subagent_type": "wire-design"}
+    assert record["tool_call_id"] == "act-9"

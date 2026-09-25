@@ -100,11 +100,19 @@ fidelity — a user sketch is not a fabrication document):
 
 Then say what the drawing made you think: every visual review ends with
 a subjective `impression` — what the sheet communicates well, what it
-leaves unsaid, whether a stranger could build from it. Write it in your
-reply and record it in the record's `impression` field.
+leaves unsaid, whether a stranger could build from it. The impression is
+a multi-sentence reading, not a verdict line: cover all three axes,
+naming strengths and residual gaps concretely (the record validator
+rejects anything under 240 characters or with fewer than two sentences,
+so a one-liner never reaches the file). Write it in your reply and
+record it in the record's `impression` field.
 
-Visual review records: when you review a rendered image, write
-`review-visual-<slug>.advisory.json` next to `design-report.json`. Do not
+Visual review records are mandatory, not optional: every rendered image
+in the export directory — each `*.png`, `*.jpg`, and `*.svg` projection —
+must be inspected through the vision lane and get a
+`review-visual-<slug>.advisory.json` next to `design-report.json`. An
+unreviewed raster is unfinished work: the stop hook lists any image
+missing its record. Do not
 hand-assemble the JSON — run the `review-record` CLI so the record is
 bound to the image bytes and validated against `src/wire/advisory.py`:
 
@@ -142,7 +150,8 @@ detail, and writes the record (fail-closed on a bad payload):
 ```
 
 `checklist` is `harness_diagram` or `intake_image`; `impression` is
-required (a record without one fails validation and is discarded); finding
+required and floored at 240 characters with at least two sentences (a
+terse record fails validation and is discarded); finding
 categories are `missing_connection`, `wrong_connector`, `routing_anomaly`,
 `label_collision`, `text_outside_frame`, `dimension_legibility`,
 `ambiguous_notation`, `missing_dimension`, `missing_manufacturing_info`,

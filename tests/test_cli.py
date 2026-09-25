@@ -68,7 +68,13 @@ def test_review_record_writes_validated_record(tmp_path: Path) -> None:
         "--checklist",
         "harness_diagram",
         "--impression",
-        "readable sheet, minor label collision",
+        (
+            "The sheet is readable and the pin tables carry every wire end with "
+            "gauge, color, and terminal data. The W4 label collides with the "
+            "C3 header, which a fabricator would trip over, and a stray label "
+            "crowds the right edge. Branch lengths anchor to mating faces so a "
+            "no-context reader could still kit the parts."
+        ),
         "--findings",
         str(findings),
     )
@@ -77,7 +83,7 @@ def test_review_record_writes_validated_record(tmp_path: Path) -> None:
     record = json.loads(record_path.read_text(encoding="utf-8"))
     assert record["tool"] == "vision_review"
     assert record["detail"]["image_sha256"] == hashlib.sha256(img.read_bytes()).hexdigest()
-    assert record["detail"]["impression"].startswith("readable")
+    assert record["detail"]["impression"].startswith("The sheet")
     assert record["detail"]["findings"][0]["category"] == "label_collision"
 
 
