@@ -213,3 +213,37 @@ def test_splice_passes_with_two_legs_one_net() -> None:
     data["wires"].append(leg)
     _, by_id, _ = _verdict(data, None)
     assert "fail" not in by_id["splice_integrity"]
+
+
+def test_housing_compatibility_mate_without_housing_fails() -> None:
+    data = example_contract_data()
+    data["connectors"][0]["mate"] = "2.54mm pin header"
+    data["connectors"][0]["housing"] = None
+    _, by_id, verdict = _verdict(data)
+    assert verdict == "fail"
+    assert "fail" in by_id["housing_compatibility"]
+
+
+def test_housing_compatibility_duplicate_mate_fails() -> None:
+    data = example_contract_data()
+    data["connectors"][0]["mate"] = data["connectors"][0]["housing"]
+    _, by_id, verdict = _verdict(data)
+    assert verdict == "fail"
+    assert "fail" in by_id["housing_compatibility"]
+
+
+def test_housing_compatibility_mate_and_housing_passes() -> None:
+    data = example_contract_data()
+    data["connectors"][0]["mate"] = "2.54mm pin header"
+    data["connectors"][0]["housing"] = "22-01-3067"
+    _, by_id, _ = _verdict(data)
+    assert "fail" not in by_id["housing_compatibility"]
+    assert by_id["housing_compatibility"] == ["pass", "pass"]
+
+
+def test_housing_compatibility_unknown_without_housing_or_mate() -> None:
+    data = example_contract_data()
+    data["connectors"][0]["housing"] = None
+    _, by_id, verdict = _verdict(data)
+    assert verdict == "fail"
+    assert "unknown" in by_id["housing_compatibility"]

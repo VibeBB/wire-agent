@@ -152,3 +152,37 @@ def test_csv_connectivity(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())
     merged = import_connectivity(contract, source, csv_path)
     assert any(s.system == "csv" for s in merged.imported_sources)
+
+
+def test_generic_family_imports_housing_as_mate(tmp_path: Path) -> None:
+    """Connector_Generic families describe the mate, not a harness part."""
+    generic: dict[str, Any] = {
+        **CIRCUIT,
+        "connectors": [
+            {
+                "ref": "J3",
+                "family_hint": "Connector_Generic:Conn_01x02",
+                "housing": "B2B-XH-A",
+                "rated_current_a": 3.0,
+                "rated_voltage_v": 250.0,
+                "cavities": ["1", "2"],
+            }
+        ],
+    }
+    contract = HarnessContract.model_validate(example_contract_data())
+    src = _write(tmp_path, "board.connectivity.json", generic)
+    merged = import_connectivity(contract, load_connectivity_source(src), src)
+    c3 = next(c for c in merged.connectors if c.id == "C3")
+    assert c3.mate == "B2B-XH-A"
+    assert c3.housing is None
+
+
+def test_named_family_keeps_housing_and_net_ref(tmp_path: Path) -> None:
+    contract = HarnessContract.model_validate(example_contract_data())
+    src = _write(tmp_path, "board.connectivity.json", CIRCUIT)
+    merged = import_connectivity(contract, load_connectivity_source(src), src)
+    c3 = next(c for c in merged.connectors if c.id == "C3")
+    assert c3.housing == "B2B-XH-A"
+    assert c3.mate is None
+    n4 = next(n for n in merged.nets if n.id == "N4")
+    assert n4.ref == "GND"

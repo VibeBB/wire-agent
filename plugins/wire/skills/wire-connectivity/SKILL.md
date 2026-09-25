@@ -48,7 +48,14 @@ Shape (validated by `ConnectivitySource` in `src/wire/imports.py`):
 `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" import --contract <file> --source <connectivity.json> --from
 circuit-json [--out <file>]` appends new C*/N* ids with `source` refs —
 existing elements are never overwritten, and the copy is the truth
-(re-import shows a diff, not live coupling). E3-style From/To CSV tables
+(re-import shows a diff, not live coupling). Net `ref` strings are kept
+as the net's display `ref` (`+3V3`, `I2C_SDA`) on wire lists and
+diagrams. For connectors, a `family_hint` naming a real connector
+family keeps `housing` as the harness-side housing; a generic family
+(`Connector_Generic:*` or none) instead records `housing` as the `mate`
+(the board-side part being plugged into) — the designer then fills
+`housing` with the receptacle that accepts the terminals.
+E3-style From/To CSV tables
 import through `--from csv` (columns: from_connector, to_connector,
 from_cavity, to_cavity, net, signal_class, voltage_v, current_a,
 family_hint, housing).

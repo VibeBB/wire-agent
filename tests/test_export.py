@@ -257,3 +257,47 @@ def test_export_fails_closed_without_drawio(tmp_path: Path) -> None:
     contract = HarnessContract.model_validate(example_contract_data())
     with pytest.raises(RuntimeError, match="drawio-desktop and xvfb"):
         export_design(contract, tmp_path)
+
+
+def test_bom_lists_mates_separately() -> None:
+    """Board-side mates are informational, not harness housing parts."""
+    from wire.export import _bom, _bom_csv
+
+    data = example_contract_data()
+    data["connectors"][0]["mate"] = "2.54mm pin header, 1x4"
+    contract = HarnessContract.model_validate(data)
+    bom = _bom(contract)
+    mates = {m["mate"]: m["connectors"] for m in bom["board_mates"]}
+    assert mates == {"2.54mm pin header, 1x4": ["C1"]}
+    assert not any("pin header" in entry["housing"] for entry in bom["connector_housings"])
+    c1 = next(c for c in bom["connectors"] if c["connector"] == "C1")
+    assert c1["mate"] == "2.54mm pin header, 1x4"
+    csv_text = _bom_csv(contract)
+    assert 'board_mate,"2.54mm pin header, 1x4",1,mates C1' in csv_text
+
+
+def test_wire_list_includes_net_ref() -> None:
+    from wire.export import _wire_list_csv
+
+    data = example_contract_data()
+    data["nets"][0]["ref"] = "+24V"
+    contract = HarnessContract.model_validate(data)
+    rows = _wire_list_csv(contract).splitlines()
+    header = rows[0].split(",")
+    net_col, ref_col = header.index("net"), header.index("net_ref")
+    w1 = next(r.split(",") for r in rows[1:] if r.startswith("W1"))
+    assert w1[ref_col] == "+24V"
+    assert w1[net_col] == data["nets"][0]["id"]
+
+
+def test_wire_label_shows_net_ref() -> None:
+    from wire.export import _net_label, _wire_label
+
+    data = example_contract_data()
+    data["nets"][0]["ref"] = "+24V"
+    contract = HarnessContract.model_validate(data)
+    net = contract.net_map()["N1"]
+    assert _net_label(net) == "N1 (+24V)"
+    wire = contract.wires[0]
+    label = _wire_label(wire, contract.wire_type_map()[wire.wire_type], net)
+    assert "N1 (+24V)" in label

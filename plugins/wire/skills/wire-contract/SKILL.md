@@ -41,12 +41,17 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
 
 - **connectors**: give every cavity `accepts_mm2` (min,max) and a terminal
   part number when known; declare `rated_current_a`, `rated_voltage_v`,
-  `mating_cycles`, `keying`, `sealed`, `temp_rating_c`. Identical housings
-  on one harness need distinct `keying`.
+  `mating_cycles`, `keying`, `sealed`, `temp_rating_c`. `housing` is the
+  harness-side housing the terminals crimp into (e.g. a 22-01-*
+  receptacle) — it lands on the BOM; `mate` names the part the connector
+  plugs into (e.g. an on-board pin header) and is informational only.
+  Identical housings on one harness need distinct `keying`.
 - **wire_types**: prefer a `spec` key from `wire_standards` (AVSS, FLRY-B,
   TXL) to inherit its derating curve, else declare `temp_derating` points
   sorted by temperature. `min_bend_factor` is × outer diameter.
-- **nets**: `signal_class` drives segregation and reporting; `voltage_v`,
+- **nets**: `ref` carries the display name (`+24V`, `I2C_SDA`) onto wire
+  lists and diagrams while `id` stays `N*`; `signal_class` drives
+  segregation and reporting; `voltage_v`,
   `current_a` drive ampacity/drop/insulation/connector gates. Declare
   `max_voltage_drop_v` for 0 V nets (ground returns) and strict budgets.
   `shield_required` forces a shielded wire type; `twisted_pair_with` binds

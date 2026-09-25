@@ -74,6 +74,7 @@ class HarnessConnector(BaseModel):
     id: str = Field(pattern=r"^C[0-9]+$")
     family: str = Field(min_length=1)
     housing: str | None = None
+    mate: str | None = None
     rated_current_a: float = Field(gt=0)
     rated_voltage_v: float = Field(gt=0)
     mating_cycles: int = Field(default=30, ge=1)
@@ -208,6 +209,7 @@ class HarnessNet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(pattern=r"^N[0-9]+$")
+    ref: str | None = None
     signal_class: Literal["power", "ground", "signal", "analog", "data", "highspeed", "shield"]
     voltage_v: float = Field(ge=0)
     current_a: float = Field(ge=0)
