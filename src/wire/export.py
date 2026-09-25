@@ -1137,6 +1137,13 @@ def _drawio_cli() -> list[str]:
     ]
 
 
+# Per-file export budget handed to drawio-desktop 31.5.2's ``--timeout``
+# (the flag fails an export exceeding it and exits 1). The subprocess bound
+# adds slack so a stuck Electron boot also terminates instead of hanging.
+_DRAWIO_TIMEOUT_SECONDS = 300
+_DRAWIO_SUBPROCESS_TIMEOUT = _DRAWIO_TIMEOUT_SECONDS + 120
+
+
 def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
     """Render the mxfile through ``drawio -x`` and return the output bytes.
 
@@ -1152,11 +1159,26 @@ def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
         src = Path(tmp) / "harness.drawio"
         out = Path(tmp) / "out"
         src.write_text(mxfile, encoding="utf-8")
-        result = subprocess.run(
-            [*cmd, "-x", *fmt_args, "-o", str(out), str(src)],
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    *cmd,
+                    "-x",
+                    "--timeout",
+                    str(_DRAWIO_TIMEOUT_SECONDS),
+                    *fmt_args,
+                    "-o",
+                    str(out),
+                    str(src),
+                ],
+                capture_output=True,
+                check=False,
+                timeout=_DRAWIO_SUBPROCESS_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"drawio -x {' '.join(fmt_args)} timed out after {_DRAWIO_SUBPROCESS_TIMEOUT}s"
+            ) from exc
         if result.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
             detail = result.stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"drawio -x {' '.join(fmt_args)} failed: {detail}")
@@ -1191,13 +1213,18 @@ def run_drawio_export(
     vsdx, csv, or mermaid files.
     """
     cmd = _drawio_cli()
-    argv = [*cmd, "-x"]
+    argv = [*cmd, "-x", "--timeout", str(_DRAWIO_TIMEOUT_SECONDS)]
     if fmt is not None:
         argv += ["-f", fmt]
     if output_path is not None:
         argv += ["-o", str(output_path)]
     argv += [*options, str(input_path)]
-    result = subprocess.run(argv, capture_output=True, check=False)
+    try:
+        result = subprocess.run(
+            argv, capture_output=True, check=False, timeout=_DRAWIO_SUBPROCESS_TIMEOUT
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"drawio -x timed out after {_DRAWIO_SUBPROCESS_TIMEOUT}s") from exc
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"drawio -x failed: {detail}")
