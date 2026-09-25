@@ -17,6 +17,9 @@ on:
       - "scripts/pull_locked_image.py"
       - "scripts/update_image_digest_lock.py"
       - "!docker/image-digests.json"
+      # The plugin pin is written by this workflow itself; exclude it so a
+      # merged pin PR does not trigger another publish.
+      - "!plugins/wire/skills/wire-workflow/tools-image.json"
       - "!docker/README.md"
   workflow_dispatch:
 
@@ -178,15 +181,27 @@ jobs:
             --tag "$TOOLS_TAG" --digest "$TOOLS_DIGEST" --published-at "$published_at" \
             --workflow-run "$workflow_run" --dockerfile docker/wire-tools.Dockerfile \
             --tools-json "$RUNNER_TEMP/wire-tools.json"
+          # Ship the same pin inside the plugin so an installed plugin can
+          # resolve the tools image without the extension cache (the
+          # launcher reads <plugin>/skills/*/tools-image.json first).
+          python3 - <<'PY'
+          import json
+
+          entry = json.load(open("docker/image-digests.json"))["wire_tools"]
+          pin = "plugins/wire/skills/wire-workflow/tools-image.json"
+          with open(pin, "w", encoding="utf-8") as out:
+              json.dump(entry, out, indent=2)
+              out.write("\n")
+          PY
           # status --porcelain (not diff --quiet) so a still-untracked lock
           # file on the very first publish is detected as a change too.
-          if [ -z "$(git status --porcelain -- docker/image-digests.json)" ]; then
+          if [ -z "$(git status --porcelain -- docker/image-digests.json plugins/wire/skills/wire-workflow/tools-image.json)" ]; then
             echo "Image digest lock is unchanged; no pull request is needed."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docker/image-digests.json
+          git add docker/image-digests.json plugins/wire/skills/wire-workflow/tools-image.json
           git commit -m "Update wire image digest lock"
           retry git push --set-upstream origin "$branch"
           body=$(printf '%s\n' \

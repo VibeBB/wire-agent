@@ -96,6 +96,13 @@ Runtime policy surfaces that the plugin declares but the host executes:
   canvas-registered `WIRE_*` secret reaches `wire_*` tool code
   end-to-end. Bash commands also receive registry values when the key
   name appears in the command text.
+- The tools container runs as the host uid, whose home does not exist
+  inside the image: the launcher pins `HOME`/`TMPDIR`/`XDG_*` to `/tmp`
+  instead of forwarding the host values so fontconfig, ezdxf and other
+  cache-writing tools work. Source/image resolution still consults both
+  `$HOME` and the account's real home for the OpenHands extension cache,
+  so a `HOME` override applied to the container does not blind the
+  launcher to `~/.openhands/cache/extensions/wire-agent-*`.
 - The `safety-rail` `pre_tool_use` hook (`hooks/scripts/safety_rail.py`)
   denies a deterministic denylist on terminal commands: root/home `rm
   -rf`, block-device writes, power commands, and the git operations the
@@ -115,7 +122,12 @@ Runtime policy surfaces that the plugin declares but the host executes:
 - `.github/workflows/release.yml` is `workflow_dispatch` only.
 - Docker image digests live in `docker/image-digests.json` and are written
   only by the `publish-wire-images.yml` workflow; do not commit
-  placeholder entries.
+  placeholder entries. The same entry ships inside the plugin at
+  `plugins/wire/skills/wire-workflow/tools-image.json` (rewritten by the
+  same workflow) so an installed plugin resolves the pinned tools image
+  without the extension cache — `wire_launcher.py` checks
+  `<plugin>/tools-image.json`, then `<plugin>/skills/*/tools-image.json`,
+  then `docker/image-digests.json`.
 - `publish-wire-images.yml` builds and publishes `ghcr.io/<owner>/wire-tools`
   on `workflow_dispatch` and on pushes to main that touch `docker/**`,
   `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
