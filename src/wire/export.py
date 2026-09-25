@@ -11,6 +11,7 @@ identical artifact bytes.
 from __future__ import annotations
 
 import csv
+import functools
 import hashlib
 import io
 import json
@@ -1137,6 +1138,43 @@ def _drawio_cli() -> list[str]:
     ]
 
 
+# Per-file export budget handed to drawio-desktop 31.5.2's ``--timeout``
+# (the flag fails an export exceeding it and exits 1). The subprocess bound
+# adds slack so a stuck Electron boot also terminates instead of hanging.
+_DRAWIO_TIMEOUT_SECONDS = 300
+_DRAWIO_SUBPROCESS_TIMEOUT = _DRAWIO_TIMEOUT_SECONDS + 120
+
+
+@functools.lru_cache(maxsize=1)
+def _drawio_supports_timeout() -> bool:
+    """Probe the installed drawio for the ``--timeout`` export flag.
+
+    drawio-desktop 31.5.2 added ``--timeout``; older pinned images would
+    treat the seconds value as an input file and fail the export. Probe
+    ``--help`` through the same xvfb wrapper the export uses so detection
+    only runs where the export itself can run, and cache the answer.
+    """
+    try:
+        probe = subprocess.run(
+            ["xvfb-run", "-a", "drawio", "--no-sandbox", "--help"],
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    out = probe.stdout.decode("utf-8", errors="replace")
+    return probe.returncode == 0 and "--timeout" in out
+
+
+def _drawio_export_prefix() -> list[str]:
+    """``drawio -x`` prefix, adding ``--timeout`` only where supported."""
+    prefix = ["-x"]
+    if _drawio_supports_timeout():
+        prefix += ["--timeout", str(_DRAWIO_TIMEOUT_SECONDS)]
+    return prefix
+
+
 def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
     """Render the mxfile through ``drawio -x`` and return the output bytes.
 
@@ -1152,11 +1190,24 @@ def _drawio_render(mxfile: str, fmt_args: Sequence[str]) -> bytes:
         src = Path(tmp) / "harness.drawio"
         out = Path(tmp) / "out"
         src.write_text(mxfile, encoding="utf-8")
-        result = subprocess.run(
-            [*cmd, "-x", *fmt_args, "-o", str(out), str(src)],
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    *cmd,
+                    *_drawio_export_prefix(),
+                    *fmt_args,
+                    "-o",
+                    str(out),
+                    str(src),
+                ],
+                capture_output=True,
+                check=False,
+                timeout=_DRAWIO_SUBPROCESS_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"drawio -x {' '.join(fmt_args)} timed out after {_DRAWIO_SUBPROCESS_TIMEOUT}s"
+            ) from exc
         if result.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
             detail = result.stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"drawio -x {' '.join(fmt_args)} failed: {detail}")
@@ -1191,13 +1242,18 @@ def run_drawio_export(
     vsdx, csv, or mermaid files.
     """
     cmd = _drawio_cli()
-    argv = [*cmd, "-x"]
+    argv = [*cmd, *_drawio_export_prefix()]
     if fmt is not None:
         argv += ["-f", fmt]
     if output_path is not None:
         argv += ["-o", str(output_path)]
     argv += [*options, str(input_path)]
-    result = subprocess.run(argv, capture_output=True, check=False)
+    try:
+        result = subprocess.run(
+            argv, capture_output=True, check=False, timeout=_DRAWIO_SUBPROCESS_TIMEOUT
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"drawio -x timed out after {_DRAWIO_SUBPROCESS_TIMEOUT}s") from exc
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"drawio -x failed: {detail}")

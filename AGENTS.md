@@ -1,6 +1,6 @@
 # Agent Working Agreement
 
-> Target: OpenHands Software Agent SDK v1.49.5, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.49.6, Python 3.12+
 
 This document is the working agreement for implementation, verification, and
 documentation in this repository. The README is the product overview,
@@ -113,6 +113,13 @@ removing, or moving a dependency, adding a version ARG or FROM image to
 scripts/check_dependency_updates.py` locally. For deferred candidates,
 record the reason and a re-check deadline in
 `scripts/dependency_update_deferrals.json`.
+
+When bumping a dependency to a newer version, review the complete changelog
+of every updated component (all releases between the pinned and target
+versions), evaluate each new feature or behavior change for use in this
+repository, adopt the useful ones in the same change, and record the
+evaluation — including reasons for non-adoption — in the PR or under
+`docs/research/`.
 
 Published image digests live in `docker/image-digests.json`, written only
 by the `publish-wire-images.yml` workflow; do not commit
