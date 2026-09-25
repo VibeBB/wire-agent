@@ -107,3 +107,9 @@ user-provided harness photos, not workspace renders like
   intake instead of duplicating imported values as R*/A*. Without
   `out_path`, the merged contract is written to
   `<contract-stem>.merged.contract.json` next to the contract.
+
+## Terminal tool notes
+
+The terminal tool runs **one command per call**: a payload carrying several commands is bounced
+as "Cannot execute multiple commands at once". Chain with `&&` inside a single command when you
+need two steps, and write files with `file_editor` rather than multi-line heredocs.
