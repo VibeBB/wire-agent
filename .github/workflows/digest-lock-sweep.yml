@@ -2,7 +2,7 @@ name: Digest lock PR sweep
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
