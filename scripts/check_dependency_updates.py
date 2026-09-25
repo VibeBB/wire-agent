@@ -415,12 +415,12 @@ def check_docker_args(
 
 _DOCKERHUB_TAGS = (
     "https://hub.docker.com/v2/repositories/library/{image}/tags"
-    "?page_size=100&name=&ordering=-last_updated"
+    "?page_size=100&name={name}&ordering=last_updated"
 )
 
 
-def _ubuntu_lts_tags(fetch_json: FetchJson) -> list[str]:
-    url: str | None = _DOCKERHUB_TAGS.format(image="ubuntu")
+def _docker_tag_names(fetch_json: FetchJson, image: str, name: str = "") -> list[str]:
+    url: str | None = _DOCKERHUB_TAGS.format(image=image, name=name)
     tags: list[str] = []
     for _page in range(10):
         if url is None:
@@ -430,12 +430,40 @@ def _ubuntu_lts_tags(fetch_json: FetchJson) -> list[str]:
         except (ValueError, OSError):
             return []
         for item in data.get("results", []):
-            name = item.get("name")
-            if isinstance(name, str) and re.fullmatch(r"\d{2}\.\d{2}", name):
-                tags.append(name)
+            tag_name = item.get("name")
+            if isinstance(tag_name, str):
+                tags.append(tag_name)
         next_url = data.get("next")
         url = next_url if isinstance(next_url, str) and next_url else None
     return tags
+
+
+def _supported_docker_base(image: str, tag: str) -> bool:
+    return (image == "ubuntu" and re.fullmatch(r"\d{2}\.\d{2}", tag) is not None) or (
+        image == "debian" and re.fullmatch(r"\d+-slim", tag) is not None
+    )
+
+
+def _latest_docker_base_tag(fetch_json: FetchJson, image: str, current: str) -> str | None:
+    if image == "ubuntu":
+        tags = [
+            t
+            for t in _docker_tag_names(fetch_json, image)
+            if re.fullmatch(r"\d{2}\.\d{2}", t) and t.endswith(".04")
+        ]
+        return max(
+            tags,
+            key=lambda t: tuple(int(p) for p in t.split(".")),
+            default=None,
+        )
+    if image == "debian":
+        tags = [
+            t
+            for t in _docker_tag_names(fetch_json, image, name="-slim")
+            if re.fullmatch(r"\d+-slim", t)
+        ]
+        return max(tags, key=lambda t: int(t.removesuffix("-slim")), default=None)
+    return None
 
 
 def check_docker_base(
@@ -445,14 +473,13 @@ def check_docker_base(
     if base is None:
         return []
     image, current = base
-    if image != "ubuntu" or re.fullmatch(r"\d{2}\.\d{2}", current) is None:
+    if not _supported_docker_base(image, current):
         return [
             DependencyStatus(
                 "docker-base", image, current, "?", _DOCKERFILES[0], False, "unhandled image"
             )
         ]
-    lts_tags = [t for t in _ubuntu_lts_tags(fetch_json) if t.endswith(".04")]
-    latest = max(lts_tags, key=lambda t: tuple(int(p) for p in t.split(".")), default=None)
+    latest = _latest_docker_base_tag(fetch_json, image, current)
     outdated = latest is not None and latest != current
     return [
         DependencyStatus(

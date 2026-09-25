@@ -55,7 +55,7 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 
 | Item | Pin | Where |
 | --- | --- | --- |
-| ubuntu base image | `26.04` | `docker/wire-tools.Dockerfile` `FROM` |
+| debian base image | `13-slim` | `docker/wire-tools.Dockerfile` `FROM` |
 | uv | `0.12.18` | `docker/wire-tools.Dockerfile` `ARG UV_VERSION` (must equal `[tool.uv] required-version`) |
 | Python in image | `3.12` | `uv python install` inside the Dockerfile |
 
@@ -67,8 +67,9 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 - GitHub Actions `uses:` SHA pins against latest repo tag.
 - `uvx` tool pins in workflows against PyPI.
 - Dockerfile `ARG UV_VERSION` against the latest `astral-sh/uv` tag.
-- Dockerfile `FROM ubuntu:YY.MM` against the newest Ubuntu `YY.04` LTS tag
-  on Docker Hub.
+- Dockerfile `FROM debian:N-slim` against the newest Debian `N-slim` tag on
+  Docker Hub (a `ubuntu:YY.MM` base is also understood and compared against
+  the newest Ubuntu `YY.04` LTS tag).
 
 The weekly workflow posts the report to the "Dependency update check
 report" issue. Deferred candidates are recorded in
