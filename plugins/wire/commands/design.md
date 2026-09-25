@@ -30,8 +30,12 @@ table, BOM, diagram → run every gate → write `design-report.json`), reads
 each failing check, fixes the CONTRACT, and reruns. Artifacts are
 projections — never edit generated files, never weaken a limit to pass.
 
-Finally delegate to `wire-review` for an advisory pass over values, topology,
-and the SVG diagram. Findings feed the contract, never a verdict.
+Finally — required, never skipped — delegate to `wire-review` for an
+advisory pass over values, topology, and the rendered diagram. Every
+rendered image in the export directory must be vision-inspected and get
+a `review-visual-*.advisory.json` record with a substantive multi-sentence
+impression (the validator rejects terse records); an unreviewed raster is
+unfinished work. Findings feed the contract, never a verdict.
 
 Summarize for the user: the final `verdict`, each failing gate by id if any,
 the artifact directory, and open follow-ups (3D envelope routing, formboard

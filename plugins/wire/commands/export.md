@@ -35,12 +35,14 @@ the same drawing without the embedded model. `--png` is a shorthand for
 `--drawio png`. Rendered bytes depend on the drawio/font versions on the
 host, so treat them as review aids — the manifest records actual hashes.
 
-A raster you inspect visually is an observation, not a verdict: persist
-it as `review-visual-<slug>.advisory.json` with the `review-record`
-subcommand (`--image`, `--model`, `--checklist`, `--impression`,
-`--findings`, `--summary`), the same record `wire-review` writes — never
-hand-assembled JSON. This applies whether the review ran through
-`wire-review` or inline here.
+Every rendered raster must then be vision-inspected — required, not
+optional. A raster you inspect visually is an observation, not a
+verdict: persist it as `review-visual-<slug>.advisory.json` with the
+`review-record` subcommand (`--image`, `--model`, `--checklist`,
+`--impression`, `--findings`, `--summary`), the same record `wire-review`
+writes — never hand-assembled JSON. The impression is a substantive
+multi-sentence reading (the validator rejects terse records). This
+applies whether the review ran through `wire-review` or inline here.
 
 For arbitrary drawio-desktop exports (vsdx/csv/mermaid inputs, page/layer
 selection, layout passes), the `wire_drawio` MCP tool and

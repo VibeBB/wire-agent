@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 SKIP_DIRECTORIES = {".git", ".venv", "node_modules"}
 MAX_DEPTH = 4
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".svg"}
 
 
 def _load_report(path: Path) -> tuple[str, str, list[str]]:
@@ -31,6 +33,22 @@ def _load_report(path: Path) -> tuple[str, str, list[str]]:
             ):
                 failed.append(f"{check['id']}:{check.get('subject', '')}")
     return str(path), verdict, failed
+
+
+def _review_record_for(image: Path) -> Path:
+    slug = re.sub(r"[^a-z0-9]+", "-", image.stem.lower()).strip("-") or "image"
+    return image.parent / f"review-visual-{slug}.advisory.json"
+
+
+def _unreviewed_images(report_dir: Path) -> list[Path]:
+    """Rendered images in the report dir lacking a review-visual record."""
+    return sorted(
+        image
+        for image in report_dir.iterdir()
+        if image.is_file()
+        and image.suffix.lower() in IMAGE_SUFFIXES
+        and not _review_record_for(image).exists()
+    )
 
 
 def _find_reports(root: Path) -> list[Path]:
@@ -61,6 +79,19 @@ def main() -> int:
                 lines.append(
                     "Before finishing, state each failing gate explicitly: "
                     + "; ".join(f"{path}: {', '.join(gates)}" for path, gates in failed)
+                )
+            unreviewed = {
+                Path(path).parent.name: _unreviewed_images(Path(path).parent)
+                for path, _v, _f in statuses
+            }
+            missing = [img for images in unreviewed.values() for img in images]
+            if missing:
+                lines.append(
+                    "Rendered images without a review-visual-*.advisory.json "
+                    "record: "
+                    + "; ".join(str(img) for img in missing)
+                    + " — vision-review every rendered image and write the "
+                    "record via the review-record CLI before finishing."
                 )
             context = "\n".join(lines)
         else:

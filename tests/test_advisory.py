@@ -11,6 +11,13 @@ from wire.advisory import (
     parse_visual_review,
 )
 
+LONG_IMPRESSION = (
+    "The sheet reads like a build document: branch lengths anchor to the "
+    "connector mating faces and every cavity carries a unique label. "
+    "A no-context reader could kit the parts from the tables alone, "
+    "and the visual hierarchy separates physical wiring from annotation."
+)
+
 
 def _vision_result() -> AdvisoryResult:
     return AdvisoryResult(
@@ -24,7 +31,7 @@ def _vision_result() -> AdvisoryResult:
             "image_sha256": "a" * 64,
             "model": "kimi-k3",
             "checklist": "harness_diagram",
-            "impression": "reads like a build sheet; branch lengths clearly anchored",
+            "impression": LONG_IMPRESSION,
             "findings": [
                 {
                     "category": "label_collision",
@@ -48,7 +55,7 @@ def test_parse_visual_review_round_trip() -> None:
     assert detail is not None
     assert detail.checklist == "harness_diagram"
     assert detail.model == "kimi-k3"
-    assert detail.impression.startswith("reads like a build sheet")
+    assert detail.impression.startswith("The sheet reads")
     assert len(detail.findings) == 3
     assert detail.findings[0].bbox == [0.1, 0.2, 0.05, 0.03]
     assert detail.findings[1].category == "design_intent"
@@ -117,8 +124,30 @@ def test_visual_review_detail_accepts_drawing_quality_categories() -> None:
                 "image_sha256": "a" * 64,
                 "model": "m",
                 "checklist": "harness_diagram",
-                "impression": "reads clearly",
+                "impression": LONG_IMPRESSION,
                 "findings": [{"category": category, "severity": "info", "note": "x"}],
             }
         )
         assert detail.findings[0].category == category
+
+
+def test_parse_visual_review_rejects_terse_impression() -> None:
+    """A one-liner or sub-floor impression fails validation — the record
+    must carry a multi-sentence reading."""
+    result = _vision_result()
+    result.detail["impression"] = "looks fine."
+    assert parse_visual_review(result) is None
+
+    result = _vision_result()
+    result.detail["impression"] = (
+        "x" * 300  # long enough but no sentence marks
+    )
+    assert parse_visual_review(result) is None
+
+
+def test_impression_min_length_floor() -> None:
+    from wire.advisory import IMPRESSION_MIN_LENGTH
+
+    result = _vision_result()
+    result.detail["impression"] = ("short. " * 30)[: IMPRESSION_MIN_LENGTH - 1]
+    assert parse_visual_review(result) is None
