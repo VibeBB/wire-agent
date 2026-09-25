@@ -168,7 +168,12 @@ def test_title_block_fields() -> None:
     frame = _frame_geometry(880.0, 274.0)
     outer = _geo(cells["tb-outer"])
     assert outer[0] + outer[2] == pytest.approx(frame["w"] - _mm(_BORDER_MM), abs=0.01)
-    values = [cells[f"tb-{r}{c}"].get("value") or "" for r in range(3) for c in range(4)]
+    values = [
+        cells[f"tb-{r}{c}{suffix}"].get("value") or ""
+        for r in range(3)
+        for c in range(4)
+        for suffix in ("-lab", "-val")
+    ]
     text = " ".join(values)
     assert contract.contract_id in text
     assert contract.revision in text
