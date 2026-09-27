@@ -11,9 +11,9 @@ from typing import Any
 
 import mcp.types
 import pytest
-from src.wire.mcp_server import dispatch_tool, image_content, tool_specs
 
 from helpers import EXAMPLE_CONTRACT
+from wire.mcp_server import dispatch_tool, image_content, tool_specs
 
 DRAWIO_PRESENT = shutil.which("drawio") is not None and shutil.which("xvfb-run") is not None
 
