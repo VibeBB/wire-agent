@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -104,3 +105,37 @@ def test_homes_includes_real_pw_dir() -> None:
     homes = module._homes()
     assert Path.home() in homes
     assert Path(_pwd.getpwuid(os.getuid()).pw_dir) in homes
+
+
+def test_main_mcp_server_argv_is_module_string(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`mcp_server` must exec `python -m wire.mcp_server`; every argv entry is a str."""
+    module = _load_launcher()
+    captured: list[list[str]] = []
+
+    def fake_execvp(file: str, args: list[str]) -> None:
+        captured.append([file, *args])
+
+    def fake_ensure_image(_root: Path, *, pull: bool = True) -> str:
+        return "img@sha256:abc"
+
+    def fake_resolve_source(_root: Path) -> Path | None:
+        return None
+
+    monkeypatch.setattr(module, "_ensure_image", fake_ensure_image)
+    monkeypatch.setattr(module, "resolve_source", fake_resolve_source)
+    monkeypatch.setattr(os, "execvp", fake_execvp)
+    monkeypatch.setattr(sys, "argv", ["wire_launcher.py", "mcp_server", "--extra"])
+    assert module.main() == 0
+    assert len(captured) == 1
+    argv = captured[0]
+    assert argv[0] == "docker"
+    assert all(isinstance(arg, str) for arg in argv)
+    assert argv[-4:] == ["python", "-m", "wire.mcp_server", "--extra"]
+
+
+def test_warn_fallback_json_matches_doctor_key(capsys: pytest.CaptureFixture[str]) -> None:
+    """The --warn fallback payload uses the same top-level key as wire.doctor."""
+    module = _load_launcher()
+    assert module._warn_or_die("boom", ["doctor", "--warn"]) == 0
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert payload == {"verdict": "fail", "detail": "boom"}
