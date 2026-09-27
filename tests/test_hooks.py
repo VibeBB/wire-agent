@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 SCRIPTS = Path(__file__).parents[1] / "plugins" / "wire" / "hooks" / "scripts"
 PROTECT_SCRIPT = SCRIPTS / "protect_generated.py"
@@ -616,9 +619,7 @@ def test_record_hooks_share_provenance_contract(tmp_path: Path) -> None:
     int(observe["event_id"], 16)
 
 
-def test_provenance_helpers(tmp_path: Path) -> None:
-    import importlib.util
-
+def test_provenance_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spec = importlib.util.spec_from_file_location("_provenance", SCRIPTS / "_provenance.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -632,13 +633,10 @@ def test_provenance_helpers(tmp_path: Path) -> None:
     payload: dict[str, Any] = {"working_dir": str(tmp_path)}
     rel = Path("observations/x.jsonl")
     env = "WIRE_TEST_EVENTS"
-    os.environ.pop(env, None)
+    monkeypatch.delenv(env, raising=False)
     assert module.events_path(payload, env, rel) == tmp_path / rel
-    os.environ[env] = "sub/log.jsonl"
-    try:
-        assert module.events_path(payload, env, rel) == tmp_path / "sub" / "log.jsonl"
-        absolute = tmp_path / "abs" / "log.jsonl"
-        os.environ[env] = str(absolute)
-        assert module.events_path(payload, env, rel) == absolute
-    finally:
-        os.environ.pop(env, None)
+    monkeypatch.setenv(env, "sub/log.jsonl")
+    assert module.events_path(payload, env, rel) == tmp_path / "sub" / "log.jsonl"
+    absolute = tmp_path / "abs" / "log.jsonl"
+    monkeypatch.setenv(env, str(absolute))
+    assert module.events_path(payload, env, rel) == absolute
