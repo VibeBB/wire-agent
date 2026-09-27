@@ -64,7 +64,7 @@ def _versions(tmp_path: Path) -> list[str]:
     import re
 
     texts = [(tmp_path / rel).read_text(encoding="utf-8") for rel in FILES]
-    found = []
+    found: list[str] = []
     for rel, text in zip(FILES, texts, strict=True):
         if rel.endswith("plugin.json"):
             m = re.search(r'"version": "([^"]+)"', text)
