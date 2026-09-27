@@ -64,8 +64,15 @@ def _check_consistent(versions: dict[str, str]) -> str:
     return current
 
 
+def _parse(version: str) -> tuple[int, int, int]:
+    m = SEMVER_RE.match(version)
+    if m is None:
+        raise BumpError(f"version '{version}' is not X.Y.Z")
+    return int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+
 def _bumped(current: str, kind: str) -> str:
-    major, minor, patch = (int(x) for x in SEMVER_RE.match(current).groups())  # type: ignore[union-attr]
+    major, minor, patch = _parse(current)
     if kind == "major":
         return f"{major + 1}.0.0"
     if kind == "minor":
@@ -74,9 +81,7 @@ def _bumped(current: str, kind: str) -> str:
 
 
 def _gt(a: str, b: str) -> bool:
-    pa = tuple(int(x) for x in SEMVER_RE.match(a).groups())  # type: ignore[union-attr]
-    pb = tuple(int(x) for x in SEMVER_RE.match(b).groups())  # type: ignore[union-attr]
-    return pa > pb
+    return _parse(a) > _parse(b)
 
 
 def _apply(root: Path, old: str, new: str) -> None:
