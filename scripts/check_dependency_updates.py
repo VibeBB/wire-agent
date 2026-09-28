@@ -32,6 +32,9 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 
+HTTP_TIMEOUT_SECONDS = 30
+SUBPROCESS_TIMEOUT_SECONDS = 120
+
 DEPENDENCY_SURFACES = (
     "pypi",
     "pypi-lock",
@@ -71,7 +74,7 @@ class DependencyDeferral:
 
 def _default_fetch_json(url: str) -> Any:
     request = Request(url, headers={"User-Agent": "wire-dep-check"})
-    with urlopen(request, timeout=30) as response:
+    with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -82,6 +85,7 @@ def _default_run_uv(command: list[str], cwd: Path) -> str:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return result.stdout
 
@@ -92,6 +96,7 @@ def _default_list_remote_tags(url: str) -> list[str]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     tags: list[str] = []
     for line in result.stdout.splitlines():
@@ -288,7 +293,7 @@ _UVX = re.compile(r"uvx\s+([\w.-]+)@([\w.]+)")
 def _github_latest_tag(repo: str, list_remote_tags: ListRemoteTags) -> str:
     try:
         tags = list_remote_tags(f"https://github.com/{repo}")
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return ""
     versioned = sorted(
         (t for t in tags if re.fullmatch(r"v?\d+\.\d+\.\d+", t)),
@@ -752,7 +757,13 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(markdown, end="")
         return 0
-    except (OSError, ValueError, subprocess.CalledProcessError, tomllib.TOMLDecodeError) as exc:
+    except (
+        OSError,
+        ValueError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        tomllib.TOMLDecodeError,
+    ) as exc:
         print(f"dependency update check failed: {exc}", file=sys.stderr)
         return 1
 
