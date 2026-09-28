@@ -33,7 +33,7 @@ RUN apt-get -o Acquire::Retries=5 update \
         libasound2t64 \
         xvfb \
         xauth \
-    && curl -fsSL -o /tmp/drawio.deb \
+    && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o /tmp/drawio.deb \
         "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
     && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \
     && apt-get install -y /tmp/drawio.deb \
