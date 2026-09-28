@@ -8,6 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from wire.cli import verdict_exit_code
+
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -17,6 +21,21 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         check=False,
     )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"verdict": "pass"}, 0),
+        ({"verdict": "ready"}, 0),
+        ({"verdict": "fail"}, 1),
+        ({"verdict": "blocked"}, 1),
+        ({"verdict": "unknown"}, 1),
+        ({}, 1),
+    ],
+)
+def testverdict_exit_code_is_fail_closed(payload: dict[str, str], expected: int) -> None:
+    assert verdict_exit_code(payload) == expected
 
 
 def test_doctor_passes() -> None:

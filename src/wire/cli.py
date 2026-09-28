@@ -20,7 +20,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from .contract import HarnessContract, load_contract
 from .doctor import run_doctor
@@ -36,16 +36,23 @@ from .imports import (
 from .intake import check_intake, load_intake
 from .report import write_report
 
+# Verdicts that map to exit 0; anything else (including a missing verdict) exits 1.
+_SUCCESS_VERDICTS: Final[frozenset[str]] = frozenset({"pass", "ready"})
+
+
+def verdict_exit_code(payload: dict[str, Any]) -> int:
+    return 0 if payload.get("verdict") in _SUCCESS_VERDICTS else 1
+
 
 def _emit(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0 if payload.get("verdict") in ("pass", "ready") else 1
+    return verdict_exit_code(payload)
 
 
 def _emit_doctor(args: argparse.Namespace) -> int:
     payload = run_doctor()
     print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0 if args.warn or payload.get("verdict") in ("pass", "ready") else 1
+    return 0 if args.warn else verdict_exit_code(payload)
 
 
 def cmd_intake(args: argparse.Namespace) -> dict[str, Any]:
