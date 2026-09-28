@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 SCRIPTS = Path(__file__).parents[1] / "plugins" / "wire" / "hooks" / "scripts"
 PROTECT_SCRIPT = SCRIPTS / "protect_generated.py"
@@ -584,3 +587,56 @@ def test_record_image_observation_records_actor(tmp_path: Path) -> None:
     record = _observations(tmp_path)[0]
     assert record["actor"] == {"action_id": "act-9", "subagent_type": "wire-design"}
     assert record["tool_call_id"] == "act-9"
+
+
+def test_record_hooks_share_provenance_contract(tmp_path: Path) -> None:
+    """Both observation hooks attribute the same actor and emit 64-hex ids."""
+    image = tmp_path / "diagram.png"
+    image.write_bytes(_PNG)
+    base = {
+        "working_dir": str(tmp_path),
+        "session_id": "s1",
+        "agent_name": "wire-design",
+        "tool_call_id": "call-7",
+    }
+    vision_payload = _vision_payload(tmp_path, agent_name="wire-design", tool_call_id="call-7")
+    observe_payload = {
+        **base,
+        "tool_name": "file_editor",
+        "tool_input": {"command": "view", "path": str(image)},
+        "tool_response": {"output": "ok"},
+    }
+
+    assert _run_hook(VISION_SCRIPT, vision_payload).returncode == 0
+    assert _run_hook(OBSERVE_SCRIPT, observe_payload).returncode == 0
+
+    vision = _vision_events(tmp_path)[0]
+    observe = _observations(tmp_path)[0]
+    expected_actor = {"agent_name": "wire-design", "tool_call_id": "call-7"}
+    assert vision["actor"] == observe["actor"] == expected_actor
+    assert len(vision["event_id"]) == len(observe["event_id"]) == 64
+    int(vision["event_id"], 16)
+    int(observe["event_id"], 16)
+
+
+def test_provenance_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = importlib.util.spec_from_file_location("_provenance", SCRIPTS / "_provenance.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    missing = tmp_path / "missing.jsonl"
+    assert module.next_sequence(missing) == 1
+    missing.write_text("a\nb\n", encoding="utf-8")
+    assert module.next_sequence(missing) == 3
+
+    payload: dict[str, Any] = {"working_dir": str(tmp_path)}
+    rel = Path("observations/x.jsonl")
+    env = "WIRE_TEST_EVENTS"
+    monkeypatch.delenv(env, raising=False)
+    assert module.events_path(payload, env, rel) == tmp_path / rel
+    monkeypatch.setenv(env, "sub/log.jsonl")
+    assert module.events_path(payload, env, rel) == tmp_path / "sub" / "log.jsonl"
+    absolute = tmp_path / "abs" / "log.jsonl"
+    monkeypatch.setenv(env, str(absolute))
+    assert module.events_path(payload, env, rel) == absolute
