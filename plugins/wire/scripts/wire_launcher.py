@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 _MODULES = {
     "mcp_server": "wire.mcp_server",
@@ -49,6 +50,8 @@ _MODULES = {
 _CONTAINER_SRC = "/plugin-src"
 _ENV_PREFIXES = ("OPENHANDS_", "WIRE_")
 _ENV_KEYS = ("TMPDIR",)
+_INSPECT_TIMEOUT_S = 30
+_PULL_TIMEOUT_S = 900
 
 # The container runs as the host uid, whose passwd entry and home do not
 # exist inside the image: a forwarded HOME/XDG leaves fontconfig, ezdxf and
@@ -131,16 +134,25 @@ def _repo_dirs(plugin_root: Path) -> list[Path]:
 
 def _lock_entry_ref(lock_path: Path, key: str | None) -> str | None:
     try:
-        data = json.loads(lock_path.read_text(encoding="utf-8"))
+        data: Any = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    entry = data.get(key) if key else data
-    if not isinstance(entry, dict) or not entry.get("image"):
+    if not isinstance(data, dict):
         return None
-    if entry.get("digest"):
-        return f"{entry['image']}@{entry['digest']}"
-    if entry.get("tag"):
-        return f"{entry['image']}:{entry['tag']}"
+    data = cast(dict[str, Any], data)
+    entry = data.get(key) if key else data
+    if not isinstance(entry, dict):
+        return None
+    entry = cast(dict[str, Any], entry)
+    image = entry.get("image")
+    if not isinstance(image, str) or not image:
+        return None
+    digest = entry.get("digest")
+    if isinstance(digest, str) and digest:
+        return f"{image}@{digest}"
+    tag = entry.get("tag")
+    if isinstance(tag, str) and tag:
+        return f"{image}:{tag}"
     return None
 
 
@@ -182,29 +194,35 @@ def _ensure_image(plugin_root: Path, *, pull: bool = True) -> str:
             "no wire tools image resolvable: set WIRE_TOOLS_IMAGE or pin "
             "image+digest in tools-image.json / docker/image-digests.json"
         )
-    if (
-        subprocess.run(
+    try:
+        inspect_result = subprocess.run(
             [docker, "image", "inspect", ref],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
-        ).returncode
-        == 0
-    ):
+            timeout=_INSPECT_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"docker image inspect timed out after {_INSPECT_TIMEOUT_S} seconds"
+        ) from exc
+    if inspect_result.returncode == 0:
         return ref
     if not pull:
         raise RuntimeError(
             f"wire tools image {ref} not pulled locally; run 'wire_launcher.py prewarm' to fetch it"
         )
     print(f"wire_launcher: pulling tools image {ref}", file=sys.stderr)
-    if (
-        subprocess.run(
+    try:
+        pull_result = subprocess.run(
             [docker, "pull", ref],
             check=False,
             stdout=subprocess.DEVNULL,
-        ).returncode
-        == 0
-    ):
+            timeout=_PULL_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"docker pull timed out after {_PULL_TIMEOUT_S} seconds") from exc
+    if pull_result.returncode == 0:
         return ref
     raise RuntimeError(f"wire tools image {ref} not present locally and pull failed")
 

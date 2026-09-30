@@ -23,6 +23,7 @@ from . import __version__
 from .contract import HarnessContract
 from .doctor import run_doctor
 from .standards import CONNECTOR_FAMILIES, WIRE_SPECS
+from .workspace import workspace_path
 
 server: Server = Server(f"wire-mcp/{__version__}")
 
@@ -130,6 +131,10 @@ def _text(payload: Any) -> list[types.ContentBlock]:
     ]
 
 
+def _path_arg(value: str | None) -> str | None:
+    return str(workspace_path(value)) if value is not None else None
+
+
 _IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
 
@@ -225,38 +230,50 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         return _text(_validate_contract(arguments["contract"]))
     if name == "wire_intake":
         return _text(
-            cmd_intake(_ns(contract=arguments["contract_path"], intake=arguments["intake_path"]))
+            cmd_intake(
+                _ns(
+                    contract=str(workspace_path(arguments["contract_path"])),
+                    intake=str(workspace_path(arguments["intake_path"])),
+                )
+            )
         )
     if name == "wire_author":
+        contract_path = str(workspace_path(arguments["contract_path"]))
+        out_dir = str(workspace_path(arguments["out_dir"]))
         result = cmd_author(
             _ns(
-                contract=arguments["contract_path"],
-                out=arguments["out_dir"],
+                contract=contract_path,
+                out=out_dir,
                 png=arguments.get("png", False),
                 drawio=",".join(arguments.get("drawio", [])),
-                baseline=arguments.get("baseline_path"),
+                baseline=_path_arg(arguments.get("baseline_path")),
             )
         )
         content: list[types.ContentBlock] = list(_text(result))
-        image = image_content(Path(arguments["out_dir"]) / "harness-diagram.png")
+        image = image_content(Path(out_dir) / "harness-diagram.png")
         if image is not None:
             content.append(image)
         return content
     if name == "wire_gates":
         return _text(
-            cmd_gates(_ns(contract=arguments["contract_path"], out=arguments.get("out_dir")))
+            cmd_gates(
+                _ns(
+                    contract=str(workspace_path(arguments["contract_path"])),
+                    out=_path_arg(arguments.get("out_dir")),
+                )
+            )
         )
     if name == "wire_import":
+        contract_path = Path(workspace_path(arguments["contract_path"]))
         if arguments.get("out_path"):
-            out_path = Path(arguments["out_path"])
+            out_path = workspace_path(arguments["out_path"])
         else:
-            contract_file = Path(arguments["contract_path"])
-            stem = contract_file.stem.removesuffix(".contract")
-            out_path = contract_file.with_name(f"{stem}.merged.contract.json")
+            stem = contract_path.stem.removesuffix(".contract")
+            out_path = contract_path.with_name(f"{stem}.merged.contract.json")
         result = cmd_import(
             _ns(
-                contract=arguments["contract_path"],
-                source=arguments["source_path"],
+                contract=str(contract_path),
+                source=str(workspace_path(arguments["source_path"])),
                 kind=arguments["kind"],
                 out=str(out_path),
             )
@@ -268,11 +285,11 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
     if name == "wire_drawio":
         result = cmd_drawio(
             _ns(
-                input=arguments["input_path"],
-                out=arguments.get("output_path"),
+                input=str(workspace_path(arguments["input_path"])),
+                out=_path_arg(arguments.get("output_path")),
                 format=arguments.get("format"),
                 options=arguments.get("options", []),
-                baseline=arguments.get("baseline_path"),
+                baseline=_path_arg(arguments.get("baseline_path")),
             )
         )
         drawio_content: list[types.ContentBlock] = list(_text(result))
@@ -286,16 +303,23 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         from .drawio_lint import lint_file
 
         report = lint_file(
-            Path(arguments["diagram_path"]),
-            Path(arguments["output_path"]) if arguments.get("output_path") else None,
+            workspace_path(arguments["diagram_path"]),
+            workspace_path(arguments["output_path"]) if arguments.get("output_path") else None,
         )
         return _text(report.model_dump(mode="json"))
     raise ValueError(f"unknown tool {name}")
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
-    return await dispatch_tool(name, arguments)
+async def call_tool(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
+    try:
+        content = await dispatch_tool(name, arguments)
+    except Exception as exc:
+        return types.CallToolResult(
+            content=_text({"verdict": "fail", "detail": f"{name} error: {exc}"}),
+            isError=True,
+        )
+    return types.CallToolResult(content=content, isError=False)
 
 
 def _ns(**kwargs: Any) -> Any:

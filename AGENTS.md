@@ -82,6 +82,9 @@ docs/adr/  docs/research/
   from prompts.
 - The `wire` MCP server exposes only deterministic entry points (the same
   functions `python -m wire` uses). It contains no agent logic.
+- Shared hooks are canonical across the family; change all 9 copies together
+  and update `EXPECTED` in `scripts/check_shared_hooks.py`.
+  `intake_attachments.py` and `record_*` hooks are intentionally repo-specific.
 - `plugins/wire/scripts/wire_launcher.py` is the single exec point for
   hooks and the MCP server: it runs `python -m wire` inside the pinned
   `wire-tools` image, resolved from `$WIRE_TOOLS_IMAGE` or the digest lock

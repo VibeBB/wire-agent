@@ -8,7 +8,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 SKIP_DIRECTORIES = {".git", ".venv", "node_modules"}
 MAX_DEPTH = 4
@@ -19,18 +19,18 @@ def _load_report(path: Path) -> tuple[str, str, list[str]]:
     value: Any = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"not an object: {path}")
+    value = cast(dict[str, Any], value)
     verdict = value.get("verdict")
     if not isinstance(verdict, str):
         raise ValueError(f"missing verdict in {path}")
     failed: list[str] = []
     checks = value.get("checks")
     if isinstance(checks, list):
-        for check in checks:
-            if (
-                isinstance(check, dict)
-                and check.get("status") in ("fail", "unknown")
-                and isinstance(check.get("id"), str)
-            ):
+        for check in cast(list[Any], checks):
+            if not isinstance(check, dict):
+                continue
+            check = cast(dict[str, Any], check)
+            if check.get("status") in ("fail", "unknown") and isinstance(check.get("id"), str):
                 failed.append(f"{check['id']}:{check.get('subject', '')}")
     return str(path), verdict, failed
 
