@@ -13,6 +13,8 @@ specifications and design decisions.
 
 - [Wire harness domains](research/wire-harness-domains.md) — task taxonomy,
   commercial tools, and standards surveyed before design
+- [SDK v1.50.0 feature evaluation](research/sdk-v1.50.0-feature-evaluation.md) —
+  SDK, uv, and drawio-desktop update decisions
 
 ## ADR index
 

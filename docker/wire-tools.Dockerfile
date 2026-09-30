@@ -1,10 +1,10 @@
-ARG UV_VERSION=0.12.19
+ARG UV_VERSION=0.12.21
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 FROM debian:13-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG UV_VERSION=0.12.19
+ARG UV_VERSION=0.12.21
 ARG IMAGE_REVISION=unknown
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -21,8 +21,8 @@ LABEL org.opencontainers.image.source="https://github.com/VibeBB/wire-agent" \
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-ARG DRAWIO_DESKTOP_VERSION=31.5.2
-ARG DRAWIO_DESKTOP_SHA256=d59482f68ad4f5c1ee9a4f911861786e6173bf2e9880536b404d68d31149def7
+ARG DRAWIO_DESKTOP_VERSION=31.5.3
+ARG DRAWIO_DESKTOP_SHA256=b2fd41f02567929c5fae4becbdc16bf118b1ef508a827a29ad9a883924263999
 
 RUN apt-get -o Acquire::Retries=5 update \
     && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
