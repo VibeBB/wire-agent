@@ -35,7 +35,16 @@ STAGES: dict[str, tuple[Command, ...]] = {
         Command(("uv", "run", "ruff", "check", ".")),
         Command(("uv", "run", "ruff", "format", "--check", ".")),
         Command(("uv", "run", "pyright")),
-        Command(("uv", "run", "pytest")),
+        Command(("uv", "run", "python", "scripts/check_shared_hooks.py")),
+        Command(
+            (
+                "uv",
+                "run",
+                "pytest",
+                "--cov",
+                "--cov-report=term-missing:skip-covered",
+            )
+        ),
         Command(("uv", "run", "python", "scripts/verify_docs.py")),
         Command(("git", "diff", "--check")),
     ),

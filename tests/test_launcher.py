@@ -5,9 +5,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -70,6 +72,17 @@ def test_docker_argv_does_not_forward_host_home(
     assert not any(pair == "HOME=/home/somebody" for pair in env_pairs)
 
 
+def test_docker_argv_forwards_project_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    module = _load_launcher()
+    argv = module._docker_argv(image="img", source=None, inner_argv=["mcp_server"])
+    env_pairs = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-e"]
+    assert f"OPENHANDS_PROJECT_DIR={tmp_path}" in env_pairs
+    assert argv[argv.index("-w") + 1] == str(tmp_path)
+
+
 def test_image_from_lock_reads_skill_pin(tmp_path: Path) -> None:
     module = _load_launcher()
     skill_dir = tmp_path / "skills" / "wire-workflow"
@@ -96,6 +109,57 @@ def test_ensure_image_warn_mode_never_pulls(
         pytest.skip("docker not on PATH")
     with pytest.raises(RuntimeError, match="not pulled locally"):
         module._ensure_image(tmp_path, pull=False)
+
+
+def test_inspect_timeout_fails_without_falling_through_to_pull(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ref = "ghcr.io/x/wire-tools@sha256:abc"
+    monkeypatch.delenv("WIRE_TOOLS_IMAGE", raising=False)
+    (tmp_path / "tools-image.json").write_text(
+        json.dumps({"image": "ghcr.io/x/wire-tools", "digest": "sha256:abc"}),
+        encoding="utf-8",
+    )
+    module = _load_launcher()
+    monkeypatch.setattr(module, "_docker", lambda: "docker")
+    calls: list[tuple[list[str], float | None]] = []
+
+    def timeout_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        timeout = kwargs["timeout"]
+        calls.append((args, timeout))
+        raise subprocess.TimeoutExpired(args, timeout)
+
+    monkeypatch.setattr(module.subprocess, "run", timeout_run)
+    with pytest.raises(RuntimeError, match="docker image inspect timed out after 30 seconds"):
+        module._ensure_image(tmp_path)
+    assert calls == [(["docker", "image", "inspect", ref], 30)]
+
+
+def test_pull_timeout_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ref = "ghcr.io/x/wire-tools@sha256:abc"
+    monkeypatch.delenv("WIRE_TOOLS_IMAGE", raising=False)
+    (tmp_path / "tools-image.json").write_text(
+        json.dumps({"image": "ghcr.io/x/wire-tools", "digest": "sha256:abc"}),
+        encoding="utf-8",
+    )
+    module = _load_launcher()
+    monkeypatch.setattr(module, "_docker", lambda: "docker")
+    calls: list[tuple[list[str], float | None]] = []
+
+    def timeout_pull(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        timeout = kwargs["timeout"]
+        calls.append((args, timeout))
+        if args[1:3] == ["image", "inspect"]:
+            return subprocess.CompletedProcess(args, 1)
+        raise subprocess.TimeoutExpired(args, timeout)
+
+    monkeypatch.setattr(module.subprocess, "run", timeout_pull)
+    with pytest.raises(RuntimeError, match="docker pull timed out after 900 seconds"):
+        module._ensure_image(tmp_path)
+    assert calls == [
+        (["docker", "image", "inspect", ref], 30),
+        (["docker", "pull", ref], 900),
+    ]
 
 
 def test_homes_includes_real_pw_dir() -> None:
