@@ -49,6 +49,7 @@ DEPENDENCY_SURFACES = (
 FetchJson = Callable[[str], Any]
 RunUv = Callable[[list[str], Path], str]
 ListRemoteTags = Callable[[str], list[str]]
+FetchUrl = Callable[[str], str]
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,12 @@ def _default_fetch_json(url: str) -> Any:
     request = Request(url, headers={"User-Agent": "wire-dep-check"})
     with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _default_final_url(url: str) -> str:
+    request = Request(url, headers={"User-Agent": "wire-dep-check"})
+    with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        return response.url
 
 
 def _default_run_uv(command: list[str], cwd: Path) -> str:
@@ -305,6 +312,15 @@ def _github_latest_tag(repo: str, list_remote_tags: ListRemoteTags) -> str:
     return versioned[-1] if versioned else ""
 
 
+def _github_latest_release(repo: str, final_url: FetchUrl) -> str:
+    try:
+        resolved = final_url(f"https://github.com/{repo}/releases/latest")
+    except (ValueError, OSError):
+        return ""
+    tag = resolved.rsplit("/", 1)[-1]
+    return tag if re.fullmatch(r"v?\d+\.\d+\.\d+", tag) else ""
+
+
 def check_github_actions(
     repo_root: Path, *, list_remote_tags: ListRemoteTags = _default_list_remote_tags
 ) -> list[DependencyStatus]:
@@ -387,25 +403,33 @@ def docker_base_image(repo_root: Path) -> tuple[str, str] | None:
 
 
 _DOCKER_ARG_UPSTREAMS = {
-    # ARG name -> (github repo, current-tag prefix stripped before compare)
-    "UV_VERSION": ("astral-sh/uv", ""),
-    "DRAWIO_DESKTOP_VERSION": ("jgraph/drawio-desktop", "v"),
+    # ARG name -> (github repo, current-tag prefix stripped before compare, upstream kind)
+    # "release" resolves the latest published GitHub release; "tags" uses the
+    # highest semver git tag (a tag can exist before its release is published).
+    "UV_VERSION": ("astral-sh/uv", "", "tags"),
+    "DRAWIO_DESKTOP_VERSION": ("jgraph/drawio-desktop", "v", "release"),
 }
 
 
 def check_docker_args(
-    repo_root: Path, *, list_remote_tags: ListRemoteTags = _default_list_remote_tags
+    repo_root: Path,
+    *,
+    list_remote_tags: ListRemoteTags = _default_list_remote_tags,
+    final_url: FetchUrl = _default_final_url,
 ) -> list[DependencyStatus]:
     statuses: list[DependencyStatus] = []
     values = docker_arg_pins(repo_root)
-    for arg, (repo, strip) in _DOCKER_ARG_UPSTREAMS.items():
+    for arg, (repo, strip, source) in _DOCKER_ARG_UPSTREAMS.items():
         current = values.get(arg)
         if current is None:
             statuses.append(
                 DependencyStatus("docker-arg", arg, "-", "?", _DOCKERFILES[0], False, "ARG missing")
             )
             continue
-        latest = _github_latest_tag(repo, list_remote_tags)
+        if source == "release":
+            latest = _github_latest_release(repo, final_url)
+        else:
+            latest = _github_latest_tag(repo, list_remote_tags)
         latest_cmp = latest.removeprefix(strip)
         current_cmp = current.removeprefix(strip)
         outdated = bool(latest_cmp) and latest_cmp != current_cmp
@@ -650,6 +674,7 @@ def check_dependency_updates(
     fetch_json: FetchJson = _default_fetch_json,
     list_remote_tags: ListRemoteTags = _default_list_remote_tags,
     run_uv: RunUv = _default_run_uv,
+    final_url: FetchUrl = _default_final_url,
 ) -> list[DependencyStatus]:
     tag_cache: dict[str, list[str]] = {}
 
@@ -665,7 +690,7 @@ def check_dependency_updates(
         *check_pypi_lock(repo_root, direct_names, run_uv=run_uv),
         *check_uv_pin(repo_root, fetch_json=fetch_json),
         *check_github_actions(repo_root, list_remote_tags=cached_tags),
-        *check_docker_args(repo_root, list_remote_tags=cached_tags),
+        *check_docker_args(repo_root, list_remote_tags=cached_tags, final_url=final_url),
         *check_docker_base(repo_root, fetch_json=fetch_json),
         *check_python_versions(repo_root, list_remote_tags=cached_tags),
     ]
