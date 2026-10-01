@@ -94,7 +94,12 @@ def test_image_from_lock_reads_skill_pin(tmp_path: Path) -> None:
         "attestation": "https://github.com/VibeBB/wire-agent/attestations/example",
     }
     (skill_dir / "tools-image.json").write_text(json.dumps(entry), encoding="utf-8")
-    assert module._image_from_lock(tmp_path) == "ghcr.io/x/wire-tools@sha256:abc"
+    assert module._image_from_lock(tmp_path) == {
+        "ref": "ghcr.io/x/wire-tools@sha256:abc",
+        "image": "ghcr.io/x/wire-tools",
+        "digest": "sha256:abc",
+        "attestation": "https://github.com/VibeBB/wire-agent/attestations/example",
+    }
 
 
 def test_ensure_image_warn_mode_never_pulls(

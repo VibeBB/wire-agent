@@ -36,6 +36,7 @@ STAGES: dict[str, tuple[Command, ...]] = {
         Command(("uv", "run", "ruff", "format", "--check", ".")),
         Command(("uv", "run", "pyright")),
         Command(("uv", "run", "python", "scripts/check_shared_hooks.py")),
+        Command(("uv", "run", "python", "scripts/check_shared_workflows.py")),
         Command(
             (
                 "uv",
