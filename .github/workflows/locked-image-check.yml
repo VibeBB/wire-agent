@@ -143,7 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           launcher=plugins/wire/scripts/wire_launcher.py
-          out=.round2-smoke/wire
+          out=.launcher-smoke/wire
           mkdir -p "$out"
           if python3 - <<'PY'
           import json
@@ -191,6 +191,6 @@ jobs:
         with:
           name: locked-wire-tools-smoke
           path: |
-            ${{ github.workspace }}/.round2-smoke/wire/**/design-report.json
-            ${{ github.workspace }}/.round2-smoke/wire/**/design-report.md
+            ${{ github.workspace }}/.launcher-smoke/wire/**/design-report.json
+            ${{ github.workspace }}/.launcher-smoke/wire/**/design-report.md
           if-no-files-found: ignore
