@@ -151,3 +151,7 @@ Write commit messages in English. Do not use `git add .`, amend commits,
 `out/` files, secrets, or environment files. Use `git mv` when renaming
 files. Split dependent changes into bottom-up stacked PRs; independent
 changes go on separate PRs based on main.
+
+## CI/CD
+
+Digest-lock PRs use `scripts/publish_image_pin_pr.sh`: the publisher dispatches `ci.yml` and `workflow-lint.yml` on the lock branch, then polls the authoritative required-check set for up to 30 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows. If required checks are still pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully. SPDX SBOM generation prefers registry pulls, uses runner temporary storage, disables file metadata, and fails above 16 MiB.
