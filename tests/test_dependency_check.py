@@ -134,6 +134,33 @@ def test_docker_args_report_fetch_failed_on_timeout():
     assert uv_status.outdated is False
 
 
+def test_docker_args_release_source_uses_release_not_tag():
+    def tags(url: str) -> list[str]:
+        return ["v31.7.0"]
+
+    def releases(url: str) -> str:
+        return "https://github.com/jgraph/drawio-desktop/releases/tag/v31.5.3"
+
+    statuses = check_docker_args(ROOT, list_remote_tags=tags, final_url=releases)
+    drawio = next(status for status in statuses if status.name == "DRAWIO_DESKTOP_VERSION")
+    assert drawio.latest == "v31.5.3"
+    assert drawio.outdated is False
+
+
+def test_docker_args_release_source_fetch_failed():
+    def failed_url(url: str) -> str:
+        raise OSError(url)
+
+    def tags(url: str) -> list[str]:
+        return ["0.12.21"]
+
+    statuses = check_docker_args(ROOT, list_remote_tags=tags, final_url=failed_url)
+    drawio = next(status for status in statuses if status.name == "DRAWIO_DESKTOP_VERSION")
+    assert drawio.latest == "?"
+    assert drawio.note == "fetch failed"
+    assert drawio.outdated is False
+
+
 def test_subprocess_timeout_is_bounded():
     assert SUBPROCESS_TIMEOUT_SECONDS >= HTTP_TIMEOUT_SECONDS > 0
 
