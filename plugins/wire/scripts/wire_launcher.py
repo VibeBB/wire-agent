@@ -30,6 +30,10 @@ Usage: mcp_server | prewarm | <wire cli args...>. Any argument other
 than mcp_server/prewarm is forwarded to `python -m wire.cli` inside the
 container. When `--warn` is present (SessionStart doctor mode), a failed
 image resolution prints a warning and exits 0.
+
+Launcher-side verification uses WIRE_VERIFY_ATTESTATION=auto|require|off.
+It verifies lock provenance before pulls and on every prewarm; normal use
+does not re-verify an image that is already present locally.
 """
 
 from __future__ import annotations
@@ -41,7 +45,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 _MODULES = {
     "mcp_server": "wire.mcp_server",
@@ -52,6 +56,19 @@ _ENV_PREFIXES = ("OPENHANDS_", "WIRE_")
 _ENV_KEYS = ("TMPDIR",)
 _INSPECT_TIMEOUT_S = 30
 _PULL_TIMEOUT_S = 900
+_ATTEST_TIMEOUT_S = 120
+_GH_AUTH_TIMEOUT_S = 15
+_VERIFY_ENV = "WIRE_VERIFY_ATTESTATION"
+_REPOSITORY = "VibeBB/wire-agent"
+_PUBLISH_FILE = ".github/workflows/publish-wire-images.yml"
+
+
+class ImagePin(TypedDict):
+    ref: str
+    image: str | None
+    digest: str | None
+    attestation: str | None
+
 
 # The container runs as the host uid, whose passwd entry and home do not
 # exist inside the image: a forwarded HOME/XDG leaves fontconfig, ezdxf and
@@ -132,7 +149,7 @@ def _repo_dirs(plugin_root: Path) -> list[Path]:
     return dirs
 
 
-def _lock_entry_ref(lock_path: Path, key: str | None) -> str | None:
+def _lock_entry_ref(lock_path: Path, key: str | None) -> ImagePin | None:
     try:
         data: Any = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -148,30 +165,36 @@ def _lock_entry_ref(lock_path: Path, key: str | None) -> str | None:
     if not isinstance(image, str) or not image:
         return None
     digest = entry.get("digest")
-    if isinstance(digest, str) and digest:
-        return f"{image}@{digest}"
+    digest = digest if isinstance(digest, str) and digest else None
     tag = entry.get("tag")
-    if isinstance(tag, str) and tag:
-        return f"{image}:{tag}"
-    return None
+    tag = tag if isinstance(tag, str) and tag else None
+    if digest is None and tag is None:
+        return None
+    attestation = entry.get("attestation")
+    return {
+        "ref": f"{image}@{digest}" if digest else f"{image}:{tag}",
+        "image": image,
+        "digest": digest,
+        "attestation": attestation if isinstance(attestation, str) and attestation else None,
+    }
 
 
-def _image_from_lock(plugin_root: Path) -> str | None:
-    ref = _lock_entry_ref(plugin_root / "tools-image.json", None)
-    if ref:
-        return ref
+def _image_from_lock(plugin_root: Path) -> ImagePin | None:
+    pin = _lock_entry_ref(plugin_root / "tools-image.json", None)
+    if pin:
+        return pin
     try:
         skill_pins = sorted(plugin_root.glob("skills/*/tools-image.json"))
     except OSError:
         skill_pins = []
     for pin in skill_pins:
-        ref = _lock_entry_ref(pin, None)
-        if ref:
-            return ref
+        lock_pin = _lock_entry_ref(pin, None)
+        if lock_pin:
+            return lock_pin
     for repo_dir in _repo_dirs(plugin_root):
-        ref = _lock_entry_ref(repo_dir / "docker" / "image-digests.json", "wire_tools")
-        if ref:
-            return ref
+        lock_pin = _lock_entry_ref(repo_dir / "docker" / "image-digests.json", "wire_tools")
+        if lock_pin:
+            return lock_pin
     return None
 
 
@@ -179,7 +202,91 @@ def _docker() -> str | None:
     return shutil.which("docker")
 
 
-def _ensure_image(plugin_root: Path, *, pull: bool = True) -> str:
+def _attestation_mode() -> str:
+    mode = os.environ.get(_VERIFY_ENV, "auto")
+    if mode not in {"auto", "require", "off"}:
+        raise ValueError(
+            f"{_VERIFY_ENV} must be auto, require, or off (got {mode!r}); "
+            f"usage: {_VERIFY_ENV}=auto|require|off"
+        )
+    return mode
+
+
+def _run_timed(
+    command: list[str],
+    operation: str,
+    timeout: int,
+    **kwargs: Any,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return cast(
+            subprocess.CompletedProcess[str],
+            subprocess.run(command, timeout=timeout, **kwargs),
+        )
+    except OSError as exc:
+        raise RuntimeError(f"{operation} failed: {exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{operation} timed out after {timeout}s") from exc
+
+
+def _verify_attestation(pin: ImagePin, *, override: bool) -> None:
+    mode = _attestation_mode()
+    if mode == "off":
+        return
+    reason: str | None = None
+    gh = shutil.which("gh")
+    if override:
+        reason = "tools image override has no lock attestation context"
+    elif not pin["attestation"]:
+        reason = "lock entry has no attestation"
+    elif not pin["image"] or not pin["digest"]:
+        reason = "lock entry has no digest"
+    elif gh is None:
+        reason = "gh is not on PATH"
+    else:
+        try:
+            auth = _run_timed(
+                [gh, "auth", "status"],
+                "gh auth status",
+                _GH_AUTH_TIMEOUT_S,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except RuntimeError:
+            reason = "gh auth status failed"
+        else:
+            if auth.returncode != 0:
+                reason = "gh auth status failed"
+    if reason is not None:
+        if mode == "require":
+            raise RuntimeError(f"attestation verification required but {reason}")
+        print(f"wire_launcher: attestation verification skipped: {reason}", file=sys.stderr)
+        return
+    assert gh is not None
+    assert pin["image"] is not None and pin["digest"] is not None
+    result = _run_timed(
+        [
+            gh,
+            "attestation",
+            "verify",
+            f"oci://{pin['image']}@{pin['digest']}",
+            "--repo",
+            _REPOSITORY,
+            "--signer-workflow",
+            f"{_REPOSITORY}/{_PUBLISH_FILE}",
+        ],
+        "gh attestation verify",
+        _ATTEST_TIMEOUT_S,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"attestation verification failed for {pin['image']}@{pin['digest']}")
+
+
+def _ensure_image(plugin_root: Path, *, pull: bool = True, prewarm: bool = False) -> str:
     """Resolve the pinned tools image ref; fail when none is available.
 
     ``pull=False`` reports a missing local image without pulling it — the
@@ -188,12 +295,24 @@ def _ensure_image(plugin_root: Path, *, pull: bool = True) -> str:
     if docker is None:
         raise RuntimeError("docker not found on PATH (wire runs docker-only)")
 
-    ref = os.environ.get("WIRE_TOOLS_IMAGE") or _image_from_lock(plugin_root)
-    if ref is None:
+    override_ref = os.environ.get("WIRE_TOOLS_IMAGE")
+    if override_ref:
+        pin: ImagePin | None = {
+            "ref": override_ref,
+            "image": None,
+            "digest": None,
+            "attestation": None,
+        }
+    else:
+        pin = _image_from_lock(plugin_root)
+    if pin is None:
         raise RuntimeError(
             "no wire tools image resolvable: set WIRE_TOOLS_IMAGE or pin "
             "image+digest in tools-image.json / docker/image-digests.json"
         )
+    ref = pin["ref"]
+    if prewarm:
+        _verify_attestation(pin, override=bool(override_ref))
     try:
         inspect_result = subprocess.run(
             [docker, "image", "inspect", ref],
@@ -212,6 +331,8 @@ def _ensure_image(plugin_root: Path, *, pull: bool = True) -> str:
         raise RuntimeError(
             f"wire tools image {ref} not pulled locally; run 'wire_launcher.py prewarm' to fetch it"
         )
+    if not prewarm:
+        _verify_attestation(pin, override=bool(override_ref))
     print(f"wire_launcher: pulling tools image {ref}", file=sys.stderr)
     try:
         pull_result = subprocess.run(
@@ -270,9 +391,18 @@ def main() -> int:
         print("usage: wire_launcher.py {mcp_server|prewarm|<wire cli args...>}", file=sys.stderr)
         return 2
 
+    try:
+        _attestation_mode()
+    except ValueError as exc:
+        print(f"wire_launcher: {exc}", file=sys.stderr)
+        return 2
+
     plugin_root = Path(__file__).resolve().parents[1]
     try:
-        image = _ensure_image(plugin_root, pull="--warn" not in argv)
+        if argv[0] == "prewarm":
+            image = _ensure_image(plugin_root, pull="--warn" not in argv, prewarm=True)
+        else:
+            image = _ensure_image(plugin_root, pull="--warn" not in argv)
     except RuntimeError as exc:
         return _warn_or_die(str(exc), argv)
     if argv[0] == "prewarm":

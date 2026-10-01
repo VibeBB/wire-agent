@@ -11,6 +11,7 @@ from scripts.check_dependency_updates import (
     HTTP_TIMEOUT_SECONDS,
     ROOT,
     SUBPROCESS_TIMEOUT_SECONDS,
+    DependencyDeferral,
     DependencyStatus,
     _github_latest_tag,  # pyright: ignore[reportPrivateUsage]
     apply_deferrals,
@@ -146,3 +147,50 @@ def test_main_reports_timeout_as_failure(
     monkeypatch.setattr(check_dependency_updates_module, "check_dependency_updates", timed_out)
     assert main([]) == 1
     assert "dependency update check failed" in capsys.readouterr().err
+
+
+def test_fetch_failures_are_unknown_and_counted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    def failed_json(url: str) -> object:
+        raise OSError(url)
+
+    def failed_tags(url: str) -> list[str]:
+        raise OSError(url)
+
+    monkeypatch.setattr(check_dependency_updates_module, "_default_fetch_json", failed_json)
+    statuses = [
+        *check_dependency_updates_module.check_pypi(ROOT, fetch_json=failed_json),
+        *check_dependency_updates_module.check_uv_pin(ROOT, fetch_json=failed_json),
+        *check_dependency_updates_module.check_github_actions(ROOT, list_remote_tags=failed_tags),
+        *check_dependency_updates_module.check_docker_args(ROOT, list_remote_tags=failed_tags),
+        *check_dependency_updates_module.check_docker_base(ROOT, fetch_json=failed_json),
+    ]
+    unknown = [status for status in statuses if status.fetch_failed]
+
+    assert unknown
+    assert all(not status.outdated for status in unknown)
+    assert {
+        "pypi",
+        "uv-pin",
+        "github-actions",
+        "docker-arg",
+        "docker-base",
+    } <= {status.surface for status in unknown}
+
+    def failed_report(_root: Path) -> list[DependencyStatus]:
+        return unknown
+
+    def no_deferrals(_root: Path) -> list[DependencyDeferral]:
+        return []
+
+    monkeypatch.setattr(check_dependency_updates_module, "check_dependency_updates", failed_report)
+    monkeypatch.setattr(check_dependency_updates_module, "load_deferrals", no_deferrals)
+    report_path = tmp_path / "report.json"
+    assert main(["--repo-root", str(ROOT), "--json", str(report_path)]) == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["unknown_count"] == len(unknown)
+    assert report["outdated_count"] == 0
+    assert "| unknown |" in capsys.readouterr().out

@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  attestations: read
 
 concurrency:
   group: locked-image-check
@@ -23,6 +24,7 @@ jobs:
       image: ${{ steps.lock.outputs.image }}
       digest: ${{ steps.lock.outputs.digest }}
       attestation: ${{ steps.lock.outputs.attestation }}
+      sbom_attestation: ${{ steps.lock.outputs.sbom_attestation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,8 +52,11 @@ jobs:
           if digest is None and tag is None:
               if entry.get("attestation") is not None:
                   raise SystemExit("wire_tools attestation cannot exist without a pinned image")
+              if entry.get("sbom_attestation") is not None:
+                  raise SystemExit("wire_tools SBOM attestation cannot exist without a pinned image")
               present = "false"
               attestation = ""
+              sbom_attestation = ""
           else:
               if not isinstance(digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
                   raise SystemExit("wire_tools digest must be null or a sha256 digest")
@@ -64,12 +69,18 @@ jobs:
               else:
                   if not isinstance(attestation, str) or not attestation.startswith("https://"):
                       raise SystemExit("wire_tools attestation must be an HTTPS URL")
+              sbom_attestation = entry.get("sbom_attestation")
+              if sbom_attestation is None:
+                  sbom_attestation = ""
+              elif not isinstance(sbom_attestation, str) or not sbom_attestation.startswith("https://"):
+                  raise SystemExit("wire_tools SBOM attestation must be an HTTPS URL")
               image = entry["image"]
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
               output.write(f"present={present}\n")
               output.write(f"image={image if present == 'true' else ''}\n")
               output.write(f"digest={digest if present == 'true' else ''}\n")
               output.write(f"attestation={attestation}\n")
+              output.write(f"sbom_attestation={sbom_attestation}\n")
           PY
   check:
     needs: check-lock
@@ -101,6 +112,20 @@ jobs:
           gh attestation verify "oci://${IMAGE}@${DIGEST}" \
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml"
+      - name: Warn that tools image has no SBOM attestation metadata
+        if: needs.check-lock.outputs.sbom_attestation == ''
+        run: echo "::warning::wire_tools image lock has no SBOM attestation metadata; skipping SBOM verification."
+      - name: Verify tools image SBOM attestation
+        if: needs.check-lock.outputs.sbom_attestation != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.check-lock.outputs.image }}
+          DIGEST: ${{ needs.check-lock.outputs.digest }}
+        run: |
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml" \
+            --predicate-type https://spdx.dev/Document/v2.3
       - run: uv run python scripts/pull_locked_image.py --entry wire_tools
       - id: image
         run: echo "ref=$(uv run python scripts/print_locked_image.py --entry wire_tools)" >> "$GITHUB_OUTPUT"
@@ -113,18 +138,59 @@ jobs:
       # output dir stays inside the container's world-writable /tmp.
       - name: Smoke locked image
         env:
-          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          GH_TOKEN: ${{ github.token }}
+          OPENHANDS_PROJECT_DIR: ${{ github.workspace }}
         run: |
-          docker run --rm --user wire \
-            --volume "$RUNNER_TEMP/wire-smoke:/tmp/wire-smoke" "$IMAGE_REF" \
-            python /opt/wire/scripts/e2e_authoring.py \
-              --contract /opt/wire/examples/sensor-harness/sensor-harness.contract.json \
-              --out /tmp/wire-smoke/sensor-harness
+          set -euo pipefail
+          launcher=plugins/wire/scripts/wire_launcher.py
+          out=.launcher-smoke/wire
+          mkdir -p "$out"
+          if python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          entry = json.loads(Path("docker/image-digests.json").read_text(encoding="utf-8"))["wire_tools"]
+          raise SystemExit(0 if entry.get("attestation") else 1)
+          PY
+          then
+            export WIRE_VERIFY_ATTESTATION=require
+          else
+            export WIRE_VERIFY_ATTESTATION=auto
+          fi
+          python3 "$launcher" prewarm
+          python3 "$launcher" doctor > "$out/doctor.json"
+          set +e
+          python3 "$launcher" author \
+            --contract examples/sensor-harness/sensor-harness.contract.json \
+            --out "$out/sensor-harness" > "$out/author.stdout.json"
+          status=$?
+          set -e
+          python3 - "$out/sensor-harness" "$out/author.stdout.json" "$status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          output = Path(sys.argv[1])
+          stdout = Path(sys.argv[2])
+          status = int(sys.argv[3])
+          reports = sorted(output.rglob("*report.json"))
+          printed = False
+          for report_path in reports:
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+              if isinstance(report, dict) and "checks" in report:
+                  print(json.dumps(report["checks"], ensure_ascii=False, indent=2))
+                  printed = True
+          if not printed:
+              print(stdout.read_text(encoding="utf-8"))
+          result = json.loads(stdout.read_text(encoding="utf-8"))
+          if status != 0 or result.get("verdict") != "pass":
+              raise SystemExit("wire launcher smoke did not pass")
+          PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: locked-wire-tools-smoke
           path: |
-            ${{ runner.temp }}/wire-smoke/**/design-report.json
-            ${{ runner.temp }}/wire-smoke/**/design-report.md
+            ${{ github.workspace }}/.launcher-smoke/wire/**/design-report.json
+            ${{ github.workspace }}/.launcher-smoke/wire/**/design-report.md
           if-no-files-found: ignore

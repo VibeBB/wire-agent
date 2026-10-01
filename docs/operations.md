@@ -1,5 +1,12 @@
 # Operations
 
+## SBOM attestations
+
+`publish-wire-images.yml` generates and attests an SPDX-2.3 SBOM for the
+published tools digest and uploads it for 30 days. The returned URL is stored
+as `sbom_attestation`; `locked-image-check.yml` verifies it when present and
+warns while continuing when it is absent.
+
 ## Verification stages
 
 `scripts/verify_all.py` is the source of truth for verification stages;
@@ -39,7 +46,8 @@ dependency, update the checker targets in
 `scripts/check_dependency_updates.py` and this document in the same change.
 The weekly `check-dependency-updates` workflow reports candidates to a
 "Dependency update check report" issue; deferrals are recorded with reason
-and re-check deadline in `scripts/dependency_update_deferrals.json`.
+and re-check deadline in `scripts/dependency_update_deferrals.json`. Fetch
+failures are reported as unknown and keep the issue open until they resolve.
 
 ## Vision support
 
@@ -141,16 +149,18 @@ Runtime policy surfaces that the plugin declares but the host executes:
   lock entries (ADR-0008). Its checkout keeps `persist-credentials: true`
   because the job pushes the lock-update branch.
 - `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
-  validates the image lock, verifies available provenance, pulls the pinned
-  tools image, and re-runs the authoring smoke check in the container.
-  Existing pins without attestation metadata warn and continue. Emitted
-  design reports are uploaded as a run artifact, including on smoke failure.
+  validates the image lock, prewarms the pinned tools image through
+  `wire_launcher.py`, runs `doctor` and the shipped authoring example, and
+  verifies available provenance and SBOM attestations. Existing pins without
+  attestation metadata warn and continue. Emitted design reports are uploaded
+  as a run artifact, including on smoke failure.
 
 ## CI
 
 - `ci.yml` runs on pushes to main, pull requests, merge groups,
-  `workflow_call`, and `workflow_dispatch` (the publish workflow dispatches
-  it on the lock-update branch): verify (Python 3.12/3.13), plugin-load
+  `workflow_call`, and `workflow_dispatch`; the publisher dispatches both
+  `ci.yml` and `workflow-lint.yml` on the lock-update branch. Jobs are verify
+  (Python 3.12/3.13), plugin-load
   against the pinned SDK, and a container smoke check when the tools image
   changes.
 - `workflow-lint.yml` runs actionlint 1.7.12 and zizmor on every pull
@@ -173,3 +183,18 @@ English commit messages. No `git add .`, no amend, no `--no-verify`, no
 force push, no direct pushes to main, no destructive reset/clean/checkout.
 Do not commit generated `out/` artifacts, secrets, or environment files.
 Split dependent changes into bottom-up stacked PRs.
+
+## Launcher-side verification
+
+`WIRE_VERIFY_ATTESTATION` accepts `auto` (the default), `require`, or `off`.
+Before pulling a lock-provided image, and on every `prewarm`, the launcher
+uses `gh attestation verify` with the lock entry and publisher workflow.
+`auto` prints one note and skips for an image override, missing attestation,
+missing `gh`, or failed `gh auth status`; once verification starts, failure
+or timeout prevents the pull. `require` makes skip conditions errors, while
+`off` never verifies. Ordinary invocations do not re-verify a locally
+present image, and `--warn` doctor paths never verify.
+
+## CI runner network auditing
+
+CI and image-publishing jobs use `step-security/harden-runner` in audit-only mode. It observes network egress without blocking requests; per-run insights are available in the GitHub Actions job summary.

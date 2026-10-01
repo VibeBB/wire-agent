@@ -61,6 +61,7 @@ class DependencyStatus:
     outdated: bool
     note: str = ""
     deferred: bool = False
+    fetch_failed: bool = False
 
 
 @dataclass(frozen=True)
@@ -212,6 +213,7 @@ def check_pypi(
                 "pyproject.toml",
                 latest not in ("?", current),
                 "" if latest != "?" else "fetch failed",
+                fetch_failed=latest == "?",
             )
         )
     return statuses
@@ -277,6 +279,7 @@ def check_uv_pin(
             "pyproject.toml [tool.uv] required-version",
             outdated,
             "" if latest != "?" else "fetch failed",
+            fetch_failed=latest == "?",
         )
     ]
 
@@ -328,6 +331,7 @@ def check_github_actions(
                     ".github/workflows",
                     outdated,
                     note,
+                    fetch_failed=not latest,
                 )
             )
         for tool, pin in _UVX.findall(text):
@@ -344,6 +348,7 @@ def check_github_actions(
                     ".github/workflows",
                     bool(latest != "?") and latest != pin,
                     "" if latest != "?" else "fetch failed",
+                    fetch_failed=latest == "?",
                 )
             )
     return statuses + uvx_statuses
@@ -413,6 +418,7 @@ def check_docker_args(
                 _DOCKERFILES[0],
                 outdated,
                 "" if latest_cmp else "fetch failed",
+                fetch_failed=not latest_cmp,
             )
         )
     return statuses
@@ -495,6 +501,7 @@ def check_docker_base(
             _DOCKERFILES[0],
             outdated,
             "" if latest else "fetch failed",
+            fetch_failed=latest is None,
         )
     ]
 
@@ -696,12 +703,18 @@ def render_markdown(statuses: list[DependencyStatus]) -> str:
         )
         ordered_statuses = [
             status
-            for state in ("outdated", "deferred", "current")
+            for state in ("outdated", "deferred", "unknown", "current")
             for status in surface_statuses
             if (
                 (state == "outdated" and status.outdated)
                 or (state == "deferred" and status.deferred)
-                or (state == "current" and not status.outdated and not status.deferred)
+                or (state == "unknown" and status.fetch_failed)
+                or (
+                    state == "current"
+                    and not status.outdated
+                    and not status.deferred
+                    and not status.fetch_failed
+                )
             )
         ]
         for status in ordered_statuses:
@@ -712,6 +725,8 @@ def render_markdown(statuses: list[DependencyStatus]) -> str:
                 state = "update available"
             elif status.deferred:
                 state = "deferred"
+            elif status.fetch_failed:
+                state = "unknown"
             else:
                 state = "up to date"
             lines.append(
@@ -750,6 +765,7 @@ def main(argv: list[str] | None = None) -> int:
                 "statuses": [asdict(status) for status in statuses],
                 "outdated_count": sum(status.outdated for status in statuses),
                 "deferred_count": sum(status.deferred for status in statuses),
+                "unknown_count": sum(status.fetch_failed for status in statuses),
             }
             args.json_path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
