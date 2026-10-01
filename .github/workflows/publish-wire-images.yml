@@ -16,6 +16,7 @@ on:
       - "scripts/print_locked_image.py"
       - "scripts/pull_locked_image.py"
       - "scripts/update_image_digest_lock.py"
+      - ".github/workflows/publish-wire-images.yml"
       - "!docker/image-digests.json"
       # The plugin pin is written by this workflow itself; exclude it so a
       # merged pin PR does not trigger another publish.
@@ -89,6 +90,10 @@ jobs:
         env:
           TOOLS_REF: ${{ env.TOOLS_REF }}
         run: uv run python scripts/measure_image_tools.py --image-ref "$TOOLS_REF" --out "$RUNNER_TEMP/wire-tools.json"
+      - name: Prepare smoke output
+        run: |
+          mkdir -p "$RUNNER_TEMP/wire-smoke"
+          chmod 0777 "$RUNNER_TEMP/wire-smoke"
       # e2e_authoring exits non-zero unless the gate verdict is "pass"
       # (fail-closed), so the container exit code is the smoke check. The
       # output dir stays inside the container's world-writable /tmp.
@@ -98,10 +103,20 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "$TOOLS_REF"
-          docker run --rm --user wire "$TOOLS_REF" \
+          docker run --rm --user wire \
+            --volume "$RUNNER_TEMP/wire-smoke:/tmp/wire-smoke" "$TOOLS_REF" \
             python /opt/wire/scripts/e2e_authoring.py \
               --contract /opt/wire/examples/sensor-harness/sensor-harness.contract.json \
               --out /tmp/wire-smoke/sensor-harness
+      - name: Upload published tools smoke reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: published-wire-tools-smoke
+          path: |
+            ${{ runner.temp }}/wire-smoke/**/design-report.json
+            ${{ runner.temp }}/wire-smoke/**/design-report.md
+          if-no-files-found: ignore
       - name: Record published image summary
         run: |
           {

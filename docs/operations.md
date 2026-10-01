@@ -134,13 +134,15 @@ Runtime policy surfaces that the plugin declares but the host executes:
 - `publish-wire-images.yml` builds and publishes `ghcr.io/<owner>/wire-tools`
   on `workflow_dispatch` and on pushes to main that touch `docker/**`,
   `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
-  project metadata (excluding the lock file and `docker/README.md`), then
-  opens and merges the digest-lock pull request. Its checkout keeps
+  project metadata, the publisher workflow, or the lock-update script
+  (excluding lock files, the plugin pin, and `docker/README.md`), then opens
+  and merges the digest-lock pull request. Its checkout keeps
   `persist-credentials: true` because the job pushes the lock-update
   branch.
-- `locked-image-check.yml` (weekly + post-publish dispatch) pulls the
-  locked tools image and re-runs the authoring smoke check in the
-  container.
+- `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
+  validates the image lock, pulls the pinned tools image, and re-runs the
+  authoring smoke check in the container. Emitted design reports are
+  uploaded as a run artifact, including when the smoke check fails.
 
 ## CI
 
@@ -149,16 +151,19 @@ Runtime policy surfaces that the plugin declares but the host executes:
   it on the lock-update branch): verify (Python 3.12/3.13), plugin-load
   against the pinned SDK, and a container smoke check when the tools image
   changes.
-- `workflow-lint.yml` runs zizmor on every pull request, merge group,
-  main pushes touching `.github/**`, and weekly; SARIF uploads to code
-  scanning. Every `uses:` entry is pinned to a 40-character SHA with a
-  `# vX.Y.Z` comment; checkout uses `persist-credentials: false` except in
-  the image publish job (the lock-update PR needs push credentials); every
-  job sets `timeout-minutes`.
-- `dependabot.yml` monitors GitHub Actions weekly. The uv ecosystem is
-  intentionally excluded (Dependabot's bundled uv cannot satisfy
-  `[tool.uv] required-version`), so Python dependency updates stay covered
-  by the weekly check-dependency-updates.yml report.
+- `workflow-lint.yml` runs actionlint 1.7.12 and zizmor on every pull
+  request, dispatched run, main push touching `.github/**`, and weekly;
+  SARIF uploads to code scanning. `.github/actionlint.yaml` declares the
+  `ubuntu-26.04` runner label so other unknown labels remain lint errors.
+  Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
+  comment; checkout uses `persist-credentials: false` except in the image
+  publish job (the lock-update PR needs push credentials); every job sets
+  `timeout-minutes`.
+- `dependabot.yml` monitors GitHub Actions and Docker dependencies weekly,
+  with seven-day cooldowns and GitHub Actions updates grouped together. The
+  uv ecosystem is intentionally excluded (Dependabot's bundled uv cannot
+  satisfy `[tool.uv] required-version`), so Python dependency updates stay
+  covered by the weekly check-dependency-updates.yml report.
 
 ## Git
 
