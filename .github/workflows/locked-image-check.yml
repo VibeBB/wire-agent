@@ -20,18 +20,65 @@ jobs:
     timeout-minutes: 10
     outputs:
       present: ${{ steps.lock.outputs.present }}
+      image: ${{ steps.lock.outputs.image }}
+      digest: ${{ steps.lock.outputs.digest }}
+      attestation: ${{ steps.lock.outputs.attestation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: lock
         run: |
-          if [ -s docker/image-digests.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          lock = json.loads(Path("docker/image-digests.json").read_text(encoding="utf-8"))
+          if not isinstance(lock, dict):
+              raise SystemExit("image lock must be a JSON object")
+          entry = lock.get("wire_tools")
+          if not isinstance(entry, dict):
+              raise SystemExit("image lock must contain a wire_tools object")
+          if entry.get("image") != "ghcr.io/vibebb/wire-tools":
+              raise SystemExit("wire_tools image does not match ghcr.io/vibebb/wire-tools")
+          if "digest" not in entry or "tag" not in entry:
+              raise SystemExit("wire_tools lock must contain digest and tag fields")
+          digest = entry["digest"]
+          tag = entry["tag"]
+          if digest is None and tag is None:
+              if entry.get("attestation") is not None:
+                  raise SystemExit("wire_tools attestation cannot exist without a pinned image")
+              present = "false"
+              attestation = ""
+          else:
+              if not isinstance(digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+                  raise SystemExit("wire_tools digest must be null or a sha256 digest")
+              if not isinstance(tag, str) or re.fullmatch(r"[0-9a-f]{40}-tools", tag) is None:
+                  raise SystemExit("wire_tools tag must be null or a 40-character tools tag")
+              present = "true"
+              attestation = entry.get("attestation")
+              if attestation is None:
+                  attestation = ""
+              else:
+                  if not isinstance(attestation, str) or not attestation.startswith("https://"):
+                      raise SystemExit("wire_tools attestation must be an HTTPS URL")
+              image = entry["image"]
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"present={present}\n")
+              output.write(f"image={image if present == 'true' else ''}\n")
+              output.write(f"digest={digest if present == 'true' else ''}\n")
+              output.write(f"attestation={attestation}\n")
+          PY
   check:
     needs: check-lock
     if: needs.check-lock.outputs.present == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      attestations: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,9 +88,26 @@ jobs:
           python-version: "3.12"
           cache-suffix: locked-image-check
       - run: uv sync --locked
+      - name: Warn that tools image has no attestation metadata
+        if: needs.check-lock.outputs.attestation == ''
+        run: echo "::warning::wire_tools image lock has no attestation metadata; skipping provenance verification."
+      - name: Verify tools image provenance
+        if: needs.check-lock.outputs.attestation != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.check-lock.outputs.image }}
+          DIGEST: ${{ needs.check-lock.outputs.digest }}
+        run: |
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml"
       - run: uv run python scripts/pull_locked_image.py --entry wire_tools
       - id: image
         run: echo "ref=$(uv run python scripts/print_locked_image.py --entry wire_tools)" >> "$GITHUB_OUTPUT"
+      - name: Prepare smoke output
+        run: |
+          mkdir -p "$RUNNER_TEMP/wire-smoke"
+          chmod 0777 "$RUNNER_TEMP/wire-smoke"
       # e2e_authoring exits non-zero unless the gate verdict is "pass"
       # (fail-closed), so the container exit code is the smoke check. The
       # output dir stays inside the container's world-writable /tmp.
@@ -51,7 +115,16 @@ jobs:
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
         run: |
-          docker run --rm --user wire "$IMAGE_REF" \
+          docker run --rm --user wire \
+            --volume "$RUNNER_TEMP/wire-smoke:/tmp/wire-smoke" "$IMAGE_REF" \
             python /opt/wire/scripts/e2e_authoring.py \
               --contract /opt/wire/examples/sensor-harness/sensor-harness.contract.json \
               --out /tmp/wire-smoke/sensor-harness
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: locked-wire-tools-smoke
+          path: |
+            ${{ runner.temp }}/wire-smoke/**/design-report.json
+            ${{ runner.temp }}/wire-smoke/**/design-report.md
+          if-no-files-found: ignore
