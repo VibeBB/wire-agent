@@ -134,13 +134,16 @@ Runtime policy surfaces that the plugin declares but the host executes:
 - `publish-wire-images.yml` builds and publishes `ghcr.io/<owner>/wire-tools`
   on `workflow_dispatch` and on pushes to main that touch `docker/**`,
   `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
-  project metadata (excluding the lock file and `docker/README.md`), then
-  opens and merges the digest-lock pull request. Its checkout keeps
-  `persist-credentials: true` because the job pushes the lock-update
-  branch.
-- `locked-image-check.yml` (weekly + post-publish dispatch) pulls the
-  locked tools image and re-runs the authoring smoke check in the
-  container.
+  project metadata, the publisher workflow, or the lock-update script
+  (excluding `docker/image-digests.json`, the plugin pin, and
+  `docker/README.md`), then opens and merges the digest-lock pull request.
+  It attests the published image and records the attestation URL in both
+  lock entries (ADR-0008). Its checkout keeps `persist-credentials: true`
+  because the job pushes the lock-update branch.
+- `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
+  validates the image lock, verifies available provenance, pulls the pinned
+  tools image, and re-runs the authoring smoke check in the container.
+  Existing pins without attestation metadata warn and continue.
 
 ## CI
 
