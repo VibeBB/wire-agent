@@ -135,14 +135,16 @@ Runtime policy surfaces that the plugin declares but the host executes:
   on `workflow_dispatch` and on pushes to main that touch `docker/**`,
   `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
   project metadata, the publisher workflow, or the lock-update script
-  (excluding lock files, the plugin pin, and `docker/README.md`), then opens
-  and merges the digest-lock pull request. Its checkout keeps
-  `persist-credentials: true` because the job pushes the lock-update
-  branch.
+  (excluding `docker/image-digests.json`, the plugin pin, and
+  `docker/README.md`), then opens and merges the digest-lock pull request.
+  It attests the published image and records the attestation URL in both
+  lock entries (ADR-0008). Its checkout keeps `persist-credentials: true`
+  because the job pushes the lock-update branch.
 - `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
-  validates the image lock, pulls the pinned tools image, and re-runs the
-  authoring smoke check in the container. Emitted design reports are
-  uploaded as a run artifact, including when the smoke check fails.
+  validates the image lock, verifies available provenance, pulls the pinned
+  tools image, and re-runs the authoring smoke check in the container.
+  Existing pins without attestation metadata warn and continue. Emitted
+  design reports are uploaded as a run artifact, including on smoke failure.
 
 ## CI
 

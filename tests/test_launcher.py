@@ -87,7 +87,12 @@ def test_image_from_lock_reads_skill_pin(tmp_path: Path) -> None:
     module = _load_launcher()
     skill_dir = tmp_path / "skills" / "wire-workflow"
     skill_dir.mkdir(parents=True)
-    entry = {"image": "ghcr.io/x/wire-tools", "digest": "sha256:abc", "tag": "t1"}
+    entry = {
+        "image": "ghcr.io/x/wire-tools",
+        "digest": "sha256:abc",
+        "tag": "t1",
+        "attestation": "https://github.com/VibeBB/wire-agent/attestations/example",
+    }
     (skill_dir / "tools-image.json").write_text(json.dumps(entry), encoding="utf-8")
     assert module._image_from_lock(tmp_path) == "ghcr.io/x/wire-tools@sha256:abc"
 
