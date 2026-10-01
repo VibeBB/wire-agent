@@ -36,8 +36,8 @@ jobs:
           # The sha256 is the published value from
           # actionlint_1.7.12_checksums.txt on the v1.7.12 release.
           tarball="actionlint_1.7.12_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 --retry-delay 1 --retry-connrefused \
-            -o "$RUNNER_TEMP/$tarball" \
+          curl --fail --location --silent --show-error --retry 5 --retry-delay 10 \
+            --output "$RUNNER_TEMP/$tarball" \
             "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$tarball"
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$tarball" \
             | sha256sum -c -
