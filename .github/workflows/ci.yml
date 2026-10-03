@@ -122,6 +122,10 @@ jobs:
           retention-days: 14
 
   dockerfile-lint:
+    needs: changes
+    # Hadolint and BuildKit --check read only docker/**; docs-only pull
+    # requests cannot produce findings, so skip like e2e.
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
