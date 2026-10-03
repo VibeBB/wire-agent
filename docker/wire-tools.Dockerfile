@@ -1,11 +1,11 @@
-ARG UV_VERSION=0.12.21
-ARG UV_DIGEST=sha256:a7aed3216253ee804de3e2d8afa5073baa1a177335345d43845cd4165e43b711
+ARG UV_VERSION=0.12.22
+ARG UV_DIGEST=sha256:f513a91fc62fe7c17567eee97230dd198e43edb8a9fbecca843714a4358fe1bc
 FROM ghcr.io/astral-sh/uv:${UV_VERSION}@${UV_DIGEST} AS uv
 
 FROM debian:13-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG UV_VERSION=0.12.21
+ARG UV_VERSION=0.12.22
 ARG IMAGE_REVISION=unknown
 
 # Fail the build when the left side of a verification pipe (curl|sha256sum)
