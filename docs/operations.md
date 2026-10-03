@@ -133,7 +133,12 @@ Runtime policy surfaces that the plugin declares but the host executes:
 
 - Versions follow semver; `plugin.json`, `pyproject.toml`, and the skill
   version strings are bumped together by `scripts/bump_version.py`.
-- `.github/workflows/release.yml` is `workflow_dispatch` only.
+- `.github/workflows/release.yml` is `workflow_dispatch` only. Its
+  `dry_run` input rehearses a release without writing anything: the
+  bump job computes the would-be version with
+  `bump_version.py --dry-run`, checks the tag is free, emits HEAD as the
+  release SHA, and the downstream verify/install-smoke/build jobs still
+  run against it while tag and release creation are skipped.
 - Docker image digests live in `docker/image-digests.json` and are written
   only by the `publish-wire-images.yml` workflow; do not commit
   placeholder entries. The same entry ships inside the plugin at
@@ -161,19 +166,30 @@ Runtime policy surfaces that the plugin declares but the host executes:
 ## CI
 
 - `ci.yml` runs on pushes to main, pull requests, merge groups,
-  `workflow_call`, and `workflow_dispatch`; the publisher dispatches both
-  `ci.yml` and `workflow-lint.yml` on the lock-update branch. Jobs are verify
+  `workflow_call`, and `workflow_dispatch`; see "Digest-lock PR
+  verification" for how the publisher triggers checks on the lock-update
+  branch. Jobs are verify
   (Python 3.12/3.13), plugin-load
   against the pinned SDK, and a container smoke check when the tools image
-  changes.
+  changes. The e2e and dockerfile-lint jobs are gated on the `changes`
+  job's code-scope output, so docs-only pull requests skip them.
 - `workflow-lint.yml` runs actionlint 1.7.12 and zizmor on every pull
   request, dispatched run, main push touching `.github/**`, and weekly;
-  SARIF uploads to code scanning. `.github/actionlint.yaml` declares the
+  SARIF uploads to code scanning. zizmor runs from a sha256-verified
+  wheel download (not an unpinned `uvx` fetch), with `GH_TOKEN` online
+  audits except on `bot/update-image-digests-*` branches where it runs
+  `--offline` because the branch may be deleted mid-run. A separate gate
+  step fails the job on any SARIF result. `.github/actionlint.yaml` declares the
   `ubuntu-26.04` runner label so other unknown labels remain lint errors.
   Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment; checkout uses `persist-credentials: false` except in the image
   publish job (the lock-update PR needs push credentials); every job sets
   `timeout-minutes`.
+- `dependency-review.yml` (shared) requires the repository's Dependency
+  graph setting to be enabled (Settings → Advanced Security); the job
+  fails with "Dependency review is not supported on this repository"
+  otherwise — a one-time repo-settings prerequisite the workflow cannot
+  self-check.
 - `dependabot.yml` monitors GitHub Actions and Docker dependencies weekly,
   with seven-day cooldowns and GitHub Actions updates grouped together. The
   uv ecosystem is intentionally excluded (Dependabot's bundled uv cannot
@@ -209,22 +225,34 @@ Three layers were adopted after a comparative evaluation of Lynis,
   ghcr.io registries and waives DL3008 (exact deb pins rot when archives
   drop them; downloaded tools are already version+sha256 pinned) and
   DL3066 (the `wire` account is intentionally named, uid 1000).
-- **Image scan on publish** (`publish-wire-images.yml`): Trivy v0.75.0
-  via `trivy-action` v0.36.0 scans the pushed digest for
-  CRITICAL/HIGH fixable vulnerabilities, secrets, and misconfiguration,
-  gated (`exit-code 1`), with SARIF uploaded to code scanning
-  (`category: trivy-wire-tools`) and a full JSON report as an artifact.
-  The action is SHA-pinned and `version:` is explicit — the March 2026
-  Trivy supply-chain compromise made both non-negotiable.
+- **Image scan on publish** (`publish-wire-images.yml`): the build
+  pushes only the immutable `<sha>-tools` tag. Trivy v0.75.0
+  via `trivy-action` v0.36.0 then scans the pushed digest for
+  CRITICAL/HIGH fixable vulnerabilities, secrets, and misconfiguration —
+  a full JSON report first (always produced, even when the gate fails),
+  then the gated SARIF scan (`exit-code 1`) uploaded to code scanning
+  (`category: trivy-wire-tools`). Only after every gate passes does the
+  `Promote :latest` step retag the digest to `:latest` via
+  `docker buildx imagetools create`, so a failing image never serves
+  `:latest`. The action is SHA-pinned and `version:` is explicit — the
+  March 2026 Trivy supply-chain compromise made both non-negotiable.
 - **Weekly audit** (`container-audit.yml`, Mondays 03:17 UTC): pulls the
   pinned digest from `docker/image-digests.json`, re-scans with a fresh
   vulnerability DB (new CVEs against the frozen image), runs the Docker
   CIS compliance report, runs an informational in-image Lynis 3.1.7
-  audit, aggregates `container-hardening.json` (artifact), and
+  audit (cloned at tag `3.1.7` then checked out detached at the pinned
+  commit `2e99f92265760b73fd6b139868eb8d4116624030`), aggregates
+  `container-hardening.json` (artifact), and
   edits/creates a "Container hardening report" issue. The issue closes
   automatically when fixable HIGH/CRITICAL findings reach zero. The
   Lynis Hardening Index is recorded as a trend metric only — its
   denominator shifts with container-skipped tests, so it never gates.
+  The CIS aggregator walks `Results` recursively for `MisconfSummary`
+  nodes and fails the step when zero checks were evaluated, so dead
+  telemetry cannot masquerade as coverage. All scans share a weekly
+  `actions/cache` Trivy DB (`TRIVY_CACHE_DIR` under `$RUNNER_TEMP`),
+  and the full scan skips vendored `boto3`/`googleapiclient` data files
+  that produced ~620 zero-failure misconfig targets.
 
 Not adopted, with reasons: `lynis audit dockerfile` (~6 greps, frozen
 since 2018, subset of hadolint, hardening index always 1);
@@ -264,11 +292,29 @@ tmpfs for tools that need scratch space.
 
 ## CI runner network auditing
 
-CI and image-publishing jobs use `step-security/harden-runner` in audit-only mode. It observes network egress without blocking requests; per-run insights are available in the GitHub Actions job summary.
+Every job in the repo-specific workflows starts with
+`step-security/harden-runner` in audit-only mode (the five shared
+workflows stay byte-identical to the family canon and are not modified
+locally). It observes network egress without blocking requests; per-run
+insights are available in the GitHub Actions job summary.
 
 ## Digest-lock PR verification
 
-The publisher dispatches `ci.yml` and `workflow-lint.yml` on the lock branch, then polls the authoritative required-check set for up to 30 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge.
+The publisher polls the authoritative required-check set for up to 30 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge.
+
+Check triggers on the lock branch are pull_request-primary: token-created
+`bot/update-image-digests-*` pull requests do fire `pull_request` runs
+in this repository, so the publisher polls `gh run list --event
+pull_request` for ~3 minutes (`PUBLISH_PIN_PR_RUN_WAIT_ATTEMPTS` ×
+`PUBLISH_PIN_PR_RUN_WAIT_SECONDS`) and only falls back to explicit
+`workflow_dispatch` of `ci.yml` and `workflow-lint.yml` when no
+pull_request run appears — avoiding the previous double CI+lint per pin
+PR. On a dispatch `422 No ref found` the script re-checks the PR state:
+`MERGED`/`CLOSED` means the create→dispatch race resolved itself and is
+tolerated. After a successful merge the publisher (and the 6-hourly
+`digest-lock-sweep.yml`) dispatches `ci.yml` and `locked-image-check.yml`
+on main for post-merge verification, since a token merge does not itself
+fire push workflows.
 
 SPDX generation prefers the GHCR registry source, writes temporary data under
 the runner's temporary directory, and disables file metadata. The publisher

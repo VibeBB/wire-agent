@@ -4,8 +4,9 @@
 Surfaces checked: direct/dev PyPI dependencies (compared against the
 resolved versions in uv.lock), uv.lock transitive drift via
 `uv lock --upgrade --dry-run`, the uv required-version pin, GitHub Actions
-`uses:` pins (40-char SHA + version comment), `uvx` tool pins in workflows,
-Docker ARG pins in docker/*.Dockerfile, the Docker base image tag,
+`uses:` pins (40-char SHA + version comment), `uvx` tool pins and
+pinned wheels in workflows, Docker ARG pins in docker/*.Dockerfile, the
+Docker base image tag,
 `git clone --branch` pins inside workflows (e.g. the pinned Lynis
 checkout in container-audit.yml), and the
 Python minor versions referenced by the repo (pyproject requires-python,
@@ -301,6 +302,7 @@ def workflow_files(repo_root: Path) -> list[Path]:
 
 _ACTION = re.compile(r"uses:\s*([\w.-]+/[\w.-]+)@([0-9a-f]{40})(?:\s*#\s*(v[\w.-]+))?")
 _UVX = re.compile(r"uvx\s+([\w.-]+)@([\w.]+)")
+_UVX_WHEEL = re.compile(r"([\w.-]+?)-(\d+(?:\.\d+)+)-py3-none-[\w_]+\.whl")
 
 
 def _github_latest_tag(repo: str, list_remote_tags: ListRemoteTags) -> str:
@@ -330,6 +332,7 @@ def check_github_actions(
     statuses: list[DependencyStatus] = []
     uvx_statuses: list[DependencyStatus] = []
     seen: set[str] = set()
+    seen_tool_pins: set[tuple[str, str]] = set()
     for workflow in workflow_files(repo_root):
         text = workflow.read_text(encoding="utf-8")
         for repo, _sha, comment in _ACTION.findall(text):
@@ -353,7 +356,11 @@ def check_github_actions(
                     fetch_failed=not latest,
                 )
             )
-        for tool, pin in _UVX.findall(text):
+        for tool, pin in [*_UVX.findall(text), *_UVX_WHEEL.findall(text)]:
+            # A tool pinned in two steps renders once, not as duplicate rows.
+            if (tool, pin) in seen_tool_pins:
+                continue
+            seen_tool_pins.add((tool, pin))
             try:
                 latest = _pypi_latest(tool, _default_fetch_json)
             except (ValueError, OSError):

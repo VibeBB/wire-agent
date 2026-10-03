@@ -21,13 +21,18 @@ jobs:
       # Creates, edits, and closes the "Dependency update check report" issue.
       issues: write
     steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
-          cache-suffix: dependency-updates
+          # A ~155 MB weekly cache is evicted before its next run anyway;
+          # skip the wasted upload.
+          enable-cache: false
       - name: Sync dependencies
         run: uv sync --locked
       - name: Collect update candidates

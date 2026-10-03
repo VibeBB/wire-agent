@@ -13,6 +13,11 @@ on:
         description: "Explicit X.Y.Z override; leave empty to bump"
         required: false
         type: string
+      dry_run:
+        description: "Rehearse the release: validate version arithmetic and run the downstream verify/install-smoke/build jobs against HEAD without committing, pushing, tagging, or releasing"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -39,6 +44,9 @@ jobs:
       tag: ${{ steps.bump.outputs.tag }}
       sha: ${{ steps.bump.outputs.sha }}
     steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
       - name: Require main
         env:
           REF: ${{ github.ref }}
@@ -54,6 +62,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUMP: ${{ inputs.bump }}
           SET_VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
           retry() {
@@ -69,6 +78,27 @@ jobs:
           }
           SET_VERSION="${SET_VERSION#v}"
           CURRENT=$(python3 -c 'import tomllib,sys;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          if [ "$DRY_RUN" = "true" ]; then
+            # Rehearsal: compute the would-be version and check the tag is
+            # free, but write nothing — downstream jobs still exercise the
+            # verify/install-smoke/build path against HEAD.
+            if [ -n "$SET_VERSION" ]; then
+              VERSION=$(python3 scripts/bump_version.py --dry-run --set "$SET_VERSION")
+            else
+              VERSION=$(python3 scripts/bump_version.py --dry-run --bump "$BUMP")
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
+              echo "::error::tag v${VERSION} already exists" >&2
+              exit 1
+            fi
+            echo "dry-run: v${VERSION} would release at $(git rev-parse HEAD) (bump=${BUMP}, current=${CURRENT})" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "sha=$(git rev-parse HEAD)"
+              echo "version=${VERSION}"
+              echo "tag=v${VERSION}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           SKIP_COMMIT=false
           if [ -n "$SET_VERSION" ]; then
             if [ "$SET_VERSION" = "$CURRENT" ]; then
@@ -216,6 +246,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.bump-version.outputs.sha }}
@@ -244,6 +277,9 @@ jobs:
       VERSION: ${{ needs.bump-version.outputs.version }}
       SHA: ${{ needs.bump-version.outputs.sha }}
     steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.bump-version.outputs.sha }}
@@ -264,7 +300,12 @@ jobs:
         run: |
           (cd plugins && zip -r "../dist/wire-plugin-v${VERSION}.zip" wire)
           zip -r "dist/wire-samples-v${VERSION}.zip" dist/samples
+      - name: Note dry-run release skip
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "dry-run: skipped creating release v${VERSION} at ${SHA}"
       - name: Create release and tag
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
