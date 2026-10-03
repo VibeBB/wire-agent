@@ -21,7 +21,7 @@ The `wire-tools` image bundles the following third-party components:
 
 | Component | License | Use |
 | --- | --- | --- |
-| [drawio-desktop](https://github.com/jgraph/drawio-desktop) 31.5.3 | GPL-3.0-only (bundles Electron/Chromium under their own licenses) | `drawio -x` renders the harness diagram and `--drawio` review outputs; runs unmodified under `xvfb-run` |
+| [drawio-desktop](https://github.com/jgraph/drawio-desktop) 31.7.0 | GPL-3.0-only (bundles Electron/Chromium under their own licenses) | `drawio -x` renders the harness diagram and `--drawio` review outputs; runs unmodified under `xvfb-run` |
 | fonts-ipafont | IPA Font License Agreement v1.0 | CJK glyph coverage for diagram text |
 | Xvfb (xserver-xorg) | MIT/X11 | Headless display for drawio-desktop |
 | uv (binary, copied from `ghcr.io/astral-sh/uv`) | Apache-2.0 OR MIT | Python environment and interpreter provisioning |
