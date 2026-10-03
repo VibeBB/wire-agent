@@ -45,7 +45,16 @@ RUN apt-get -o Acquire::Retries=5 update \
     && rm /tmp/drawio.deb \
     && rm -rf /var/lib/apt/lists/*
 
+# The uv-managed CPython bundles pip with vendored copies of urllib3,
+# msgpack, and setuptools that nothing in the image invokes — dependencies
+# install via uv and the shipped venv is pip-less — so strip the payload
+# instead of shipping unused vulnerable vendored packages.
 RUN uv python install 3.12 \
+    && rm -rf /opt/uv-python/bin/pip* \
+              /opt/uv-python/cpython-*/bin/pip* \
+              /opt/uv-python/cpython-*/lib/python3.12/site-packages/pip \
+              /opt/uv-python/cpython-*/lib/python3.12/site-packages/pip-*.dist-info \
+              /opt/uv-python/cpython-*/lib/python3.12/ensurepip \
     && uv venv --python 3.12 /opt/wire/.venv
 
 COPY pyproject.toml uv.lock /opt/wire/
