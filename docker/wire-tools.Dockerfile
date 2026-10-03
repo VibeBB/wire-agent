@@ -22,8 +22,8 @@ LABEL org.opencontainers.image.source="https://github.com/VibeBB/wire-agent" \
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-ARG DRAWIO_DESKTOP_VERSION=31.5.3
-ARG DRAWIO_DESKTOP_SHA256=b2fd41f02567929c5fae4becbdc16bf118b1ef508a827a29ad9a883924263999
+ARG DRAWIO_DESKTOP_VERSION=31.7.0
+ARG DRAWIO_DESKTOP_SHA256=eb9695e208fcc5ccfbfc496aa8ab2f52a273297d83715de2177b231c172c13de
 
 RUN apt-get -o Acquire::Retries=5 update \
     && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
