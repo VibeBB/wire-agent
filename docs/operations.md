@@ -252,7 +252,9 @@ network/PAM/accounting are governed by the runtime flags below, not the
 image fs). The profile raises the Hardening Index from ~58 to ~70 and
 reduces the suggestion list to image-actionable items; remaining
 suggestions are fixed in the Dockerfile (`UMASK 027` in login.defs) or
-silenced only with a documented reason.
+silenced only with a documented reason. Because the tightened umask
+makes Lynis write its report and log 0640 root-owned, the audit step
+`chmod 644`s both files so the runner-side grep can read the index.
 
 `wire_launcher.py` applies the runtime-hardening flags the container
 profile defers to: `--network none`, `--user uid:gid`,
