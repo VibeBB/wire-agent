@@ -8,6 +8,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG UV_VERSION=0.12.21
 ARG IMAGE_REVISION=unknown
 
+# Fail the build when the left side of a verification pipe (curl|sha256sum)
+# breaks instead of silently passing the right side.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 ENV PATH="/opt/wire/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -37,7 +41,7 @@ RUN apt-get -o Acquire::Retries=5 update \
     && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o /tmp/drawio.deb \
         "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
     && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \
-    && apt-get install -y /tmp/drawio.deb \
+    && apt-get install --no-install-recommends -y /tmp/drawio.deb \
     && rm /tmp/drawio.deb \
     && rm -rf /var/lib/apt/lists/*
 
@@ -50,8 +54,9 @@ COPY plugins/wire /opt/wire/plugins/wire
 COPY scripts/e2e_authoring.py /opt/wire/scripts/e2e_authoring.py
 COPY examples /opt/wire/examples
 
-RUN cd /opt/wire \
-    && uv export --frozen --no-dev --no-emit-project --format requirements-txt \
+WORKDIR /opt/wire
+
+RUN uv export --frozen --no-dev --no-emit-project --format requirements-txt \
         --output-file /tmp/wire-requirements.txt \
     && uv pip install --python /opt/wire/.venv/bin/python \
         --requirement /tmp/wire-requirements.txt \
