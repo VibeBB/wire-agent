@@ -17,6 +17,8 @@ specifications and design decisions.
   SDK, uv, and drawio-desktop update decisions
 - [SDK v1.50.1 feature evaluation](research/sdk-v1.50.1-feature-evaluation.md) —
   SDK and tools adoption decisions
+- [SDK v1.51.0 feature evaluation](research/sdk-v1.51.0-feature-evaluation.md) —
+  SDK, tools, and uv update decisions
 
 ## ADR index
 
