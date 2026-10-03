@@ -16,6 +16,7 @@ from scripts.check_dependency_updates import (
     _github_latest_tag,  # pyright: ignore[reportPrivateUsage]
     apply_deferrals,
     check_docker_args,
+    check_git_clones,
     dependency_names,
     docker_arg_pins,
     docker_base_image,
@@ -66,6 +67,30 @@ def test_docker_arg_matches_uv_pin():
 def test_docker_base_image_parsed():
     base = docker_base_image(ROOT)
     assert base == ("debian", "13-slim")
+
+
+def test_lynis_clone_pin_parsed():
+    statuses = check_git_clones(ROOT, list_remote_tags=lambda url: ["3.1.7"])
+    lynis = next(status for status in statuses if status.name == "CISOfy/lynis")
+    assert lynis.current == "3.1.7"
+    assert lynis.latest == "3.1.7"
+    assert lynis.outdated is False
+
+
+def test_git_clones_report_outdated_and_fetch_failed():
+    statuses = check_git_clones(ROOT, list_remote_tags=lambda url: ["3.1.7", "3.2.0"])
+    lynis = next(status for status in statuses if status.name == "CISOfy/lynis")
+    assert lynis.latest == "3.2.0"
+    assert lynis.outdated is True
+
+    def failed_tags(url: str) -> list[str]:
+        raise OSError(url)
+
+    statuses = check_git_clones(ROOT, list_remote_tags=failed_tags)
+    lynis = next(status for status in statuses if status.name == "CISOfy/lynis")
+    assert lynis.latest == "?"
+    assert lynis.fetch_failed is True
+    assert lynis.outdated is False
 
 
 def test_render_markdown_groups_by_surface():

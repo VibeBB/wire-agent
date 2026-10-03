@@ -59,6 +59,16 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 | uv | `0.12.21` | `docker/wire-tools.Dockerfile` `ARG UV_VERSION` (must equal `[tool.uv] required-version`) |
 | Python in image | `3.12` | `uv python install` inside the Dockerfile |
 
+## Workflow git clone pins
+
+| Item | Pin | Where |
+| --- | --- | --- |
+| CISOfy/lynis | `3.1.7` | `git clone --depth 1 --branch` in `container-audit.yml` |
+
+The checker treats `git clone --branch <ref>` pins inside workflows as a
+`git-clone` surface and compares the ref against the upstream repo's
+highest semver tag, so a new Lynis release surfaces in the weekly report.
+
 ## Checked by `scripts/check_dependency_updates.py`
 
 - PyPI dependencies (runtime + dev + sdk-check), resolved against latest
@@ -70,6 +80,8 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 - Dockerfile `FROM debian:N-slim` against the newest Debian `N-slim` tag on
   Docker Hub (a `ubuntu:YY.MM` base is also understood and compared against
   the newest Ubuntu `YY.04` LTS tag).
+- Workflow `git clone --branch` pins (e.g. CISOfy/lynis in
+  `container-audit.yml`) against the upstream repo's latest semver tag.
 
 The weekly workflow posts the report to the "Dependency update check
 report" issue. Deferred candidates are recorded in
