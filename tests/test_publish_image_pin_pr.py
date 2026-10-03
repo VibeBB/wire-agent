@@ -30,6 +30,9 @@ case "$1 $2" in
     ;;
   "workflow run")
     ;;
+  "run list")
+    printf '%s\n' "${GH_STUB_RUN_LIST_COUNT:-0}"
+    ;;
   "pr checks")
     check_call=$(grep -c '^pr checks ' "$GH_STUB_CALLS")
     case "$GH_STUB_CASE" in
@@ -106,6 +109,8 @@ esac
             "PUBLISH_PIN_PR_MERGE_WAIT_SECONDS": "0",
             "PUBLISH_PIN_PR_RETRY_ATTEMPTS": "1",
             "PUBLISH_PIN_PR_RETRY_DELAY_SECONDS": "0",
+            "PUBLISH_PIN_PR_RUN_WAIT_ATTEMPTS": "1",
+            "PUBLISH_PIN_PR_RUN_WAIT_SECONDS": "0",
             "PUBLISH_PIN_PR_POST_MERGE_WORKFLOWS": "ci.yml locked-image-check.yml",
         }
     )
@@ -168,6 +173,23 @@ def test_pin_pr_state_and_required_checks(
         assert "api -X POST repos/" in call_log
     if case == "required-failure":
         assert "--auto --squash --delete-branch" not in call_log
+
+
+def test_pull_request_runs_skip_duplicate_dispatch(
+    publish_pin_pr: tuple[Path, dict[str, str], Path],
+    tmp_path: Path,
+) -> None:
+    script, env, calls = publish_pin_pr
+    env.update({"GH_STUB_CASE": "default", "GH_STUB_RUN_LIST_COUNT": "3"})
+
+    result = run_helper(script, env)
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    call_log = calls.read_text(encoding="utf-8")
+
+    assert result.returncode == 0
+    assert "skipping duplicate" in summary
+    assert f"workflow run ci.yml --repo {REPOSITORY} --ref {BRANCH}" not in call_log
+    assert "--event pull_request" in call_log
 
 
 def test_unreported_checks_transition_to_green_json(

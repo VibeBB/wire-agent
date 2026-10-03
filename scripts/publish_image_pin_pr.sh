@@ -14,6 +14,8 @@ REQUIRED_WAIT_ATTEMPTS=${PUBLISH_PIN_PR_REQUIRED_WAIT_ATTEMPTS:-120}
 REQUIRED_WAIT_SECONDS=${PUBLISH_PIN_PR_REQUIRED_WAIT_SECONDS:-15}
 MERGE_WAIT_ATTEMPTS=${PUBLISH_PIN_PR_MERGE_WAIT_ATTEMPTS:-36}
 MERGE_WAIT_SECONDS=${PUBLISH_PIN_PR_MERGE_WAIT_SECONDS:-10}
+PR_RUN_WAIT_ATTEMPTS=${PUBLISH_PIN_PR_RUN_WAIT_ATTEMPTS:-6}
+PR_RUN_WAIT_SECONDS=${PUBLISH_PIN_PR_RUN_WAIT_SECONDS:-30}
 RETRY_ATTEMPTS=${PUBLISH_PIN_PR_RETRY_ATTEMPTS:-3}
 RETRY_DELAY_SECONDS=${PUBLISH_PIN_PR_RETRY_DELAY_SECONDS:-10}
 REQUIRED_CHECKS_STDERR_FILE=$(mktemp)
@@ -122,10 +124,16 @@ dispatch_pin_workflow() {
     command+=(-f "base_sha=$BASE_SHA")
   fi
   check_pin_pr_state
-  if ! retry "${command[@]}"; then
-    check_pin_pr_state
-    write_summary "Dispatch of ${workflow} for pin PR ${PR_URL} failed; required PR checks remain authoritative."
+  if retry "${command[@]}"; then
+    return 0
   fi
+  # The lock branch is deleted the moment the PR merges, so a dispatch can
+  # 422 ("No ref found") inside the create->dispatch window. Re-check the
+  # PR state before erroring: check_pin_pr_state treats MERGED as success
+  # (dispatching the post-merge workflows) and CLOSED as fatal, so a
+  # resolved race never reaches the summary line below.
+  check_pin_pr_state
+  write_summary "Dispatch of ${workflow} for pin PR ${PR_URL} failed; required PR checks remain authoritative."
 }
 
 required_check_counts() {
@@ -185,9 +193,34 @@ arm_auto_merge() {
 }
 
 check_pin_pr_state
-for workflow in ci.yml workflow-lint.yml; do
-  dispatch_pin_workflow "$workflow"
+
+# pull_request runs satisfy the required checks and always fire on the
+# token-created PR; dispatched runs exercise the same head SHA but never
+# satisfy required checks, so dispatching unconditionally duplicates CI
+# and lint on every pin PR. Wait briefly for the pull_request runs to
+# appear; dispatch only as a fallback for environments where the event
+# does not self-trigger.
+pr_runs_seen=false
+for ((attempt = 1; attempt <= PR_RUN_WAIT_ATTEMPTS; attempt++)); do
+  check_pin_pr_state
+  run_count=$(retry gh run list --repo "$GITHUB_REPOSITORY" --branch "$BRANCH" \
+    --event pull_request --limit 20 --json databaseId --jq 'length' || printf '0\n')
+  run_count=${run_count:-0}
+  if [ "$run_count" -gt 0 ]; then
+    pr_runs_seen=true
+    break
+  fi
+  if [ "$attempt" -lt "$PR_RUN_WAIT_ATTEMPTS" ]; then
+    sleep "$PR_RUN_WAIT_SECONDS"
+  fi
 done
+if [ "$pr_runs_seen" = true ]; then
+  write_summary "pull_request checks are running on ${BRANCH}; skipping duplicate ci.yml/workflow-lint.yml dispatches."
+else
+  for workflow in ci.yml workflow-lint.yml; do
+    dispatch_pin_workflow "$workflow"
+  done
+fi
 
 checks_complete=false
 for ((attempt = 1; attempt <= REQUIRED_WAIT_ATTEMPTS; attempt++)); do
