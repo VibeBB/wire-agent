@@ -141,6 +141,25 @@ def test_apply_deferrals_marks_matching_outdated(tmp_path: Path):
     assert "test" in statuses[0].note
 
 
+def test_workflow_tool_pins_deduplicated(monkeypatch: pytest.MonkeyPatch):
+    def fetch_json(url: str) -> object:
+        return {"info": {"version": "1.30.1"}}
+
+    monkeypatch.setattr(
+        check_dependency_updates_module,
+        "_default_fetch_json",
+        fetch_json,
+    )
+    statuses = check_dependency_updates_module.check_github_actions(
+        ROOT, list_remote_tags=lambda url: []
+    )
+    zizmor = [s for s in statuses if s.surface == "pypi-uvx" and s.name == "zizmor"]
+    assert len(zizmor) == 1
+    assert zizmor[0].current == "1.30.1"
+    assert zizmor[0].latest == "1.30.1"
+    assert zizmor[0].outdated is False
+
+
 def test_github_latest_tag_treats_timeout_as_fetch_failure():
     def timed_out(url: str) -> list[str]:
         raise subprocess.TimeoutExpired(["git", "ls-remote", "--tags", url], 1)
