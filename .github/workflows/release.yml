@@ -92,9 +92,11 @@ jobs:
               exit 1
             fi
             echo "dry-run: v${VERSION} would release at $(git rev-parse HEAD) (bump=${BUMP}, current=${CURRENT})" >> "$GITHUB_STEP_SUMMARY"
-            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "sha=$(git rev-parse HEAD)"
+              echo "version=${VERSION}"
+              echo "tag=v${VERSION}"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           SKIP_COMMIT=false
