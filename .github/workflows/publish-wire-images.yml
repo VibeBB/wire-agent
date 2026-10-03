@@ -226,7 +226,7 @@ jobs:
               --contract /opt/wire/examples/sensor-harness/sensor-harness.contract.json \
               --out /tmp/wire-smoke/sensor-harness
       - name: Upload published tools smoke reports
-        if: always() && hashFiles(format('{0}/wire-smoke/**', runner.temp)) != ''
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: published-wire-tools-smoke
