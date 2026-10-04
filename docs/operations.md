@@ -146,7 +146,12 @@ Runtime policy surfaces that the plugin declares but the host executes:
   bump job computes the would-be version with
   `bump_version.py --dry-run`, checks the tag is free, emits HEAD as the
   release SHA, and the downstream verify/install-smoke/build jobs still
-  run against it while tag and release creation are skipped.
+  run against it while tag and release creation are skipped. The
+  bump-version state machine — version resolution, tag check, direct
+  push, and the self-approving + dispatched-checks + auto-merge
+  fallback PR — lives in `scripts/release_bump.sh` (the workflow step
+  is a thin wrapper) and is covered by `tests/test_release_bump.py`
+  (stubbed `gh`, local git remotes).
 - Docker image digests live in `docker/image-digests.json` and are written
   only by the `publish-wire-images.yml` workflow; do not commit
   placeholder entries. The same entry ships inside the plugin at
@@ -163,7 +168,12 @@ Runtime policy surfaces that the plugin declares but the host executes:
   `docker/README.md`), then opens and merges the digest-lock pull request.
   It attests the published image and records the attestation URL in both
   lock entries (ADR-0008). Its checkout keeps `persist-credentials: true`
-  because the job pushes the lock-update branch.
+  because the job pushes the lock-update branch. It accepts a `dry_run`
+  dispatch input that rehearses the publish: the tools image builds into
+  the local daemon and the Trivy gates, SBOM chain, measurements, and
+  smoke checks still run against it, but nothing is pushed, promoted
+  (`:latest`), attested, locked, or dispatched, and no SARIF reaches
+  code scanning. The run summary lists every skipped step.
 - `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
   validates the image lock, prewarms the pinned tools image through
   `wire_launcher.py`, runs `doctor` and the shipped authoring example, and
