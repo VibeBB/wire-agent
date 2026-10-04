@@ -25,6 +25,12 @@ on:
       - "!plugins/wire/skills/wire-workflow/tools-image.json"
       - "!docker/README.md"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Rehearse the publish: build and gate the image locally, but skip the registry push, :latest promotion, attestations, SARIF upload, the digest-lock PR, and post-merge dispatches"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: publish-wire-images
@@ -94,7 +100,10 @@ jobs:
           file: docker/wire-tools.Dockerfile
           build-args: |
             IMAGE_REVISION=${{ github.sha }}
-          push: true
+          # dry_run keeps the image in the local daemon for the gates
+          # below; nothing reaches the registry.
+          push: ${{ inputs.dry_run != true }}
+          load: ${{ inputs.dry_run == true }}
           # Only the immutable per-sha tag is pushed at build time; the
           # mutable :latest tag is promoted after every gate below passes,
           # so a failed scan never serves a new :latest.
@@ -114,7 +123,10 @@ jobs:
           TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         with:
           scan-type: image
-          scan-ref: ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools@${{ steps.tools.outputs.digest }}
+          # Scan the immutable sha tag — the same manifest the pushed
+          # digest addresses on a real run, and the local image under
+          # dry_run.
+          scan-ref: ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools:${{ github.sha }}-tools
           version: v0.75.0
           scanners: vuln,secret,misconfig,license
           ignore-unfixed: false
@@ -129,9 +141,10 @@ jobs:
           TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         with:
           scan-type: image
-          # Scan the exact pushed digest — the content the SBOM and
-          # provenance attestations bind to.
-          scan-ref: ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools@${{ steps.tools.outputs.digest }}
+          # Scan the immutable sha tag — the manifest the SBOM and
+          # provenance attestations bind to on a real run (the local
+          # image under dry_run).
+          scan-ref: ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools:${{ github.sha }}-tools
           version: v0.75.0
           scanners: vuln,secret,misconfig
           severity: CRITICAL,HIGH
@@ -148,7 +161,8 @@ jobs:
         if: failure() && hashFiles('trivy-image.json') != ''
         run: python3 scripts/trivy_gate_summary.py trivy-image.json >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Trivy SARIF
-        if: always() && hashFiles('trivy-image.sarif') != ''
+        # A rehearsal must not file code-scanning alerts.
+        if: always() && inputs.dry_run != true && hashFiles('trivy-image.sarif') != ''
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy-image.sarif
@@ -162,6 +176,7 @@ jobs:
           retention-days: 90
       - name: Attest tools image provenance
         id: attest
+        if: inputs.dry_run != true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/vibebb/wire-tools
@@ -170,16 +185,30 @@ jobs:
       - name: Resolve tools digest
         env:
           BUILT_DIGEST: ${{ steps.tools.outputs.digest }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          case "$BUILT_DIGEST" in sha256:*) ;; *) echo "invalid tools digest: $BUILT_DIGEST" >&2; exit 1 ;; esac
-          TOOLS_REF="ghcr.io/${IMAGE_OWNER}/wire-tools@${BUILT_DIGEST}"
-          TOOLS_TAG="${GITHUB_SHA}-tools"
-          printf 'TOOLS_REF=%s\nTOOLS_DIGEST=%s\nTOOLS_TAG=%s\n' "$TOOLS_REF" "${TOOLS_REF##*@}" "$TOOLS_TAG" >> "$GITHUB_ENV"
+          if [ "$DRY_RUN" = "true" ]; then
+            # Nothing was pushed: retag the daemon-local image under a
+            # slash-free name the measurement probe accepts, and reference
+            # it everywhere below.
+            docker tag \
+              "ghcr.io/${IMAGE_OWNER}/wire-tools:${GITHUB_SHA}-tools" \
+              "wire-tools:${GITHUB_SHA}-rehearsal"
+            TOOLS_REF="wire-tools:${GITHUB_SHA}-rehearsal"
+            TOOLS_DIGEST="${BUILT_DIGEST:-unpublished}"
+            TOOLS_TAG="${GITHUB_SHA}-tools"
+          else
+            case "$BUILT_DIGEST" in sha256:*) ;; *) echo "invalid tools digest: $BUILT_DIGEST" >&2; exit 1 ;; esac
+            TOOLS_REF="ghcr.io/${IMAGE_OWNER}/wire-tools@${BUILT_DIGEST}"
+            TOOLS_TAG="${GITHUB_SHA}-tools"
+          fi
+          printf 'TOOLS_REF=%s\nTOOLS_DIGEST=%s\nTOOLS_TAG=%s\n' "$TOOLS_REF" "${TOOLS_DIGEST:-${TOOLS_REF##*@}}" "$TOOLS_TAG" >> "$GITHUB_ENV"
       - name: Generate tools SPDX SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         env:
-          SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: registry
+          # dry_run reads the just-built image from the local daemon.
+          SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: ${{ inputs.dry_run == true && 'docker' || 'registry' }}
           TMPDIR: ${{ runner.temp }}
           SYFT_FILE_METADATA_SELECTION: none
         with:
@@ -219,6 +248,7 @@ jobs:
           PY
       - name: Attest tools SBOM
         id: attest_sbom
+        if: inputs.dry_run != true
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/vibebb/wire-tools
@@ -246,9 +276,13 @@ jobs:
       - name: Verify published tools smoke
         env:
           TOOLS_REF: ${{ env.TOOLS_REF }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          docker pull "$TOOLS_REF"
+          # dry_run already holds the image in the local daemon.
+          if [ "$DRY_RUN" != "true" ]; then
+            docker pull "$TOOLS_REF"
+          fi
           docker run --rm --user wire \
             --volume "$RUNNER_TEMP/wire-smoke:/tmp/wire-smoke" "$TOOLS_REF" \
             python /opt/wire/scripts/e2e_authoring.py \
@@ -278,11 +312,14 @@ jobs:
         # digest. imagetools create copies the manifest server-side — no
         # re-push — so the provenance and SBOM attestations keep
         # referencing the same digest.
+        if: inputs.dry_run != true
         run: |
           docker buildx imagetools create \
             --tag "ghcr.io/${IMAGE_OWNER}/wire-tools:latest" \
             "$TOOLS_REF"
       - name: Update digest lock and merge PR
+        # dry_run stops at the summary: no lock PR, no post-merge dispatches.
+        if: inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
           ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
@@ -357,3 +394,16 @@ jobs:
             --title "Update wire image digest lock" --body "$body")
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
           bash scripts/publish_image_pin_pr.sh "$pr_url" "$branch" "" "ci.yml locked-image-check.yml workflow-lint.yml"
+      - name: Note dry-run skips
+        if: inputs.dry_run
+        run: |
+          {
+            echo "### dry-run rehearsal"
+            echo
+            echo "Built and gated the image without publishing. Skipped:"
+            echo "- registry push of the tools image tag"
+            echo "- SARIF upload to code scanning"
+            echo "- provenance and SBOM attestations"
+            echo "- :latest promotion"
+            echo "- digest-lock pull request and post-merge dispatches"
+          } >> "$GITHUB_STEP_SUMMARY"
