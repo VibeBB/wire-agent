@@ -1,11 +1,11 @@
-ARG UV_VERSION=0.12.22
-ARG UV_DIGEST=sha256:f513a91fc62fe7c17567eee97230dd198e43edb8a9fbecca843714a4358fe1bc
+ARG UV_VERSION=0.12.23
+ARG UV_DIGEST=sha256:61d393e44e249f2e4b526b6c7ddcecce245946826e608e11c93ad4f5bba55b21
 FROM ghcr.io/astral-sh/uv:${UV_VERSION}@${UV_DIGEST} AS uv
 
 FROM debian:13-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG UV_VERSION=0.12.22
+ARG UV_VERSION=0.12.23
 ARG IMAGE_REVISION=unknown
 
 # Fail the build when the left side of a verification pipe (curl|sha256sum)
@@ -49,13 +49,13 @@ RUN apt-get -o Acquire::Retries=5 update \
 # msgpack, and setuptools that nothing in the image invokes — dependencies
 # install via uv and the shipped venv is pip-less — so strip the payload
 # instead of shipping unused vulnerable vendored packages.
-RUN uv python install 3.12 \
+RUN uv python install 3.14 \
     && rm -rf /opt/uv-python/bin/pip* \
               /opt/uv-python/cpython-*/bin/pip* \
-              /opt/uv-python/cpython-*/lib/python3.12/site-packages/pip \
-              /opt/uv-python/cpython-*/lib/python3.12/site-packages/pip-*.dist-info \
-              /opt/uv-python/cpython-*/lib/python3.12/ensurepip \
-    && uv venv --python 3.12 /opt/wire/.venv
+              /opt/uv-python/cpython-*/lib/python3.14/site-packages/pip \
+              /opt/uv-python/cpython-*/lib/python3.14/site-packages/pip-*.dist-info \
+              /opt/uv-python/cpython-*/lib/python3.14/ensurepip \
+    && uv venv --python 3.14 /opt/wire/.venv
 
 COPY pyproject.toml uv.lock /opt/wire/
 COPY src /opt/wire/src
