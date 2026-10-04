@@ -48,6 +48,7 @@ DEPENDENCY_SURFACES = (
     "docker-arg",
     "docker-base",
     "git-clone",
+    "direct-download",
 )
 
 FetchJson = Callable[[str], Any]
@@ -415,6 +416,69 @@ def check_git_clones(
     return statuses
 
 
+_GH_DOWNLOAD = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/releases/download/(v?\d+\.\d+\.\d+)")
+_TRIVY_USES = re.compile(r"uses:\s*aquasecurity/(?:trivy-action|setup-trivy)@[0-9a-f]{40}")
+_TRIVY_VERSION = re.compile(r'^\s*version:\s*["\']?(v\d+\.\d+\.\d+)', re.MULTILINE)
+_STEP_START = re.compile(r"^\s*- (?:name|uses|run):", re.MULTILINE)
+
+
+def _trivy_pins(text: str) -> list[str]:
+    """`version:` inputs inside each aquasecurity trivy step's `with:` block."""
+    pins: list[str] = []
+    for match in _TRIVY_USES.finditer(text):
+        boundary = _STEP_START.search(text, match.end())
+        window = text[match.end() : boundary.start() if boundary else None]
+        version = _TRIVY_VERSION.search(window)
+        if version is not None:
+            pins.append(version.group(1))
+    return pins
+
+
+def check_workflow_downloads(
+    repo_root: Path, *, list_remote_tags: ListRemoteTags = _default_list_remote_tags
+) -> list[DependencyStatus]:
+    """Direct-download pins inside workflows that no `uses:` line tracks:
+    GitHub release-asset URLs (e.g. the actionlint tarball in
+    workflow-lint.yml) and trivy binaries installed via `version:` inputs
+    on aquasecurity actions."""
+    statuses: list[DependencyStatus] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(name: str, current: str, latest: str, source: str, outdated: bool) -> None:
+        if (name, current) in seen:
+            return
+        seen.add((name, current))
+        statuses.append(
+            DependencyStatus(
+                "direct-download",
+                name,
+                current,
+                latest or "?",
+                source,
+                outdated,
+                "" if latest else "fetch failed",
+                fetch_failed=not latest,
+            )
+        )
+
+    for workflow in workflow_files(repo_root):
+        text = workflow.read_text(encoding="utf-8")
+        source = f".github/workflows/{workflow.name}"
+        for repo, tag in _GH_DOWNLOAD.findall(text):
+            latest = _github_latest_tag(repo, list_remote_tags)
+            add(repo, tag, latest, source, bool(latest) and latest != tag)
+        for version in _trivy_pins(text):
+            latest = _github_latest_tag("aquasecurity/trivy", list_remote_tags)
+            add(
+                "aquasecurity/trivy",
+                version,
+                latest,
+                source,
+                bool(latest) and latest.lstrip("v") != version.lstrip("v"),
+            )
+    return statuses
+
+
 _DOCKER_ARG = re.compile(r"^ARG\s+([A-Z_]+)=([^\s#]+)", re.MULTILINE)
 _DOCKER_FROM = re.compile(r"^FROM\s+([^\s:@]+)(?::([^\s@]+))?", re.MULTILINE)
 _DOCKERFILES = ["wire-tools.Dockerfile"]
@@ -603,15 +667,28 @@ def check_python_versions(
         values.append((args["PYTHON_VERSION"], _DOCKERFILES[0]))
     for dockerfile in _DOCKERFILES:
         path = repo_root / "docker" / dockerfile
-        if path.is_file():
-            for minor in re.findall(
-                r"uv\s+python\s+install\s+(\d+\.\d+)", path.read_text(encoding="utf-8")
-            ):
-                values.append((minor, dockerfile))
-    ci = repo_root / ".github" / "workflows" / "ci.yml"
-    if ci.is_file():
-        for minor in re.findall(r'"3\.(\d+)"', ci.read_text(encoding="utf-8")):
-            values.append((f"3.{minor}", "ci.yml"))
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for minor in re.findall(r"uv\s+python\s+install\s+(\d+\.\d+)", text):
+            values.append((minor, dockerfile))
+        for minor in re.findall(r"uv\s+venv\s+--python\s+(\d+\.\d+)", text):
+            values.append((minor, dockerfile))
+        for minor in re.findall(r"python3\.(\d+)", text):
+            values.append((f"3.{minor}", dockerfile))
+    dotfile = repo_root / ".python-version"
+    if dotfile.is_file():
+        match = re.search(r"(\d+\.\d+)", dotfile.read_text(encoding="utf-8"))
+        if match is not None:
+            values.append((match.group(1), ".python-version"))
+    for workflow in workflow_files(repo_root):
+        text = workflow.read_text(encoding="utf-8")
+        # Quoted "3.x" strings catch matrix entries and scalar pins alike;
+        # the unquoted pattern covers `python-version: 3.x` inputs.
+        minors = {f"3.{minor}" for minor in re.findall(r'"3\.(\d+)"', text)}
+        minors.update(re.findall(r"python-version:\s*(\d+\.\d+)", text))
+        for minor in sorted(minors):
+            values.append((minor, workflow.name))
     tags = list_remote_tags("https://github.com/python/cpython")
     stable_minors = sorted(
         {
@@ -737,6 +814,7 @@ def check_dependency_updates(
         *check_github_actions(repo_root, list_remote_tags=cached_tags),
         *check_docker_args(repo_root, list_remote_tags=cached_tags, final_url=final_url),
         *check_git_clones(repo_root, list_remote_tags=cached_tags),
+        *check_workflow_downloads(repo_root, list_remote_tags=cached_tags),
         *check_docker_base(repo_root, fetch_json=fetch_json),
         *check_python_versions(repo_root, list_remote_tags=cached_tags),
     ]
@@ -753,6 +831,7 @@ def render_markdown(statuses: list[DependencyStatus]) -> str:
         "docker-arg": "Docker ARG",
         "docker-base": "Docker base image",
         "git-clone": "Workflow git clones",
+        "direct-download": "Direct-download tool pins in workflows",
     }
     lines = ["# Dependency update check report", ""]
     for surface, label in labels.items():

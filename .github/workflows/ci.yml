@@ -64,10 +64,16 @@ jobs:
   verify:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    # The 3.15 leg is a forward-compatibility canary ahead of the 2026-10-09
+    # stable release: it must not fail the job while CPython is in rc.
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
+        include:
+          - python-version: "3.15"
+            experimental: true
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -80,8 +86,8 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
-          # The 3.12 and 3.13 matrix legs save uv caches concurrently; a
-          # distinct suffix per leg avoids "Unable to reserve cache" races.
+          # The matrix legs save uv caches concurrently; a distinct suffix
+          # per leg avoids "Unable to reserve cache" races.
           cache-suffix: verify-${{ matrix.python-version }}
       - name: Sync dependencies
         run: uv sync --locked
@@ -104,7 +110,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache-suffix: e2e
       - name: Sync dependencies
         run: uv sync --locked
@@ -163,7 +169,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache-suffix: plugin-load
       - name: Sync dependencies
         run: uv sync --locked --group sdk-check
