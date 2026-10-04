@@ -117,6 +117,20 @@ approve_gated_runs() {
   done <<< "$run_ids"
 }
 
+workflow_already_covers_head() {
+  local workflow=$1 head_sha count
+  # A lock-branch PR triggers pull_request runs on its own head SHA; a
+  # manual dispatch of the same workflow on the same head is a duplicate.
+  head_sha=$(retry gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+    --json headRefOid --jq '.headRefOid' 2>/dev/null || true)
+  [ -n "$head_sha" ] || return 1
+  count=$(retry gh api \
+    "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?event=pull_request&branch=${BRANCH}&per_page=20" \
+    --jq "[.workflow_runs[] | select(.head_sha==\"${head_sha}\")] | length" \
+    2>/dev/null || true)
+  [ "${count:-0}" -gt 0 ] 2>/dev/null
+}
+
 dispatch_pin_workflow() {
   local workflow=$1
   local -a command=(gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$BRANCH")
@@ -124,6 +138,10 @@ dispatch_pin_workflow() {
     command+=(-f "base_sha=$BASE_SHA")
   fi
   check_pin_pr_state
+  if workflow_already_covers_head "$workflow"; then
+    write_summary "${workflow} pull_request run already covers the pin PR head SHA; skipping duplicate dispatch."
+    return 0
+  fi
   if retry "${command[@]}"; then
     return 0
   fi
@@ -195,32 +213,26 @@ arm_auto_merge() {
 check_pin_pr_state
 
 # pull_request runs satisfy the required checks and always fire on the
-# token-created PR; dispatched runs exercise the same head SHA but never
-# satisfy required checks, so dispatching unconditionally duplicates CI
-# and lint on every pin PR. Wait briefly for the pull_request runs to
-# appear; dispatch only as a fallback for environments where the event
-# does not self-trigger.
-pr_runs_seen=false
+# token-created PR; a manual dispatch of the same workflow on the same
+# head SHA is a duplicate. Wait briefly for the pull_request runs to
+# register, then let each workflow's dispatch re-check coverage on the
+# head SHA itself before deciding to fire.
 for ((attempt = 1; attempt <= PR_RUN_WAIT_ATTEMPTS; attempt++)); do
   check_pin_pr_state
   run_count=$(retry gh run list --repo "$GITHUB_REPOSITORY" --branch "$BRANCH" \
     --event pull_request --limit 20 --json databaseId --jq 'length' || printf '0\n')
   run_count=${run_count:-0}
   if [ "$run_count" -gt 0 ]; then
-    pr_runs_seen=true
+    write_summary "pull_request checks are running on ${BRANCH}."
     break
   fi
   if [ "$attempt" -lt "$PR_RUN_WAIT_ATTEMPTS" ]; then
     sleep "$PR_RUN_WAIT_SECONDS"
   fi
 done
-if [ "$pr_runs_seen" = true ]; then
-  write_summary "pull_request checks are running on ${BRANCH}; skipping duplicate ci.yml/workflow-lint.yml dispatches."
-else
-  for workflow in ci.yml workflow-lint.yml; do
-    dispatch_pin_workflow "$workflow"
-  done
-fi
+for workflow in ci.yml workflow-lint.yml; do
+  dispatch_pin_workflow "$workflow"
+done
 
 checks_complete=false
 for ((attempt = 1; attempt <= REQUIRED_WAIT_ATTEMPTS; attempt++)); do
