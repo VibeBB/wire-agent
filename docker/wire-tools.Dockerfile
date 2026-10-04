@@ -55,6 +55,7 @@ RUN uv python install 3.14 \
               /opt/uv-python/cpython-*/lib/python3.*/site-packages/pip \
               /opt/uv-python/cpython-*/lib/python3.*/site-packages/pip-*.dist-info \
               /opt/uv-python/cpython-*/lib/python3.*/ensurepip \
+              /root/.cache/uv \
     && uv venv --python 3.14 /opt/wire/.venv
 
 COPY pyproject.toml uv.lock /opt/wire/
