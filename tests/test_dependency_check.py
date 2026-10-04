@@ -17,6 +17,7 @@ from scripts.check_dependency_updates import (
     apply_deferrals,
     check_docker_args,
     check_git_clones,
+    check_workflow_downloads,
     dependency_names,
     docker_arg_pins,
     docker_base_image,
@@ -141,7 +142,7 @@ def test_apply_deferrals_marks_matching_outdated(tmp_path: Path):
     assert "test" in statuses[0].note
 
 
-def test_workflow_tool_pins_deduplicated(monkeypatch: pytest.MonkeyPatch):
+def test_workflow_tool_pins_deduplicated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     def fetch_json(url: str) -> object:
         return {"info": {"version": "1.30.1"}}
 
@@ -150,14 +151,126 @@ def test_workflow_tool_pins_deduplicated(monkeypatch: pytest.MonkeyPatch):
         "_default_fetch_json",
         fetch_json,
     )
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "lint.yml").write_text(
+        "      - run: uvx zizmor@1.30.1 .github/workflows\n"
+        "      - run: uvx zizmor@1.30.1 .github/workflows\n",
+        encoding="utf-8",
+    )
     statuses = check_dependency_updates_module.check_github_actions(
-        ROOT, list_remote_tags=lambda url: []
+        tmp_path, list_remote_tags=lambda url: []
     )
     zizmor = [s for s in statuses if s.surface == "pypi-uvx" and s.name == "zizmor"]
     assert len(zizmor) == 1
     assert zizmor[0].current == "1.30.1"
     assert zizmor[0].latest == "1.30.1"
     assert zizmor[0].outdated is False
+
+
+def test_repo_workflows_cover_all_pinned_external_sources():
+    actions = {
+        status.name
+        for status in check_dependency_updates_module.check_github_actions(
+            ROOT, list_remote_tags=lambda url: ["v1.0.0"]
+        )
+    }
+    downloads = {
+        status.name
+        for status in check_workflow_downloads(
+            ROOT,
+            fetch_json=lambda url: {"info": {"version": "1.30.1"}},
+            list_remote_tags=lambda url: ["v1.0.0"],
+        )
+    }
+    assert "github/codeql-action/upload-sarif" in actions
+    assert {
+        "rhysd/actionlint",
+        "zizmor",
+        "aquasecurity/trivy",
+        "actionlint download checksum",
+        "zizmor download checksum",
+    } <= downloads
+
+
+def test_subpath_action_pins_track_the_parent_repo(tmp_path: Path):
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "lint.yml").write_text(
+        "steps:\n"
+        "  - uses: github/codeql-action/upload-sarif@"
+        "2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2\n",
+        encoding="utf-8",
+    )
+    seen: list[str] = []
+
+    def remote_tags(url: str) -> list[str]:
+        seen.append(url)
+        return ["v4.38.2"]
+
+    statuses = check_dependency_updates_module.check_github_actions(
+        tmp_path, list_remote_tags=remote_tags
+    )
+
+    pin = next(status for status in statuses if status.name == "github/codeql-action/upload-sarif")
+    assert pin.current == "v4.38.2"
+    assert pin.latest == "v4.38.2"
+    assert not pin.outdated
+    assert seen == ["https://github.com/github/codeql-action"]
+
+
+def test_workflow_download_pins_and_checksums(tmp_path: Path):
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "lint.yml").write_text(
+        'tarball="actionlint_1.7.12_linux_amd64.tar.gz"\n'
+        'curl "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$tarball"\n'
+        'echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+        '  $RUNNER_TEMP/$tarball" | sha256sum -c -\n'
+        'wheel="zizmor-1.30.1-py3-none-manylinux_2_28_x86_64.whl"\n'
+        'echo "eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e'
+        '  $RUNNER_TEMP/$wheel" | sha256sum -c -\n'
+        "      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25\n"
+        "        with:\n"
+        "          version: v0.75.0\n",
+        encoding="utf-8",
+    )
+
+    statuses = check_workflow_downloads(
+        tmp_path,
+        fetch_json=lambda url: {"info": {"version": "99.0.0"}},
+        list_remote_tags=lambda url: ["v99.0.0"],
+    )
+
+    by_name = {status.name: status for status in statuses}
+    assert by_name["rhysd/actionlint"].current == "v1.7.12"
+    assert by_name["rhysd/actionlint"].outdated is True
+    assert by_name["zizmor"].current == "1.30.1"
+    assert by_name["zizmor"].latest == "99.0.0"
+    assert by_name["aquasecurity/trivy"].current == "v0.75.0"
+    assert by_name["aquasecurity/trivy"].outdated is True
+    assert by_name["actionlint download checksum"].outdated is False
+    assert by_name["zizmor download checksum"].outdated is False
+
+
+def test_workflow_download_checksum_must_be_sha256(tmp_path: Path):
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "lint.yml").write_text(
+        'tarball="actionlint_1.7.12_linux_amd64.tar.gz"\n'
+        'echo "deadbeef  $RUNNER_TEMP/$tarball" | sha256sum -c -\n',
+        encoding="utf-8",
+    )
+
+    statuses = check_workflow_downloads(
+        tmp_path,
+        fetch_json=lambda url: {"info": {"version": "1.0.0"}},
+        list_remote_tags=lambda url: [],
+    )
+
+    checksum = next(status for status in statuses if status.name.endswith("checksum"))
+    assert checksum.outdated is True
+    assert checksum.latest == "invalid"
 
 
 def test_github_latest_tag_treats_timeout_as_fetch_failure():
@@ -236,6 +349,9 @@ def test_fetch_failures_are_unknown_and_counted(
         *check_dependency_updates_module.check_pypi(ROOT, fetch_json=failed_json),
         *check_dependency_updates_module.check_uv_pin(ROOT, fetch_json=failed_json),
         *check_dependency_updates_module.check_github_actions(ROOT, list_remote_tags=failed_tags),
+        *check_dependency_updates_module.check_workflow_downloads(
+            ROOT, fetch_json=failed_json, list_remote_tags=failed_tags
+        ),
         *check_dependency_updates_module.check_docker_args(ROOT, list_remote_tags=failed_tags),
         *check_dependency_updates_module.check_docker_base(ROOT, fetch_json=failed_json),
     ]
@@ -247,6 +363,7 @@ def test_fetch_failures_are_unknown_and_counted(
         "pypi",
         "uv-pin",
         "github-actions",
+        "workflow-download",
         "docker-arg",
         "docker-base",
     } <= {status.surface for status in unknown}
