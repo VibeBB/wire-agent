@@ -158,7 +158,7 @@ Digest-lock PRs use `scripts/publish_image_pin_pr.sh`: checks on the lock
 branch are pull_request-primary — the publisher polls for
 `pull_request`-triggered runs for ~3 minutes and only falls back to
 dispatching `ci.yml` and `workflow-lint.yml` when none appear. It then
-polls the authoritative required-check set for up to 30 minutes. Non-required
+polls the authoritative required-check set for up to 15 minutes. Non-required
 failures do not block publishing; a concluded required-check failure or a PR
 closed without merge fails the job. A PR merged externally triggers the
 existing post-merge main workflows. If required checks are still pending at
