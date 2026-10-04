@@ -51,6 +51,14 @@ The weekly `check-dependency-updates` workflow reports candidates to a
 "Dependency update check report" issue; deferrals are recorded with reason
 and re-check deadline in `scripts/dependency_update_deferrals.json`. Fetch
 failures are reported as unknown and keep the issue open until they resolve.
+The checker covers: PyPI direct/dev pins against `uv.lock`, lock-file
+transitive drift, the uv required-version, GitHub Actions `uses:` SHA pins
+(including subpath actions such as `github/codeql-action/upload-sarif`,
+which share the parent repo's tags), `uvx` tool pins, direct-download pins
+inside workflows (the actionlint release tarball version + sha256, the
+sha256-verified zizmor wheel, and `version:` inputs on aquasecurity
+actions), Dockerfile ARG pins, the Docker base image tag, in-workflow
+`git clone --branch` pins, and the CPython minor line.
 
 ## Vision support
 
@@ -242,17 +250,28 @@ Three layers were adopted after a comparative evaluation of Lynis,
   CIS compliance report, runs an informational in-image Lynis 3.1.7
   audit (cloned at tag `3.1.7` then checked out detached at the pinned
   commit `2e99f92265760b73fd6b139868eb8d4116624030`), aggregates
-  `container-hardening.json` (artifact), and
-  edits/creates a "Container hardening report" issue. The issue closes
-  automatically when fixable HIGH/CRITICAL findings reach zero. The
-  Lynis Hardening Index is recorded as a trend metric only — its
-  denominator shifts with container-skipped tests, so it never gates.
-  The CIS aggregator walks `Results` recursively for `MisconfSummary`
-  nodes and fails the step when zero checks were evaluated, so dead
-  telemetry cannot masquerade as coverage. All scans share a weekly
-  `actions/cache` Trivy DB (`TRIVY_CACHE_DIR` under `$RUNNER_TEMP`),
-  and the full scan skips vendored `boto3`/`googleapiclient` data files
-  that produced ~620 zero-failure misconfig targets.
+  `container-hardening.json` (artifact), and maintains a persistent
+  "Container hardening report" issue edited in place (`--state all`
+  lookup so the newest open *or* closed issue is reused). A new issue
+  is created only when the gate has fixable HIGH/CRITICAL findings to
+  track; an open issue closes when the gate reaches zero and a closed
+  one reopens if they return — a green run with no existing issue
+  writes nothing, so it never does the create+close dance. A
+  `workflow_dispatch` `dry_run` input runs every scan and the report
+  while skipping the issue write. The report tracks the unfixed
+  CRITICAL/HIGH counts so the accepted exposure is visible between
+  weekly runs. The Lynis Hardening Index is recorded as a trend metric
+  only — its denominator shifts with container-skipped tests, so it
+  never gates. The CIS aggregator (`scripts/container_hardening_report.py`)
+  walks `Results` recursively for `MisconfSummary` nodes and fails the
+  step when zero checks were evaluated, so dead telemetry cannot
+  masquerade as coverage; the scan itself retries once keyed on that
+  payload check rather than the exit code. All scans share a weekly
+  `actions/cache` Trivy DB keyed `cache-trivy-<ISO year>-W<week>`
+  (`TRIVY_CACHE_DIR` under `$RUNNER_TEMP`); this job owns the save and
+  `publish-wire-images.yml` restores the same key read-only. The full
+  scan skips vendored `boto3`/`googleapiclient` data files that produced
+  ~620 zero-failure misconfig targets.
 
 Not adopted, with reasons: `lynis audit dockerfile` (~6 greps, frozen
 since 2018, subset of hadolint, hardening index always 1);
@@ -316,15 +335,21 @@ Check triggers on the lock branch are pull_request-primary: token-created
 `bot/update-image-digests-*` pull requests do fire `pull_request` runs
 in this repository, so the publisher polls `gh run list --event
 pull_request` for ~3 minutes (`PUBLISH_PIN_PR_RUN_WAIT_ATTEMPTS` ×
-`PUBLISH_PIN_PR_RUN_WAIT_SECONDS`) and only falls back to explicit
-`workflow_dispatch` of `ci.yml` and `workflow-lint.yml` when no
-pull_request run appears — avoiding the previous double CI+lint per pin
-PR. On a dispatch `422 No ref found` the script re-checks the PR state:
-`MERGED`/`CLOSED` means the create→dispatch race resolved itself and is
-tolerated. After a successful merge the publisher (and the 6-hourly
-`digest-lock-sweep.yml`) dispatches `ci.yml` and `locked-image-check.yml`
-on main for post-merge verification, since a token merge does not itself
-fire push workflows.
+`PUBLISH_PIN_PR_RUN_WAIT_SECONDS`) and then re-checks, per workflow,
+whether a pull_request run already covers the pin PR's head SHA before
+falling back to explicit `workflow_dispatch` of `ci.yml` and
+`workflow-lint.yml` — a dispatch of a run already covering the head is a
+duplicate and is skipped. On a dispatch `422 No ref found` the script
+re-checks the PR state: `MERGED`/`CLOSED` means the create→dispatch race
+resolved itself and is tolerated. After a successful merge the publisher
+(and the 6-hourly `digest-lock-sweep.yml` — which also backfills merges
+that landed via armed auto-merge after the publisher exited, since a
+token merge does not fire push workflows) dispatches `ci.yml`,
+`locked-image-check.yml`, and `workflow-lint.yml` on main for post-merge
+verification. `locked-image-check.yml` additionally runs on pull requests
+that touch `docker/image-digests.json` or the plugin tools pin, so its
+schema validation, attestation verification, image pull, smoke, and the
+`:latest`-vs-locked-digest drift assertion all gate the pin PR itself.
 
 SPDX generation prefers the GHCR registry source, writes temporary data under
 the runner's temporary directory, and disables file metadata. The publisher

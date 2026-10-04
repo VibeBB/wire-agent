@@ -22,11 +22,15 @@ set -eu
 printf '%s\\n' "$*" >> "$GH_STUB_CALLS"
 case "$1 $2" in
   "pr view")
-    case "$GH_STUB_CASE" in
-      merged) printf 'MERGED\\n' ;;
-      closed) printf 'CLOSED\\n' ;;
-      *) printf 'OPEN\\n' ;;
-    esac
+    if [[ "$*" == *"headRefOid"* ]]; then
+      printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\\n'
+    else
+      case "$GH_STUB_CASE" in
+        merged) printf 'MERGED\\n' ;;
+        closed) printf 'CLOSED\\n' ;;
+        *) printf 'OPEN\\n' ;;
+      esac
+    fi
     ;;
   "workflow run")
     ;;
@@ -83,7 +87,12 @@ case "$1 $2" in
   "pr merge")
     ;;
   api\\ *)
-    if [[ "$*" == *"-X POST"*"/approve"* ]]; then
+    if [[ "$*" == *"/runs?"* ]]; then
+      case "$GH_STUB_CASE" in
+        covers-head) printf '1\\n' ;;
+        *) printf '0\\n' ;;
+      esac
+    elif [[ "$*" == *"-X POST"*"/approve"* ]]; then
       printf 'approval response noise\\n'
     else
       printf '77\\n'
@@ -97,6 +106,8 @@ esac
     summary = tmp_path / "summary.md"
     calls = tmp_path / "calls.log"
     env = os.environ.copy()
+    env.pop("BASH_ENV", None)
+    env = {k: v for k, v in env.items() if not k.startswith("BASH_FUNC_gh")}
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
@@ -175,7 +186,25 @@ def test_pin_pr_state_and_required_checks(
         assert "--auto --squash --delete-branch" not in call_log
 
 
-def test_pull_request_runs_skip_duplicate_dispatch(
+def test_pull_request_run_covering_head_skips_duplicate_dispatch(
+    publish_pin_pr: tuple[Path, dict[str, str], Path],
+    tmp_path: Path,
+) -> None:
+    script, env, calls = publish_pin_pr
+    env["GH_STUB_CASE"] = "covers-head"
+
+    result = run_helper(script, env)
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    call_log = calls.read_text(encoding="utf-8")
+
+    assert result.returncode == 0
+    assert "/runs?event=pull_request&branch=" in call_log
+    assert f"workflow run ci.yml --repo {REPOSITORY} --ref {BRANCH}" not in call_log
+    assert f"workflow run workflow-lint.yml --repo {REPOSITORY} --ref {BRANCH}" not in call_log
+    assert "already covers the pin PR head SHA; skipping duplicate dispatch" in summary
+
+
+def test_pull_request_runs_seen_writes_summary_and_still_checks_head(
     publish_pin_pr: tuple[Path, dict[str, str], Path],
     tmp_path: Path,
 ) -> None:
@@ -187,9 +216,11 @@ def test_pull_request_runs_skip_duplicate_dispatch(
     call_log = calls.read_text(encoding="utf-8")
 
     assert result.returncode == 0
-    assert "skipping duplicate" in summary
-    assert f"workflow run ci.yml --repo {REPOSITORY} --ref {BRANCH}" not in call_log
     assert "--event pull_request" in call_log
+    assert "pull_request checks are running" in summary
+    # Head-SHA coverage is still re-checked per workflow before dispatch;
+    # with coverage absent the dispatch proceeds.
+    assert f"workflow run ci.yml --repo {REPOSITORY} --ref {BRANCH}" in call_log
 
 
 def test_unreported_checks_transition_to_green_json(
