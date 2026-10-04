@@ -129,7 +129,10 @@ jobs:
       - name: Author example harness
         run: |
           mkdir -p dist/samples
-          uv run python scripts/e2e_authoring.py \
+          # drawio-desktop + xvfb only exist inside the pinned wire-tools
+          # image, so authoring runs in the locked container (same path as
+          # locked-image-check) with the checkout bind-mounted.
+          python3 scripts/run_in_locked_image.py -- python3 scripts/e2e_authoring.py \
             --contract examples/sensor-harness/sensor-harness.contract.json \
             --out dist/samples/sensor-harness
       - name: Build release zips
