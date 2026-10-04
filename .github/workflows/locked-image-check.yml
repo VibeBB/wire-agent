@@ -3,6 +3,10 @@ name: Locked image check
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - docker/image-digests.json
+      - plugins/wire/skills/wire-workflow/tools-image.json
   schedule:
     - cron: "40 0 * * 1"
   workflow_dispatch:
@@ -120,6 +124,7 @@ jobs:
           gh attestation verify "oci://${IMAGE}@${DIGEST}" \
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml"
+          echo "- provenance attestation verified: \`${IMAGE}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Warn that tools image has no SBOM attestation metadata
         if: needs.check-lock.outputs.sbom_attestation == ''
         run: echo "::warning::wire_tools image lock has no SBOM attestation metadata; skipping SBOM verification."
@@ -134,9 +139,32 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml" \
             --predicate-type https://spdx.dev/Document/v2.3
+          echo "- SBOM attestation verified: \`${IMAGE}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
       - run: uv run python scripts/pull_locked_image.py --entry wire_tools
       - id: image
         run: echo "ref=$(uv run python scripts/print_locked_image.py --entry wire_tools)" >> "$GITHUB_OUTPUT"
+      - name: Assert :latest tag resolves to the locked digest
+        env:
+          IMAGE: ${{ needs.check-lock.outputs.image }}
+          DIGEST: ${{ needs.check-lock.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # The mutable :latest tag is the only drift surface left after
+          # promote-by-tag: a failed promote leaves it pointing at a stale
+          # digest while every pinned check stays green. Retry briefly so
+          # GHCR propagation right after a promote cannot false-positive.
+          latest=""
+          for attempt in 1 2 3; do
+            latest=$(docker buildx imagetools inspect "${IMAGE}:latest" \
+              --format '{{json .Manifest.Digest}}' | tr -d '"') || latest=""
+            if [ "$latest" = "$DIGEST" ]; then
+              echo "- \`${IMAGE}:latest\` resolves to the locked digest \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 20))
+          done
+          echo "::error::${IMAGE}:latest resolves to ${latest:-<unreadable>}, not the locked digest ${DIGEST}."
+          exit 1
       - name: Prepare smoke output
         run: |
           mkdir -p "$RUNNER_TEMP/wire-smoke"
