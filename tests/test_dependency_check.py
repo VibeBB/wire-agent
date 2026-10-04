@@ -47,7 +47,7 @@ def test_lock_versions_cover_direct_deps():
 
 
 def test_uv_pin_parsed():
-    assert uv_version_pin(ROOT) == "==0.12.22"
+    assert uv_version_pin(ROOT) == "==0.12.23"
 
 
 def test_workflow_files_have_expected_suffixes():
@@ -57,7 +57,7 @@ def test_workflow_files_have_expected_suffixes():
 
 def test_docker_arg_pins_parsed():
     args = docker_arg_pins(ROOT)
-    assert args["UV_VERSION"] == "0.12.22"
+    assert args["UV_VERSION"] == "0.12.23"
 
 
 def test_docker_arg_matches_uv_pin():
@@ -273,6 +273,33 @@ def test_workflow_download_checksum_must_be_sha256(tmp_path: Path):
     assert checksum.latest == "invalid"
 
 
+def test_workflow_downloads_cover_actionlint_and_trivy():
+    def tags(url: str) -> list[str]:
+        if "actionlint" in url:
+            return ["v1.7.12"]
+        if "trivy" in url:
+            return ["v0.75.0"]
+        return []
+
+    statuses = check_dependency_updates_module.check_workflow_downloads(ROOT, list_remote_tags=tags)
+    by_name = {status.name: status for status in statuses}
+    actionlint = by_name["rhysd/actionlint"]
+    assert actionlint.surface == "direct-download"
+    assert actionlint.current == "v1.7.12"
+    assert actionlint.latest == "v1.7.12"
+    assert actionlint.outdated is False
+    trivy = by_name["aquasecurity/trivy"]
+    assert trivy.current == "v0.75.0"
+    assert trivy.outdated is False
+
+    outdated = check_dependency_updates_module.check_workflow_downloads(
+        ROOT, list_remote_tags=lambda url: ["v9.9.9"]
+    )
+    tracked = {s.name: s for s in outdated}
+    assert tracked["rhysd/actionlint"].outdated is True
+    assert tracked["aquasecurity/trivy"].outdated is True
+
+
 def test_github_latest_tag_treats_timeout_as_fetch_failure():
     def timed_out(url: str) -> list[str]:
         raise subprocess.TimeoutExpired(["git", "ls-remote", "--tags", url], 1)
@@ -309,7 +336,7 @@ def test_docker_args_release_source_fetch_failed():
         raise OSError(url)
 
     def tags(url: str) -> list[str]:
-        return ["0.12.22"]
+        return ["0.12.23"]
 
     statuses = check_docker_args(ROOT, list_remote_tags=tags, final_url=failed_url)
     drawio = next(status for status in statuses if status.name == "DRAWIO_DESKTOP_VERSION")
@@ -363,7 +390,7 @@ def test_fetch_failures_are_unknown_and_counted(
         "pypi",
         "uv-pin",
         "github-actions",
-        "workflow-download",
+        "direct-download",
         "docker-arg",
         "docker-base",
     } <= {status.surface for status in unknown}

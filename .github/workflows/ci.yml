@@ -67,7 +67,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
+        include:
+          # Forward-compatibility canary ahead of the 2026-10-09 stable
+          # release: step-level continue-on-error keeps the leg green while
+          # the last step reports the failure as an annotation.
+          - python-version: "3.15"
+            experimental: true
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -80,13 +86,21 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
-          # The 3.12 and 3.13 matrix legs save uv caches concurrently; a
-          # distinct suffix per leg avoids "Unable to reserve cache" races.
+          # The matrix legs save uv caches concurrently; a distinct suffix
+          # per leg avoids "Unable to reserve cache" races.
           cache-suffix: verify-${{ matrix.python-version }}
       - name: Sync dependencies
+        id: sync
+        continue-on-error: ${{ matrix.experimental || false }}
         run: uv sync --locked
       - name: Verify fast stage
+        id: fast
+        continue-on-error: ${{ matrix.experimental || false }}
         run: uv run python scripts/verify_all.py --stage fast
+      - name: Report 3.15 canary outcome
+        if: matrix.experimental && (steps.sync.outcome == 'failure' || steps.fast.outcome == 'failure')
+        run: |
+          echo "::warning::Python 3.15 canary leg failed (sync=${{ steps.sync.outcome }}, verify=${{ steps.fast.outcome }}) — forward-compat signal, not a gate failure"
 
   e2e:
     needs: changes
@@ -104,7 +118,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache-suffix: e2e
       - name: Sync dependencies
         run: uv sync --locked
@@ -163,7 +177,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache-suffix: plugin-load
       - name: Sync dependencies
         run: uv sync --locked --group sdk-check

@@ -36,9 +36,11 @@ via `uv export --no-dev`.
 
 | Tool | Pin | Where |
 | --- | --- | --- |
-| uv | `==0.12.22` | `[tool.uv] required-version` |
-| Python | `>=3.12`, CI matrix 3.12/3.13 | pyproject `requires-python` |
-| zizmor | `1.30.1` (uvx pin) | `workflow-lint.yml` |
+| uv | `==0.12.23` | `[tool.uv] required-version` |
+| Python | `>=3.12`, CI matrix 3.12/3.13/3.14 (+3.15 canary leg) | pyproject `requires-python` |
+| zizmor | `1.30.1` (sha256-verified wheel) | `workflow-lint.yml` |
+| actionlint | `v1.7.12` (sha256-verified tarball) | `workflow-lint.yml` |
+| trivy | `v0.75.0` (`version:` input) | `container-audit.yml`, `publish-wire-images.yml` |
 
 ## GitHub Actions pins
 
@@ -57,8 +59,8 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 | Item | Pin | Where |
 | --- | --- | --- |
 | debian base image | `13-slim` | `docker/wire-tools.Dockerfile` `FROM` |
-| uv | `0.12.22` | `docker/wire-tools.Dockerfile` `ARG UV_VERSION` (must equal `[tool.uv] required-version`) |
-| Python in image | `3.12` | `uv python install` inside the Dockerfile |
+| uv | `0.12.23` | `docker/wire-tools.Dockerfile` `ARG UV_VERSION` (must equal `[tool.uv] required-version`) |
+| Python in image | `3.14` | `uv python install` inside the Dockerfile |
 
 ## Workflow git clone pins
 
@@ -83,6 +85,13 @@ highest semver tag, so a new Lynis release surfaces in the weekly report.
   the newest Ubuntu `YY.04` LTS tag).
 - Workflow `git clone --branch` pins (e.g. CISOfy/lynis in
   `container-audit.yml`) against the upstream repo's latest semver tag.
+- Direct-download tool pins in workflows: GitHub `releases/download` URLs
+  (e.g. the actionlint tarball) and trivy `version:` inputs on
+  aquasecurity actions, against the upstream repo's latest semver tag.
+- Python minor pins: pyproject `requires-python`, Dockerfile
+  `uv python install` / `uv venv --python` / `python3.X` pins,
+  `.python-version`, and `python-version` pins in every workflow, against
+  the latest stable CPython minor.
 
 The weekly workflow posts the report to the "Dependency update check
 report" issue. Deferred candidates are recorded in
