@@ -339,7 +339,7 @@ insights are available in the GitHub Actions job summary.
 
 ## Digest-lock PR verification
 
-The publisher polls the authoritative required-check set for up to 30 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge.
+The publisher polls the authoritative required-check set for up to 15 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge.
 
 Check triggers on the lock branch are pull_request-primary: token-created
 `bot/update-image-digests-*` pull requests do fire `pull_request` runs
