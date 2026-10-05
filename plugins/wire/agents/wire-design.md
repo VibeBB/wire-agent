@@ -57,10 +57,19 @@ You are the wire harness authoring sub-agent. Input: a valid
 3. If a check reports `unknown`, treat it as a failure to resolve (missing
    declaration, unreadable artifact), not as a pass.
 
+4. `wire_author` renders `harness-diagram.png` (and `route-plan.png` when
+   imported mech anchors carry `position_mm`) and returns them inline;
+   look at each one and record a `wire_record_vision_review` for it.
+   `route_geometry` fails when a route is shorter than the straight-line
+   path through its anchors; `import_freshness` fails when an imported
+   source file changed since `wire_import` — re-import it rather than
+   editing the hash.
+
 Iterate until `verdict` is `pass` or you can name the exact blocking check
 and why it cannot pass with the current requirements — then hand that back
 to the orchestrator instead of weakening a limit. Never edit
 `wire-list.csv`, `cut-table.csv`, `bom.*`, `harness-diagram.drawio.svg`,
+`route-plan.*`,
 `manifest.json`, `provenance.json`, or `design-report.*` directly; they are
 projections of the contract. Report the final verdict and the artifact
 directory verbatim.
@@ -69,6 +78,8 @@ directory verbatim.
 
 Record these without being asked; the Stop hook refuses to finish a
 session that still owes them (see `docs/records-protocol.md`).
+
+Use stage `design`. Typical decisions: each contract repair for a failing gate (gauge, route length or split, segregation, connector rating) with the measured value and limit it answers.
 
 - **Decision** (`wire_record_decision`) for every non-trivial choice:
   the question, the first principles / physical laws / standards it rests

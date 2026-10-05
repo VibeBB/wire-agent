@@ -12,13 +12,14 @@ import csv
 import hashlib
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .contract import (
     HarnessContract,
 )
+from .workspace import workspace_root
 
 CONNECTIVITY_SYSTEMS = ("circuit", "csv", "kbl", "vec")
 
@@ -96,6 +97,34 @@ def load_envelope_source(path: Path) -> EnvelopeSource:
     return EnvelopeSource.model_validate(value)
 
 
+def source_ref(source_path: Path) -> str:
+    """Workspace-relative ref when the source lives in the workspace, else absolute."""
+    resolved = source_path.resolve()
+    root = workspace_root()
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def resolve_source_ref(ref: str) -> Path:
+    path = Path(ref)
+    return path if path.is_absolute() else workspace_root() / path
+
+
+def _upsert_source(data: dict[str, Any], entry: dict[str, Any]) -> str:
+    """Replace the entry for the same (system, ref), else append a fresh I* id."""
+    sources = cast(list[dict[str, Any]], data["imported_sources"])
+    for index, existing in enumerate(sources):
+        if existing["system"] == entry["system"] and existing["ref"] == entry["ref"]:
+            entry["id"] = existing["id"]
+            sources[index] = entry
+            return str(existing["id"])
+    entry["id"] = _next_id("I", {str(source["id"]) for source in sources})
+    sources.append(entry)
+    return str(entry["id"])
+
+
 def _next_id(prefix: str, used: set[str]) -> str:
     index = 1
     while f"{prefix}{index}" in used:
@@ -111,24 +140,37 @@ def import_connectivity(
     """Merge a connectivity source into the contract with provenance.
 
     Existing connectors/nets are left untouched; new elements are appended
-    with deterministic C*/N* ids. The source file's sha256 is recorded.
+    with deterministic C*/N* ids. Elements whose `source.ref` was already
+    imported from the same system are skipped, so a re-import of the same
+    file refreshes the `imported_sources` entry (sha256) instead of
+    duplicating the harness.
     """
     data = contract.model_dump()
     used_c = {c["id"] for c in data["connectors"]}
     used_n = {n["id"] for n in data["nets"]}
-    used_i = {s["id"] for s in data["imported_sources"]}
+    known_c = {
+        c["source"]["ref"]
+        for c in data["connectors"]
+        if c.get("source") and c["source"]["system"] == source.system
+    }
+    known_n = {
+        n["source"]["ref"]
+        for n in data["nets"]
+        if n.get("source") and n["source"]["system"] == source.system
+    }
     digest = _sha256_file(source_path)
-    source_id = _next_id("I", used_i)
-    data["imported_sources"].append(
+    _upsert_source(
+        data,
         {
-            "id": source_id,
             "system": source.system,
-            "ref": str(source_path),
+            "ref": source_ref(source_path),
             "sha256": digest,
             "description": f"{len(source.connectors)} connectors, {len(source.nets)} nets",
-        }
+        },
     )
     for conn in source.connectors:
+        if conn.ref in known_c:
+            continue
         cid = _next_id("C", used_c)
         used_c.add(cid)
         # Generic families (Connector_Generic:* or none) describe what the
@@ -152,6 +194,8 @@ def import_connectivity(
             }
         )
     for net in source.nets:
+        if net.ref in known_n:
+            continue
         nid = _next_id("N", used_n)
         used_n.add(nid)
         data["nets"].append(
@@ -176,20 +220,25 @@ def import_envelope(
     source: EnvelopeSource,
     source_path: Path,
 ) -> HarnessContract:
-    """Record an envelope source; its anchor names become resolvable."""
+    """Record an envelope source; its anchors (names, kinds, positions) become resolvable.
+
+    Re-importing the same file replaces its entry, so changed anchor
+    positions flow into the `route_geometry` gate.
+    """
+    names = [anchor.name for anchor in source.anchors]
+    if len(set(names)) != len(names):
+        raise ValueError(f"envelope {source_path} declares duplicate anchor names")
     data = contract.model_dump()
-    used_i = {s["id"] for s in data["imported_sources"]}
-    digest = _sha256_file(source_path)
-    source_id = _next_id("I", used_i)
-    data["imported_sources"].append(
+    _upsert_source(
+        data,
         {
-            "id": source_id,
             "system": "mech",
-            "ref": str(source_path),
-            "sha256": digest,
+            "ref": source_ref(source_path),
+            "sha256": _sha256_file(source_path),
             "description": f"{len(source.anchors)} anchors",
-            "anchors": [anchor.name for anchor in source.anchors],
-        }
+            "anchors": names,
+            "anchor_points": [anchor.model_dump() for anchor in source.anchors],
+        },
     )
     return HarnessContract.model_validate(data)
 

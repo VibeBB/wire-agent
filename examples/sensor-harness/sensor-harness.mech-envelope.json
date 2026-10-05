@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "system": "mech",
+  "anchors": [
+    {"name": "ctrl-exit", "kind": "grommet", "position_mm": [0.0, 0.0, 12.0]},
+    {"name": "lid-clip", "kind": "clip", "position_mm": [180.0, 60.0, 12.0]},
+    {"name": "sensor-breakout", "kind": "breakout", "position_mm": [320.0, 140.0, 8.0]},
+    {"name": "motor-clip", "kind": "clip", "position_mm": [150.0, -220.0, 10.0]}
+  ]
+}

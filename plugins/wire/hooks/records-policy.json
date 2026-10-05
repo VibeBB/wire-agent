@@ -11,6 +11,8 @@
     "**/bom.csv",
     "**/bom.json",
     "**/harness-diagram.*",
+    "**/route-plan.*",
+    "liaison/*.ux-response.json",
     "**/*.kbl",
     "**/*.vec"
   ],

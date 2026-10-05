@@ -2,7 +2,8 @@
 
 Writes wire-list.csv, cut-table.csv, bom.json, bom.csv, and
 harness-diagram.drawio.svg (an SVG whose root `content` attribute embeds
-the editable drawio model), plus manifest.json (sha256 per file) and
+the editable drawio model), route-plan.drawio.svg when imported mech
+anchors carry positions, plus manifest.json (sha256 per file) and
 provenance.json (contract hash and tool versions). Nothing here judges
 the design; gates read these artifacts. Identical contract bytes produce
 identical artifact bytes.
@@ -42,6 +43,7 @@ from .export_tables import _bom_csv as _bom_csv
 from .export_tables import _csv_text as _csv_text
 from .export_tables import _cut_table_csv as _cut_table_csv
 from .export_tables import _wire_list_csv as _wire_list_csv
+from .route_plan import ROUTE_PLAN_NAME, ROUTE_PLAN_PNG, route_plan_mxfile
 
 
 def export_design(
@@ -112,6 +114,22 @@ def export_design(
                 "bytes": len(rendered),
             }
         )
+
+    plan = route_plan_mxfile(contract)
+    if plan is not None:
+        renders: list[tuple[str, list[str]]] = [(ROUTE_PLAN_NAME, ["-f", "svg", "-e"])]
+        if "png" in extra:
+            renders.append((ROUTE_PLAN_PNG, ["-f", "png", "-s", "2"]))
+        for name, fmt_args in renders:
+            rendered = _drawio_render(plan, fmt_args)
+            (out_dir / name).write_bytes(rendered)
+            files.append(
+                {
+                    "path": name,
+                    "sha256": hashlib.sha256(rendered).hexdigest(),
+                    "bytes": len(rendered),
+                }
+            )
 
     provenance = {
         "schema_version": 1,

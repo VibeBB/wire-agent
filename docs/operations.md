@@ -85,7 +85,9 @@ builtin `inspect_image_with_vision` tool, which consults a saved
 vision-capable LLM profile (`LLMProfileStore`, e.g. saved via
 `store.save("vision", LLM(model="..."))` or the canvas settings UI). If
 no vision-capable profile exists the agents skip vision rather than
-guess — no degradation of gate authority either way.
+guess — no degradation of gate authority either way. Workspace renders
+reach the model inline from `wire_author`/`wire_drawio` or through
+`wire_view_image`; see [records-and-vision.md](records-and-vision.md).
 
 `wire_drawio` / `python -m wire drawio` proxy the full `drawio -x`
 surface; see `plugins/wire/commands/export.md` for the flag cheat sheet

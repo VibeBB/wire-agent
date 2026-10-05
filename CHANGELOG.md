@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- SLP v2 responder: `wire_ux_inbox` / `wire_ux_respond` MCP tools and
+  `wire ux inbox|respond` read UX-creator `liaison/*.ux-request.json`
+  (states `new`/`answered`/`stale`/`blocked`, malformed files listed) and
+  write hashed `*.ux-response.json`; `done` is refused while a gate fails.
+- `route_geometry` and `import_freshness` gates; mech envelope anchors
+  keep `kind` and `position_mm`.
+- Route plan projection (`route-plan.drawio.svg` / `.png`), returned
+  inline by `wire_author`; `design-report.json` lists `vision_points`.
+- `wire_view_image` MCP tool; image observations from `wire_author`,
+  `wire_drawio` and `wire_view_image` are logged for the VRP Stop hook.
+- Visual review checklists `route_plan`, `built_harness_photo`,
+  `sister_artifact`.
+- Technical docs split into workflow, agents, skills, commands, MCP,
+  hooks, contracts, records-and-vision, sister-cooperation,
+  performance-and-limits and development; ADR-0010.
+
 - `wire review-record`: writes `review-visual-<slug>.advisory.json` for a
   reviewed image — computes the image sha256, fills the `vision_review`
   envelope, and validates the detail against `advisory.py` (fail-closed),
@@ -21,6 +37,12 @@ All notable changes to this project are documented here. The format follows
   estimated box overlaps a connector swimlane.
 
 ### Changed
+
+- Re-importing a source refreshes its `I*` entry instead of appending a
+  duplicate; `wire import --out` writes the merged contract there.
+- Typed advisory impressions use the VRP floor (400 characters, three
+  sentences).
+- README rewritten for non-engineers (English, then Japanese).
 
 - `cut-table.csv` now lists both ends (`strip_a_mm`/`terminal_a` +
   `strip_b_mm`/`terminal_b`); wires only share a row when both sides match.

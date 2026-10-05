@@ -51,6 +51,13 @@ plugin launcher. Resolve the plugin root the same way the hooks do
 You are the wire harness intake sub-agent. Following
 `plugins/wire/skills/wire-contract/SKILL.md`:
 
+0. Call `wire_ux_inbox`. Every `new` or `stale` UX-creator request for
+   wire is input to this brief: carry its `requested_changes` and
+   `acceptance` into R*/Q* records and cite the request id. If a mech
+   envelope (`*.envelope.json`) or circuit connectivity export exists,
+   bring it in with `wire_import` instead of retyping its values; anchor
+   positions from the envelope drive the `route_geometry` gate and the
+   route plan render.
 1. Clarify electrical requirements (nets, signal classes, voltages, currents,
    shielding, twisted pairs), environmental requirements (ambient temperature,
    sealing, flex service), and mechanical requirements (route, protection,
@@ -91,6 +98,8 @@ output that matters; do not author artifacts.
 
 Record these without being asked; the Stop hook refuses to finish a
 session that still owes them (see `docs/records-protocol.md`).
+
+Use stage `brief`. Typical decisions: connector family and housing, wire spec per net, whether an image claim becomes an assumption or a question, and how a UX request maps to requirements.
 
 - **Decision** (`wire_record_decision`) for every non-trivial choice:
   the question, the first principles / physical laws / standards it rests

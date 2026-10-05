@@ -32,6 +32,9 @@ EXPECTED = {
     "wire_record_impression": True,
     "wire_record_vision_review": True,
     "wire_records_status": False,
+    "wire_ux_inbox": False,
+    "wire_ux_respond": True,
+    "wire_view_image": False,
 }
 
 
@@ -184,3 +187,21 @@ def test_mcp_accepts_relative_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         "contract": str(tmp_path / "fixtures" / "contract.json"),
         "intake": str(tmp_path / "intake.json"),
     }
+
+
+def test_wire_view_image_returns_inline_image(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    (tmp_path / "photo.jpg").write_bytes(b"\xff\xd8fake")
+    blocks = _call("wire_view_image", {"image_path": "photo.jpg"})
+    assert isinstance(blocks[1], mcp.types.ImageContent)
+    assert blocks[1].mimeType == "image/jpeg"
+    result = _call_result("wire_view_image", {"image_path": "notes.txt"})
+    assert result.isError
+
+
+def test_wire_ux_inbox_over_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    payload = _payload(_call_result("wire_ux_inbox", {}))
+    assert payload["requests"] == []

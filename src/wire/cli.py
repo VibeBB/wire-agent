@@ -12,6 +12,7 @@ Subcommands:
   review-record  write a validated visual-review advisory JSON for an image
   record    append a VibeBB Record Protocol record (decision, impression,
             vision-review) or print the records status
+  ux        SLP v2 liaison with UX-creator: `ux inbox`, `ux respond --json <file>`
 
 All commands print a JSON verdict to stdout; the verdict is fail-closed.
 """
@@ -24,6 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any, Final, cast
 
+from .advisory import VISUAL_CHECKLISTS
 from .contract import HarnessContract, load_contract
 from .doctor import run_doctor
 from .export import drawio_export_formats, export_design, run_drawio_export
@@ -245,6 +247,22 @@ def cmd_record(args: argparse.Namespace) -> dict[str, Any]:
         return {"verdict": "fail", "stage": "record", "detail": str(exc)}
 
 
+def cmd_ux(args: argparse.Namespace) -> dict[str, Any]:
+    from pydantic import ValidationError
+
+    from .liaison import inbox, respond
+
+    if args.action == "inbox":
+        return inbox()
+    try:
+        raw: Any = json.loads(Path(args.json).read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("respond JSON must be an object")
+        return respond(cast(dict[str, Any], raw))
+    except (OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
+        return {"verdict": "fail", "stage": "ux-respond", "detail": str(exc)}
+
+
 def cmd_import(args: argparse.Namespace) -> dict[str, Any]:
     try:
         contract = _load(args.contract)
@@ -363,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         choices=["circuit-json", "csv", "mech-envelope"],
     )
+    p.add_argument("--out", default=None, help="merged contract path (default: in place)")
 
     p = sub.add_parser(
         "review-record",
@@ -373,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--checklist",
         required=True,
-        choices=["harness_diagram", "intake_image"],
+        choices=list(VISUAL_CHECKLISTS),
     )
     p.add_argument("--impression", default=None, help="subjective reading (required)")
     p.add_argument(
@@ -393,7 +412,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("kind", choices=["decision", "impression", "vision-review", "status"])
     p.add_argument("--json", default=None, help="JSON object file with the record fields")
 
+    p = sub.add_parser("ux", help="SLP v2 liaison with UX-creator (inbox, respond)")
+    p.add_argument("action", choices=["inbox", "respond"])
+    p.add_argument("--json", default=None, help="respond input JSON (request, status, ...)")
+
     args = parser.parse_args(argv)
+    if args.command == "ux" and args.action == "respond" and not args.json:
+        parser.error("ux respond requires --json")
     if args.command == "record" and args.kind != "status" and not args.json:
         parser.error("record decision|impression|vision-review requires --json")
     if args.command == "doctor":
@@ -408,6 +433,7 @@ def main(argv: list[str] | None = None) -> int:
         "import": cmd_import,
         "review-record": cmd_review_record,
         "record": cmd_record,
+        "ux": cmd_ux,
     }
     return _emit(handlers[args.command](args))
 

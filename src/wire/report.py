@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .contract import HarnessContract
 from .gates import GateReport
@@ -28,9 +28,26 @@ def build_report(
         "total_wire_length_m": round(sum(w.length_m for w in contract.wires), 4),
     }
     report["imported_sources"] = [
-        {"id": s.id, "system": s.system, "ref": s.ref} for s in contract.imported_sources
+        {"id": s.id, "system": s.system, "ref": s.ref, "sha256": s.sha256}
+        for s in contract.imported_sources
     ]
     return report
+
+
+VISION_POINTS: tuple[tuple[str, str], ...] = (
+    ("harness-diagram.png", "harness_diagram"),
+    ("harness-diagram.jpg", "harness_diagram"),
+    ("route-plan.png", "route_plan"),
+)
+
+
+def vision_points(out_dir: Path) -> list[dict[str, str]]:
+    """Rendered rasters in out_dir that a vision reviewer must look at, with their checklist."""
+    return [
+        {"image": name, "checklist": checklist}
+        for name, checklist in VISION_POINTS
+        if (out_dir / name).is_file()
+    ]
 
 
 def write_report(
@@ -39,6 +56,7 @@ def write_report(
     out_dir: Path,
 ) -> Path:
     report = build_report(contract, gate_report)
+    report["vision_points"] = vision_points(out_dir)
     lint_path = out_dir / "harness-diagram.drawio_lint.json"
     if lint_path.is_file():
         with contextlib.suppress(json.JSONDecodeError):
@@ -94,5 +112,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         ]
         for finding in lint["findings"]:
             lines.append(f"- {finding['severity']}: {finding['type']} — {finding['description']}")
+    points = cast(list[dict[str, str]], report.get("vision_points") or [])
+    if points:
+        lines += [
+            "",
+            "## Vision points (advisory)",
+            "",
+            "Each raster below needs a vision review record "
+            "(`review-visual-<slug>.advisory.json` via `review-record`).",
+            "",
+        ]
+        for point in points:
+            lines.append(f"- `{point['image']}` — checklist `{point['checklist']}`")
     lines.append("")
     return "\n".join(lines)

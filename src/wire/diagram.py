@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import textwrap
 from typing import Any
 
 from . import __version__
@@ -136,6 +137,8 @@ _DOC_NOTES_X = _COL_X[0] + _DOC_LEGEND_W + 40.0
 _DOC_NOTES_W = _COL_X[1] + _CONN_W - _DOC_NOTES_X
 _DOC_HEADER_H = 20.0
 _DOC_ROW_H = 16.0
+# Characters per notes row that fit inside the NOTES block at 11 px monospace.
+_NOTE_CHARS = 52
 _DOC_PAD_BOTTOM = 4.0
 _DOC_GAP_TOP = 36.0
 
@@ -361,7 +364,7 @@ def _doc_notes_rows(contract: HarnessContract, unused_cavities: int) -> list[str
         if route.flex_required:
             parts.append("flex")
         if route.anchors:
-            parts.append("anchors " + ",".join(sorted(route.anchors)))
+            parts.append("anchors " + " > ".join(route.anchors))
         lines.append("route " + " · ".join(parts))
     for splice in sorted(contract.splices, key=lambda s: s.id):
         lines.append(f"splice {splice.id} {splice.kind}")
@@ -382,7 +385,18 @@ def _doc_notes_rows(contract: HarnessContract, unused_cavities: int) -> list[str
             lines.append("service " + " / ".join(service) + " cycles")
     if unused_cavities:
         lines.append(f"{unused_cavities} cav. unused (grey); seal per spec")
-    return [f"{i}. {line}" for i, line in enumerate(lines, start=1)]
+    rows: list[str] = []
+    for i, line in enumerate(lines, start=1):
+        rows.extend(
+            textwrap.wrap(
+                f"{i}. {line}",
+                width=_NOTE_CHARS,
+                subsequent_indent="   ",
+                break_on_hyphens=False,
+                break_long_words=False,
+            )
+        )
+    return rows
 
 
 def _doc_block(

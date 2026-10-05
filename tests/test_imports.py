@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from helpers import example_contract_data
 from wire.contract import HarnessContract
 from wire.gates import run_gates
@@ -75,15 +77,102 @@ def test_circuit_import_creates_stubs(tmp_path: Path) -> None:
     assert len(merged.wires) == len(contract.wires)
 
 
-def test_import_is_append_only(tmp_path: Path) -> None:
-    """A second import allocates fresh ids rather than mutating elements."""
+def test_reimport_refreshes_instead_of_duplicating(tmp_path: Path) -> None:
+    """Re-importing the same file keeps one I* entry and never duplicates elements."""
     contract = HarnessContract.model_validate(example_contract_data())
     src = _write(tmp_path, "board.connectivity.json", CIRCUIT)
     once = import_connectivity(contract, load_connectivity_source(src), src)
     twice = import_connectivity(once, load_connectivity_source(src), src)
-    assert {c.id for c in twice.connectors} == {"C1", "C2", "C3", "C4"}
-    assert {n.id for n in twice.nets} == {"N1", "N2", "N3", "N4", "N5"}
-    assert len(twice.imported_sources) == len(once.imported_sources) + 1
+    assert {c.id for c in twice.connectors} == {c.id for c in once.connectors}
+    assert {n.id for n in twice.nets} == {n.id for n in once.nets}
+    assert len(twice.imported_sources) == len(once.imported_sources)
+
+
+def test_reimport_appends_only_new_refs(tmp_path: Path) -> None:
+    contract = HarnessContract.model_validate(example_contract_data())
+    src = _write(tmp_path, "board.connectivity.json", CIRCUIT)
+    once = import_connectivity(contract, load_connectivity_source(src), src)
+    grown = json.loads(json.dumps(CIRCUIT))
+    grown["connectors"].append({"ref": "J4", "cavities": ["1"]})
+    src.write_text(json.dumps(grown), encoding="utf-8")
+    twice = import_connectivity(once, load_connectivity_source(src), src)
+    assert len(twice.connectors) == len(once.connectors) + 1
+    entry = twice.imported_sources[-1]
+    assert entry.id == once.imported_sources[-1].id
+    assert entry.sha256 == hashlib.sha256(src.read_bytes()).hexdigest()
+
+
+def test_envelope_keeps_anchor_geometry(tmp_path: Path) -> None:
+    contract = HarnessContract.model_validate(example_contract_data())
+    src = _write(tmp_path, "housing.envelope.json", ENVELOPE)
+    merged = import_envelope(contract, load_envelope_source(src), src)
+    points = merged.anchor_map()
+    assert points["clip-01"].position_mm == (100.0, 0.0, 40.0)
+    assert points["clip-01"].kind == "clip"
+    assert points["grm-01"].position_mm is None
+
+
+def test_envelope_rejects_duplicate_anchor_names(tmp_path: Path) -> None:
+    contract = HarnessContract.model_validate(example_contract_data())
+    data = {"schema_version": 1, "system": "mech", "anchors": [{"name": "a"}, {"name": "a"}]}
+    src = _write(tmp_path, "dup.envelope.json", data)
+    with pytest.raises(ValueError, match="duplicate"):
+        import_envelope(contract, load_envelope_source(src), src)
+
+
+def _placed(tmp_path: Path, anchors: list[str], length_scale: float = 1.0) -> HarnessContract:
+    contract = HarnessContract.model_validate(example_contract_data())
+    src = _write(tmp_path, "housing.envelope.json", PLACED)
+    merged = import_envelope(contract, load_envelope_source(src), src)
+    data = merged.model_dump(mode="json")
+    data["routes"][0]["anchors"] = anchors
+    for segment in data["routes"][0]["segments"]:
+        segment["length_m"] *= length_scale
+    return HarnessContract.model_validate(data)
+
+
+PLACED = {
+    "schema_version": 1,
+    "system": "mech",
+    "anchors": [
+        {"name": "a", "kind": "clip", "position_mm": [0.0, 0.0, 0.0]},
+        {"name": "b", "kind": "clip", "position_mm": [300.0, 400.0, 0.0]},
+        {"name": "c", "kind": "breakout"},
+    ],
+}
+
+
+def _checks(contract: HarnessContract, check_id: str) -> list[str]:
+    return [c.status for c in run_gates(contract).checks if c.id == check_id]
+
+
+def test_route_geometry_passes_when_route_reaches_anchors(tmp_path: Path) -> None:
+    # RT1 is 0.5 m long; a..b is 500 mm.
+    assert _checks(_placed(tmp_path, ["a", "b"]), "route_geometry") == ["pass"]
+
+
+def test_route_geometry_fails_when_route_too_short(tmp_path: Path) -> None:
+    contract = _placed(tmp_path, ["a", "b"], length_scale=0.5)
+    report = run_gates(contract)
+    check = next(c for c in report.checks if c.id == "route_geometry")
+    assert check.status == "fail"
+    assert check.limit == 500.0
+    assert report.verdict == "fail"
+
+
+def test_route_geometry_unknown_without_positions(tmp_path: Path) -> None:
+    assert _checks(_placed(tmp_path, ["a", "c"]), "route_geometry") == ["unknown"]
+
+
+def test_import_freshness_tracks_source_bytes(tmp_path: Path) -> None:
+    contract = HarnessContract.model_validate(example_contract_data())
+    src = _write(tmp_path, "board.connectivity.json", CIRCUIT)
+    merged = import_connectivity(contract, load_connectivity_source(src), src)
+    assert _checks(merged, "import_freshness") == ["pass"]
+    src.write_text(json.dumps({**CIRCUIT, "nets": []}), encoding="utf-8")
+    assert _checks(merged, "import_freshness") == ["fail"]
+    src.unlink()
+    assert _checks(merged, "import_freshness") == ["unknown"]
 
 
 def test_envelope_import_and_anchor_resolution(tmp_path: Path) -> None:

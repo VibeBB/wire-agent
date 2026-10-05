@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from wire.cli import verdict_exit_code
+from helpers import EXAMPLE_CONTRACT
+from wire.cli import main, verdict_exit_code
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -153,3 +154,23 @@ def test_review_record_requires_impression(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert not (tmp_path / "review-visual-harness-diagram.advisory.json").exists()
+
+
+def test_cli_import_writes_out(tmp_path: Path) -> None:
+    out = tmp_path / "merged.contract.json"
+    code = main(
+        [
+            "import",
+            "--contract",
+            str(EXAMPLE_CONTRACT),
+            "--source",
+            str(Path(__file__).parent / "fixtures" / "upstream" / "housing.envelope.json"),
+            "--from",
+            "mech-envelope",
+            "--out",
+            str(out),
+        ]
+    )
+    assert code == 0
+    merged = json.loads(out.read_text(encoding="utf-8"))
+    assert merged["imported_sources"][0]["anchor_points"][0]["name"] == "clip-01"
