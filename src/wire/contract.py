@@ -240,6 +240,16 @@ class ServiceExpectation(BaseModel):
     flex_cycles: int | None = Field(default=None, ge=1)
 
 
+class AnchorPoint(BaseModel):
+    """A mechanical fixturing point copied from a mech envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    kind: Literal["clip", "grommet", "breakout", "other"] = "other"
+    position_mm: tuple[float, float, float] | None = None
+
+
 class ImportedSource(BaseModel):
     """An external file whose contents were copied into the contract."""
 
@@ -251,6 +261,19 @@ class ImportedSource(BaseModel):
     sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     description: str = ""
     anchors: list[str] = Field(default_factory=list[str])
+    anchor_points: list[AnchorPoint] = Field(default_factory=list[AnchorPoint])
+
+    @model_validator(mode="after")
+    def _points_are_declared(self) -> ImportedSource:
+        names = [point.name for point in self.anchor_points]
+        if len(set(names)) != len(names):
+            raise ValueError(f"imported source {self.id}: duplicate anchor_points names")
+        undeclared = sorted(set(names) - set(self.anchors))
+        if undeclared:
+            raise ValueError(
+                f"imported source {self.id}: anchor_points not in anchors: {undeclared}"
+            )
+        return self
 
 
 class HarnessContract(BaseModel):
@@ -346,6 +369,18 @@ class HarnessContract(BaseModel):
 
     def splice_map(self) -> dict[str, HarnessSplice]:
         return {splice.id: splice for splice in self.splices}
+
+    def anchor_map(self) -> dict[str, AnchorPoint]:
+        """Anchor geometry from imported mech envelopes; later imports win."""
+        points: dict[str, AnchorPoint] = {}
+        for source in self.imported_sources:
+            if source.system != "mech":
+                continue
+            for name in source.anchors:
+                points[name] = AnchorPoint(name=name)
+            for point in source.anchor_points:
+                points[point.name] = point
+        return points
 
 
 def contract_sha256(contract: HarnessContract) -> str:

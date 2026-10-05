@@ -363,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         choices=["circuit-json", "csv", "mech-envelope"],
     )
+    p.add_argument("--out", default=None, help="merged contract path (default: in place)")
 
     p = sub.add_parser(
         "review-record",

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -619,6 +620,90 @@ def _check_anchor_resolution(contract: HarnessContract) -> list[GateCheck]:
     ]
 
 
+def _check_route_geometry(contract: HarnessContract) -> list[GateCheck]:
+    """A route must be at least as long as the straight polyline through its anchors.
+
+    Segment lengths are the designer's claim; anchor positions come from
+    the imported mech envelope. A route shorter than the anchor-to-anchor
+    distance cannot physically reach its fixturing points. Routes with fewer
+    than two anchors carry no geometry to compare; an anchor without
+    `position_mm` makes the comparison `unknown` (fail-closed).
+    """
+    points = contract.anchor_map()
+    checks: list[GateCheck] = []
+    for route in contract.routes:
+        if len(route.anchors) < 2:
+            continue
+        unplaced = [
+            name for name in route.anchors if name not in points or points[name].position_mm is None
+        ]
+        if unplaced:
+            checks.append(
+                GateCheck(
+                    "route_geometry",
+                    route.id,
+                    "unknown",
+                    detail=f"anchors without position_mm: {', '.join(unplaced)}",
+                )
+            )
+            continue
+        span_mm = 0.0
+        for first, second in zip(route.anchors, route.anchors[1:], strict=False):
+            a = points[first].position_mm
+            b = points[second].position_mm
+            assert a is not None and b is not None
+            span_mm += math.dist(a, b)
+        length_mm = sum(segment.length_m for segment in route.segments) * 1000.0
+        checks.append(
+            GateCheck(
+                "route_geometry",
+                route.id,
+                "pass" if length_mm >= span_mm else "fail",
+                measured=round(length_mm, 3),
+                limit=round(span_mm, 3),
+                detail="" if length_mm >= span_mm else "route shorter than its anchor polyline",
+            )
+        )
+    if not checks:
+        return [GateCheck("route_geometry", "routes", "pass", detail="no route spans two anchors")]
+    return checks
+
+
+def _check_import_freshness(contract: HarnessContract) -> list[GateCheck]:
+    """Every hashed imported source must still match the bytes that were copied."""
+    from .imports import resolve_source_ref
+
+    checks: list[GateCheck] = []
+    for source in contract.imported_sources:
+        if source.sha256 is None:
+            continue
+        path = resolve_source_ref(source.ref)
+        try:
+            current = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            checks.append(
+                GateCheck(
+                    "import_freshness",
+                    source.id,
+                    "unknown",
+                    detail=f"source file not readable: {source.ref}",
+                )
+            )
+            continue
+        fresh = current == source.sha256
+        checks.append(
+            GateCheck(
+                "import_freshness",
+                source.id,
+                "pass" if fresh else "fail",
+                detail="" if fresh else f"{source.ref} changed since import; re-import it",
+            )
+        )
+    if not checks:
+        return [GateCheck("import_freshness", "imports", "pass", detail="no hashed imports")]
+    return checks
+
+
 def _check_manifest(contract: HarnessContract, out_dir: Path | None) -> list[GateCheck]:
     if out_dir is None:
         return [
@@ -681,6 +766,8 @@ def run_gates(contract: HarnessContract, out_dir: Path | None = None) -> GateRep
     checks.extend(_wrap("connector_rating", _check_connector_rating, contract))
     checks.extend(_wrap("housing_compatibility", _check_housing_compatibility, contract))
     checks.extend(_wrap("anchor_resolution", _check_anchor_resolution, contract))
+    checks.extend(_wrap("route_geometry", _check_route_geometry, contract))
+    checks.extend(_wrap("import_freshness", _check_import_freshness, contract))
     checks.extend(_wrap("manifest_integrity", _check_manifest, contract, out_dir))
     verdict: Literal["pass", "fail"] = "pass" if all(c.status == "pass" for c in checks) else "fail"
     return GateReport(checks=checks, verdict=verdict)
