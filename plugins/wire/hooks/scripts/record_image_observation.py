@@ -2,8 +2,9 @@
 
 Companion to record_vision_tool_event.py: that hook logs delegated
 inspect_image_with_vision calls; this one logs direct image observations —
-`file_editor` `view` commands on image files and `wire_drawio`/`wire_export` tool results
-mentioning rendered image paths. Each observation is appended to
+`file_editor` `view` commands on image files and `wire_author`/`wire_drawio`/
+`wire_export`/`wire_view_image` tool results mentioning rendered image
+paths. Each observation is appended to
 `observations/wire/image-observations.jsonl` as
 {sequence, event_id, tool_name, image_path, image_sha256, recorded_at,
 session_id, actor, tool_call_id} so every image the model saw has a
@@ -34,7 +35,7 @@ from _provenance import (
 
 EVENTS_ENV = "WIRE_IMAGE_OBSERVATIONS"
 EVENTS_RELATIVE_PATH = Path("observations/wire/image-observations.jsonl")
-OBSERVED_TOOLS = {"wire_drawio", "wire_export", "file_editor"}
+OBSERVED_TOOLS = {"wire_author", "wire_drawio", "wire_export", "wire_view_image", "file_editor"}
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
 _IMAGE_PATH = re.compile(r"[^\s\"'<>]+?\.(?:png|jpe?g)", re.IGNORECASE)

@@ -22,6 +22,7 @@ from mcp.server.stdio import stdio_server
 from . import __version__
 from .contract import HarnessContract
 from .doctor import run_doctor
+from .liaison import RespondInput, inbox, respond
 from .records import (
     DecisionInput,
     StageImpressionInput,
@@ -31,6 +32,7 @@ from .records import (
     record_vision_review,
     records_summary,
 )
+from .route_plan import ROUTE_PLAN_PNG
 from .standards import CONNECTOR_FAMILIES, WIRE_SPECS
 from .workspace import workspace_path
 
@@ -43,6 +45,18 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     "wire_records_status": {
         "type": "object",
         "properties": {},
+        "additionalProperties": False,
+    },
+    "wire_ux_inbox": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    "wire_ux_respond": RespondInput.model_json_schema(),
+    "wire_view_image": {
+        "type": "object",
+        "properties": {"image_path": {"type": "string"}},
+        "required": ["image_path"],
         "additionalProperties": False,
     },
     "wire_doctor": {
@@ -206,13 +220,29 @@ _DESCRIPTIONS: dict[str, str] = {
         "Counts of decision / impression / vision-review records and the last Stop-hook "
         "verdict listing records this session still owes."
     ),
+    "wire_ux_inbox": (
+        "List UX-creator SLP v2 requests in liaison/ that target wire, each with its state "
+        "(new, answered, stale, blocked) and every malformed liaison file. Check it at "
+        "session start and before answering."
+    ),
+    "wire_ux_respond": (
+        "Write liaison/<request>.ux-response.json (SLP v2). Hashes the request inputs and "
+        "the delivered artifacts; derives gate verdicts from design_reports. Refuses 'done' "
+        "with a fail/unknown gate, on a stale or blocked request, without artifacts or an "
+        "impression ref, and any decision/impression ref missing from the VRP logs."
+    ),
+    "wire_view_image": (
+        "Return a workspace PNG/JPEG inline so a vision-capable model sees it (renders, "
+        "intake photos, sister artifacts). Record a wire_record_vision_review afterwards."
+    ),
     "wire_doctor": "Probe the wire tool environment; JSON verdict.",
     "wire_standards": "Return reference wire spec or connector family tables.",
     "wire_validate_contract": "Validate a harness contract JSON against the schema.",
     "wire_intake": "Run the intake/provenance gate between contract and intake files.",
     "wire_author": (
         "Export projections (optionally drawio-desktop renders: png, jpg, pdf, html, xml), "
-        "run all gates, write the design report."
+        "run all gates, write the design report. png defaults to true so the harness "
+        "diagram (and route plan, when mech anchors carry positions) come back inline."
     ),
     "wire_gates": "Re-run all deterministic gates on existing artifacts.",
     "wire_import": (
@@ -246,6 +276,9 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_record_impression": _anno("Record stage impression", write=True),
     "wire_record_vision_review": _anno("Record vision review", write=True),
     "wire_records_status": _anno("Records status", write=False),
+    "wire_ux_inbox": _anno("UX liaison inbox", write=False),
+    "wire_ux_respond": _anno("UX liaison respond", write=True),
+    "wire_view_image": _anno("View image", write=False),
     "wire_doctor": _anno("Wire doctor", write=False),
     "wire_standards": _anno("Wire standards", write=False),
     "wire_validate_contract": _anno("Validate harness contract", write=False),
@@ -271,6 +304,16 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         return _text(record_vision_review(arguments))
     if name == "wire_records_status":
         return _text(records_summary())
+    if name == "wire_ux_inbox":
+        return _text(inbox())
+    if name == "wire_ux_respond":
+        return _text(respond(arguments))
+    if name == "wire_view_image":
+        image_path = workspace_path(arguments["image_path"])
+        image = image_content(image_path)
+        if image is None:
+            raise ValueError(f"not a readable PNG/JPEG: {arguments['image_path']}")
+        return [*_text({"verdict": "pass", "image_path": str(image_path)}), image]
     if name == "wire_standards":
         kind = arguments["kind"]
         if kind == "wire_specs":
@@ -294,16 +337,20 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
             _ns(
                 contract=contract_path,
                 out=out_dir,
-                png=arguments.get("png", False),
+                png=arguments.get("png", True),
                 drawio=",".join(arguments.get("drawio", [])),
                 baseline=_path_arg(arguments.get("baseline_path")),
             )
         )
-        content: list[types.ContentBlock] = list(_text(result))
-        image = image_content(Path(out_dir) / "harness-diagram.png")
-        if image is not None:
-            content.append(image)
-        return content
+        images: list[types.ContentBlock] = []
+        shown: list[str] = []
+        for raster in ("harness-diagram.png", ROUTE_PLAN_PNG):
+            image = image_content(Path(out_dir) / raster)
+            if image is not None:
+                images.append(image)
+                shown.append(str(Path(out_dir) / raster))
+        result["images"] = shown
+        return [*_text(result), *images]
     if name == "wire_gates":
         return _text(
             cmd_gates(

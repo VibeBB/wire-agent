@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -21,7 +21,10 @@ from .records import IMPRESSION_MIN_CHARS, impression_is_prose
 VISION_REVIEW_TOOL = "vision_review"
 IMPRESSION_MIN_LENGTH = IMPRESSION_MIN_CHARS
 
-VisualChecklist = Literal["harness_diagram", "intake_image"]
+VisualChecklist = Literal[
+    "harness_diagram", "route_plan", "intake_image", "built_harness_photo", "sister_artifact"
+]
+VISUAL_CHECKLISTS: tuple[str, ...] = get_args(VisualChecklist)
 VisualFindingCategory = Literal[
     "missing_connection",
     "wrong_connector",

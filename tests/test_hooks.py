@@ -640,3 +640,30 @@ def test_provenance_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     absolute = tmp_path / "abs" / "log.jsonl"
     monkeypatch.setenv(env, str(absolute))
     assert module.events_path(payload, env, rel) == absolute
+
+
+def test_protect_denies_route_plan_and_liaison_response_writes() -> None:
+    for path in ("out/demo/route-plan.png", "liaison/lid-fit.ux-response.json"):
+        payload = {"tool_name": "file_editor", "tool_input": {"command": "create", "path": path}}
+        assert _run_hook(PROTECT_SCRIPT, payload).returncode == 2, path
+    allowed = {
+        "tool_name": "file_editor",
+        "tool_input": {"command": "create", "path": "liaison/lid-fit.ux-request.json"},
+    }
+    assert _run_hook(PROTECT_SCRIPT, allowed).returncode == 0
+
+
+@pytest.mark.parametrize("tool_name", ["wire_author", "wire_view_image"])
+def test_record_image_observation_logs_author_and_view_image(
+    tmp_path: Path, tool_name: str
+) -> None:
+    image = tmp_path / "route-plan.png"
+    image.write_bytes(_PNG)
+    payload = {
+        "working_dir": str(tmp_path),
+        "tool_name": tool_name,
+        "tool_input": {},
+        "tool_response": {"content": [{"type": "text", "text": f'{{"images": ["{image}"]}}'}]},
+    }
+    assert _run_hook(OBSERVE_SCRIPT, payload).returncode == 0
+    assert [r["image_path"] for r in _observations(tmp_path)] == [str(image)]
