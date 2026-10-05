@@ -32,6 +32,21 @@ pytest runs `-n auto --dist loadgroup` by default; `uv run pytest -n 0` for
 single-test debugging. Parallel and sequential runs must produce identical
 verdicts and artifact hashes.
 
+### Partial runs
+
+`--list` dumps each stage's commands as JSON. Run only the slice you touched
+instead of a full stage — the groups are `lint`, `unit`, and `docker`
+(standard/drawio stages):
+
+```bash
+uv run python scripts/verify_all.py --stage fast --group lint
+uv run python scripts/verify_all.py --stage fast --match test_gates
+uv run python scripts/verify_all.py --stage standard --group docker
+```
+
+CI uses the same flags for its matrix legs, so a local partial run reproduces
+a failing check exactly. Run the full `fast` stage before submitting.
+
 ## Dependency policy
 
 PyPI dependencies are pinned in `pyproject.toml` and `uv.lock`. The
