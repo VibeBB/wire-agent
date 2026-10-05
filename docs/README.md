@@ -34,3 +34,4 @@ specifications and design decisions.
 | [ADR-0006](adr/ADR-0006-vision-render-and-review-records.md) | Vision render lane, visual baseline, and typed review records | Accepted |
 | [ADR-0007](adr/ADR-0007-drawio-sheet-frame.md) | ISO 5457 drawing frame + ISO 7200 title block on the drawio diagram | Accepted |
 | [ADR-0008](adr/ADR-0008-attest-published-tools-images.md) | Attest published tools images | Accepted |
+| [ADR-0009](adr/ADR-0009-vibebb-record-protocol.md) | VibeBB Record Protocol | Accepted |
