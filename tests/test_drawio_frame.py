@@ -459,27 +459,6 @@ def test_frame_cells_avoid_lint_checks() -> None:
     assert report.errors == 0
 
 
-def test_producer_mark_sits_in_the_bottom_border_clear_of_zone_marks() -> None:
-    from wire.diagram import _zone_segments
-    from wire.mark import MARK_ASPECT, MARK_SVG, mark_data_uri
-
-    cells = _cells(_model())
-    mark = cells["frame-mark"]
-    assert mark.get("parent") == "frame"
-    assert mark_data_uri() in (mark.get("style") or "")
-    assert "<text" not in MARK_SVG and "board-preview" not in MARK_SVG
-    x, y, w, h = _geo(mark)
-    sheet_h = PX_A4[1]
-    assert y >= sheet_h - _mm(_BORDER_MM) and y + h <= sheet_h
-    assert w == pytest.approx(h * MARK_ASPECT, rel=1e-3)
-    seg0, seg1 = _zone_segments(PX_A4[0] / 2, PX_A4[0] / 2)[0]
-    numeral = cells["frame-lab-b0"]
-    nx, _ny, nw, _nh = _geo(numeral)
-    numeral_right = nx + nw / 2 + _mm(3.5) / 2
-    assert x > numeral_right and x + w < seg1
-    assert seg0 < x
-
-
 def _logo_contract(tmp_path: Path, payload: bytes, path: str = "logo.svg") -> HarnessContract:
     import hashlib
 

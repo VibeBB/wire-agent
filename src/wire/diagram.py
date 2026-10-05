@@ -16,7 +16,6 @@ from .contract import (
     WireType,
     contract_sha256,
 )
-from .mark import MARK_ASPECT, mark_data_uri
 
 __all__ = [
     "SVG_NS",
@@ -36,7 +35,6 @@ __all__ = [
     "_GAP_Y",
     "_GRID_STROKE_MM",
     "_HEADER_H",
-    "_MARK_H_MM",
     "_MID_CHANNEL_X",
     "_PALE_LUMINANCE",
     "_PX_PER_MM",
@@ -186,7 +184,6 @@ _ZONE_FIELD_MM = 50.0  # nominal zone field length
 _ZONE_TEXT_MM = 3.5  # zone letter/numeral height
 _TITLE_BLOCK_W_MM = 180.0  # ISO 7200 recommended title-block width
 _TITLE_ROW_MM = 9.0
-_MARK_H_MM = 6.0  # producer-mark height in the bottom border
 _TITLE_ROWS = 5  # technical-data strip + the four ISO 7200 rows
 _MONO_ADVANCE = 0.6  # monospace glyph advance per unit of font size
 _CELL_PAD_PX = 8.0  # spacingLeft plus the right-hand clearance
@@ -601,22 +598,6 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
             bm,
             "fontSize=10;fontStyle=1;align=right;",
         )
-    )
-
-    # Producer mark in the bottom border, centred in the free half of the
-    # first zone field (between its numeral and the first tick), so it
-    # never touches the drawing space, the zone numerals or the title block.
-    seg0, seg1 = _zone_segments(cx, sw / 2)[0]
-    mark_h = _mm(_MARK_H_MM)
-    mark_w = mark_h * MARK_ASPECT
-    half_x = (seg0 + seg1) / 2 + label_h
-    parts.append(
-        f'<mxCell id="frame-mark" value="" style="shape=image;'
-        f"image={mark_data_uri()};imageAspect=1;aspect=fixed;"
-        f'noLabel=1;" vertex="1" parent="frame">'
-        f'<mxGeometry x="{_num((half_x + seg1 - mark_w) / 2)}" '
-        f'y="{_num(sh - bm + (bm - mark_h) / 2)}" width="{_num(mark_w)}" '
-        f'height="{_num(mark_h)}" as="geometry" /></mxCell>'
     )
 
     # ISO 7200 title block, bottom-right of the drawing space, in the

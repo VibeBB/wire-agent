@@ -83,14 +83,9 @@ Two constraints shape the design:
   fails closed on a missing file, a path escape or a digest mismatch,
   then embeds it as a data URI in the upper part of the Legal owner cell
   above the owner name. Because the pin lives in the contract, swapping
-  the file changes nothing silently — it stops the export. The VibeBB
-  mark is a producer mark, not an owner mark: it is printed small in the
-  bottom border, centred between the first zone numeral and the first
-  zone tick, outside the drawing space and the title block. Its geometry
-  (`src/wire/mark.py`) is the `silkscreen` group of
-  `assets/vibebb-silkscreen.svg` in VibeBB/www.vibebb.org at commit
-  2ad2267, recoloured black with the board-preview plate dropped; it is
-  pure stroke paths, so it renders without fonts and byte-identically.
+  the file changes nothing silently — it stops the export. No VibeBB
+  mark is printed: VibeBB is the producing tool, not the owner, and the
+  creator field (`wire-agent/<version>`) already names the producer.
 - The `frame` layer cell carries `locked=1`, so drawio shows it locked
   and a hand edit cannot move the border or title block.
 - `drawio_lint` treats the `frame` layer as outside content checks (it
