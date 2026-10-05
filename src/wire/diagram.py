@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import math
 import textwrap
 from typing import Any
@@ -15,6 +16,7 @@ from .contract import (
     WireType,
     contract_sha256,
 )
+from .mark import MARK_ASPECT, mark_data_uri
 
 __all__ = [
     "SVG_NS",
@@ -34,6 +36,7 @@ __all__ = [
     "_GAP_Y",
     "_GRID_STROKE_MM",
     "_HEADER_H",
+    "_MARK_H_MM",
     "_MID_CHANNEL_X",
     "_PALE_LUMINANCE",
     "_PX_PER_MM",
@@ -183,6 +186,7 @@ _ZONE_FIELD_MM = 50.0  # nominal zone field length
 _ZONE_TEXT_MM = 3.5  # zone letter/numeral height
 _TITLE_BLOCK_W_MM = 180.0  # ISO 7200 recommended title-block width
 _TITLE_ROW_MM = 9.0
+_MARK_H_MM = 6.0  # producer-mark height in the bottom border
 _TITLE_ROWS = 5  # technical-data strip + the four ISO 7200 rows
 _MONO_ADVANCE = 0.6  # monospace glyph advance per unit of font size
 _CELL_PAD_PX = 8.0  # spacingLeft plus the right-hand clearance
@@ -599,6 +603,22 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
         )
     )
 
+    # Producer mark in the bottom border, centred in the free half of the
+    # first zone field (between its numeral and the first tick), so it
+    # never touches the drawing space, the zone numerals or the title block.
+    seg0, seg1 = _zone_segments(cx, sw / 2)[0]
+    mark_h = _mm(_MARK_H_MM)
+    mark_w = mark_h * MARK_ASPECT
+    half_x = (seg0 + seg1) / 2 + label_h
+    parts.append(
+        f'<mxCell id="frame-mark" value="" style="shape=image;'
+        f"image={mark_data_uri()};imageAspect=1;aspect=fixed;"
+        f'noLabel=1;" vertex="1" parent="frame">'
+        f'<mxGeometry x="{_num((half_x + seg1 - mark_w) / 2)}" '
+        f'y="{_num(sh - bm + (bm - mark_h) / 2)}" width="{_num(mark_w)}" '
+        f'height="{_num(mark_h)}" as="geometry" /></mxCell>'
+    )
+
     # ISO 7200 title block, bottom-right of the drawing space, in the
     # ISO 7200 / ISO 29845 arrangement: administrative row on top, legal
     # owner down the left, title in the middle, and the identification
@@ -631,7 +651,19 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
             f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
             f'width="{_num(w)}" height="{_num(lab_h)}" as="geometry" /></mxCell>'
         )
-        value_h = h - lab_h
+        value_y, value_h = y + lab_h, h - lab_h
+        owner_logo = frame.get("owner_logo")
+        if key == "owner" and owner_logo:
+            logo_h = value_h * 0.6
+            parts.append(
+                f'<mxCell id="tb-owner-logo" value="" style="shape=image;'
+                f"image={owner_logo};imageAspect=1;aspect=fixed;"
+                f'noLabel=1;" vertex="1" parent="frame">'
+                f'<mxGeometry x="{_num(x + _mm(2.0))}" y="{_num(value_y)}" '
+                f'width="{_num(w - _mm(4.0))}" height="{_num(logo_h - _mm(1.0))}" '
+                'as="geometry" /></mxCell>'
+            )
+            value_y, value_h = value_y + logo_h, value_h - logo_h
         if key == "title":
             value_h = (h - lab_h) * 0.55
             sup, sup_size = _fit_text(values["supplementary"], w, 8.0)
@@ -650,7 +682,7 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
             'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
             f'fontFamily=monospace;fontSize={_num(fitted)};{style}" '
             'vertex="1" parent="frame">'
-            f'<mxGeometry x="{_num(x)}" y="{_num(y + lab_h)}" '
+            f'<mxGeometry x="{_num(x)}" y="{_num(value_y)}" '
             f'width="{_num(w)}" height="{_num(value_h)}" as="geometry" /></mxCell>'
         )
     parts.append(rect("tb-outer", tb_x, tb_y, tb_w, tb_h, frame_style))
@@ -1083,7 +1115,7 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
     return "".join(parts)
 
 
-def _harness_mxfile(contract: HarnessContract) -> str:
+def _harness_mxfile(contract: HarnessContract, owner_logo: bytes | None = None) -> str:
     """Drawio mxfile of the pin-table diagram.
 
     Every connector is a swimlane of cavity cells and every wire is an edge
@@ -1091,6 +1123,12 @@ def _harness_mxfile(contract: HarnessContract) -> str:
     attached.
     """
     layout = _diagram_layout(contract)
+    logo = contract.drawing.owner_logo
+    if logo is not None and owner_logo is not None:
+        mime = "image/svg+xml" if logo.path.endswith(".svg") else "image/png"
+        layout["frame"]["owner_logo"] = f"data:{mime}," + base64.b64encode(owner_logo).decode(
+            "ascii"
+        )
     model = _drawio_model(contract, layout)
     return (
         '<mxfile host="wire-agent" type="device">'

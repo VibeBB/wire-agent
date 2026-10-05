@@ -277,6 +277,22 @@ class ImportedSource(BaseModel):
         return self
 
 
+class OwnerLogo(BaseModel):
+    """Legal owner's logo for the title block, pinned by digest so a
+    swapped file fails the export instead of printing someone else's mark."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(pattern=r"^[A-Za-z0-9_./-]+\.(?:svg|png)$")
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_relative(self) -> OwnerLogo:
+        if self.path.startswith("/") or ".." in self.path.split("/"):
+            raise ValueError("owner_logo.path must be relative to the contract directory")
+        return self
+
+
 class DrawingInfo(BaseModel):
     """ISO 7200 title-block data a contract cannot derive: who owns,
     prepared and approved the drawing, and when it was released.
@@ -296,6 +312,7 @@ class DrawingInfo(BaseModel):
     supplementary_title: str | None = Field(default=None, min_length=1, max_length=60)
     classification: str | None = Field(default=None, min_length=1, max_length=25)
     language: str = Field(default="en", pattern=r"^[a-z]{2,3}$")
+    owner_logo: OwnerLogo | None = None
 
     @model_validator(mode="after")
     def validate_release(self) -> DrawingInfo:
@@ -430,6 +447,36 @@ def contract_sha256(contract: HarnessContract) -> str:
     """Canonical JSON digest used by the intake sidecar and provenance."""
     payload = contract.model_dump_json()
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+_OWNER_LOGO_MAX_BYTES = 256 * 1024
+
+
+def read_owner_logo(contract: HarnessContract, root: Path | None) -> bytes | None:
+    """Bytes of the declared owner logo, resolved under ``root`` (the
+    contract's directory) and checked against its pinned sha256."""
+    logo = contract.drawing.owner_logo
+    if logo is None:
+        return None
+    if root is None:
+        raise ValueError("drawing.owner_logo needs the contract directory to resolve its path")
+    base = root.resolve()
+    path = (base / logo.path).resolve()
+    if not path.is_relative_to(base):
+        raise ValueError(f"drawing.owner_logo escapes the contract directory: {logo.path}")
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"could not read drawing.owner_logo {logo.path}: {exc}") from exc
+    if len(data) > _OWNER_LOGO_MAX_BYTES:
+        raise ValueError(f"drawing.owner_logo exceeds {_OWNER_LOGO_MAX_BYTES} bytes: {logo.path}")
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != logo.sha256:
+        raise ValueError(
+            f"drawing.owner_logo sha256 mismatch for {logo.path}: "
+            f"declared {logo.sha256}, file {digest}"
+        )
+    return data
 
 
 def load_contract(path: Path) -> HarnessContract:

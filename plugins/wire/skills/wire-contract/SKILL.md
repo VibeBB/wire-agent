@@ -76,7 +76,10 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
   `approved_by` and `date_of_issue` only when a human has actually
   approved and issued the drawing. A date of issue without an approver is
   rejected; the sheet then reads `In preparation` / `In approval` /
-  `Released` accordingly.
+  `Released` accordingly. If the user supplies their organisation's
+  logo, copy it next to the contract and set `owner_logo` to its relative
+  path and sha256 (`sha256sum`); never use the VibeBB mark as an owner
+  logo — VibeBB prints its own producer mark in the bottom border.
 - **service**: `mating_cycles` is checked against connector ratings;
   `flex_cycles` is recorded for v0.2 flex-endurance checks.
 

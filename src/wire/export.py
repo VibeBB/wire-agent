@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__, drawio_lint
-from .contract import HarnessContract, contract_sha256
+from .contract import HarnessContract, contract_sha256, read_owner_logo
 from .diagram import _BORDER_LEFT_MM as _BORDER_LEFT_MM
 from .diagram import _BORDER_MM as _BORDER_MM
 from .diagram import SVG_NS as SVG_NS
@@ -52,6 +52,7 @@ def export_design(
     *,
     png: bool = False,
     drawio: Sequence[str] = (),
+    asset_root: Path | None = None,
 ) -> dict[str, Any]:
     """Write every projection plus manifest.json and provenance.json.
 
@@ -64,7 +65,11 @@ def export_design(
     raster images to the LLM).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    mxfile = _harness_mxfile(contract)
+    try:
+        owner_logo = read_owner_logo(contract, asset_root)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    mxfile = _harness_mxfile(contract, owner_logo)
     artifacts: dict[str, str] = {
         "wire-list.csv": _wire_list_csv(contract),
         "cut-table.csv": _cut_table_csv(contract),

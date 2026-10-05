@@ -77,6 +77,20 @@ Two constraints shape the design:
   (contract digest instead of a file name), and adds the approval and
   status fields KiCad lacks; it drops the size field and free comments
   (the drawing's notes block carries those).
+- Logos. The legal owner's logo is optional: `drawing.owner_logo`
+  names an SVG or PNG relative to the contract directory together with
+  its sha256 (≤256 KiB). The export resolves it under that directory and
+  fails closed on a missing file, a path escape or a digest mismatch,
+  then embeds it as a data URI in the upper part of the Legal owner cell
+  above the owner name. Because the pin lives in the contract, swapping
+  the file changes nothing silently — it stops the export. The VibeBB
+  mark is a producer mark, not an owner mark: it is printed small in the
+  bottom border, centred between the first zone numeral and the first
+  zone tick, outside the drawing space and the title block. Its geometry
+  (`src/wire/mark.py`) is the `silkscreen` group of
+  `assets/vibebb-silkscreen.svg` in VibeBB/www.vibebb.org at commit
+  2ad2267, recoloured black with the board-preview plate dropped; it is
+  pure stroke paths, so it renders without fonts and byte-identically.
 - The `frame` layer cell carries `locked=1`, so drawio shows it locked
   and a hand edit cannot move the border or title block.
 - `drawio_lint` treats the `frame` layer as outside content checks (it

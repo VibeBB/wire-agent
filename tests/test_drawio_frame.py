@@ -457,3 +457,87 @@ def test_frame_cells_avoid_lint_checks() -> None:
     report = lint_text(_harness_mxfile(_contract()), source=Path("d.drawio"))
     assert report.verdict == "pass"
     assert report.errors == 0
+
+
+def test_producer_mark_sits_in_the_bottom_border_clear_of_zone_marks() -> None:
+    from wire.diagram import _zone_segments
+    from wire.mark import MARK_ASPECT, MARK_SVG, mark_data_uri
+
+    cells = _cells(_model())
+    mark = cells["frame-mark"]
+    assert mark.get("parent") == "frame"
+    assert mark_data_uri() in (mark.get("style") or "")
+    assert "<text" not in MARK_SVG and "board-preview" not in MARK_SVG
+    x, y, w, h = _geo(mark)
+    sheet_h = PX_A4[1]
+    assert y >= sheet_h - _mm(_BORDER_MM) and y + h <= sheet_h
+    assert w == pytest.approx(h * MARK_ASPECT, rel=1e-3)
+    seg0, seg1 = _zone_segments(PX_A4[0] / 2, PX_A4[0] / 2)[0]
+    numeral = cells["frame-lab-b0"]
+    nx, _ny, nw, _nh = _geo(numeral)
+    numeral_right = nx + nw / 2 + _mm(3.5) / 2
+    assert x > numeral_right and x + w < seg1
+    assert seg0 < x
+
+
+def _logo_contract(tmp_path: Path, payload: bytes, path: str = "logo.svg") -> HarnessContract:
+    import hashlib
+
+    (tmp_path / path).write_bytes(payload)
+    data = example_contract_data()
+    data["drawing"]["owner_logo"] = {"path": path, "sha256": hashlib.sha256(payload).hexdigest()}
+    return HarnessContract.model_validate(data)
+
+
+_LOGO = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 5">'
+    b'<rect width="10" height="5"/></svg>'
+)
+
+
+def test_owner_logo_renders_in_the_legal_owner_cell(tmp_path: Path) -> None:
+    from wire.contract import read_owner_logo
+
+    contract = _logo_contract(tmp_path, _LOGO)
+    logo = read_owner_logo(contract, tmp_path)
+    assert logo == _LOGO
+    mxfile = ET.fromstring(_harness_mxfile(contract, logo))
+    model = mxfile.find("diagram/mxGraphModel")
+    assert model is not None
+    cells = _cells(model)
+    image = cells["tb-owner-logo"]
+    assert image.get("parent") == "frame"
+    assert "data:image/svg+xml," in (image.get("style") or "")
+    ox, oy, ow, oh = _geo(cells["tb-owner"])
+    lx, ly, lw, lh = _geo(image)
+    _vx, vy, _vw, vh = _geo(cells["tb-owner-val"])
+    assert ox < lx and lx + lw < ox + ow
+    assert oy < ly and ly + lh <= vy
+    assert vy + vh == pytest.approx(oy + oh, abs=0.01)
+    assert cells["tb-owner-val"].get("value") == "VibeBB"
+
+
+def test_owner_logo_absent_without_declaration() -> None:
+    assert "tb-owner-logo" not in _cells(_model())
+
+
+def test_owner_logo_fails_closed(tmp_path: Path) -> None:
+    from wire.contract import read_owner_logo
+
+    contract = _logo_contract(tmp_path, _LOGO)
+    with pytest.raises(ValueError, match="contract directory"):
+        read_owner_logo(contract, None)
+    (tmp_path / "logo.svg").write_bytes(_LOGO + b" ")
+    with pytest.raises(ValueError, match="sha256 mismatch"):
+        read_owner_logo(contract, tmp_path)
+    (tmp_path / "logo.svg").unlink()
+    with pytest.raises(ValueError, match="could not read"):
+        read_owner_logo(contract, tmp_path)
+
+
+@pytest.mark.parametrize("path", ["../logo.svg", "/abs/logo.svg", "a/../../logo.svg", "logo.gif"])
+def test_owner_logo_path_must_stay_inside_the_contract_directory(path: str) -> None:
+    data = example_contract_data()
+    data["drawing"]["owner_logo"] = {"path": path, "sha256": "0" * 64}
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)

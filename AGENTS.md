@@ -22,6 +22,7 @@ src/wire/                 # deterministic wire-harness core
 ├── export.py             # wire list/cut table/BOM/diagram + manifest/provenance
 ├── render.py             # sha256 visual baseline for rendered images
 ├── advisory.py           # typed L2 visual-review records (never verdicts)
+├── mark.py               # VibeBB producer mark (sheet frame)
 ├── route_plan.py         # route plan projection from placed mech anchors
 ├── drawio_cli.py         # drawio-desktop subprocess adapter
 ├── records.py            # VibeBB Record Protocol writers and status
