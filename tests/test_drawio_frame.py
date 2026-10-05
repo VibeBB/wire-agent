@@ -12,9 +12,17 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from helpers import example_contract_data
-from wire.contract import HarnessContract
+from wire.contract import HarnessContract, contract_sha256
+from wire.diagram import (
+    _CELL_PAD_PX,
+    _MONO_ADVANCE,
+    _TITLE_BLOCK_W_MM,
+    _TITLE_FIELDS,
+    _TITLE_ROW_MM,
+)
 from wire.export import (
     _BORDER_LEFT_MM,
     _BORDER_MM,
@@ -68,8 +76,8 @@ def test_sheet_ladder_picks_smallest_that_fits() -> None:
         (3500.0, 500.0, "A0"),
         (700.0, 5000.0, "A0x2"),
         (700.0, 8000.0, "A0x3"),
-        (700.0, 12000.0, "200x3115"),  # custom: mm dims as designation
-        (6000.0, 400.0, "1544x169"),  # wider than any sheet's drawing space
+        (700.0, 12000.0, "200x3121"),  # custom: mm dims as designation
+        (6000.0, 400.0, "1544x175"),  # wider than any sheet's drawing space
     ]
     for w, h, expected in cases:
         assert _frame_geometry(w, h)["name"] == expected, (w, h, expected)
@@ -180,36 +188,170 @@ def test_frame_cells_stay_on_frame_layer() -> None:
             assert cell.get("parent") == "frame", cid
 
 
-def test_title_block_fields() -> None:
-    contract = _contract()
-    cells = _cells(_model())
-    frame = _frame_geometry(880.0, 274.0)
-    outer = _geo(cells["tb-outer"])
-    assert outer[0] + outer[2] == pytest.approx(frame["w"] - _mm(_BORDER_MM), abs=0.01)
+def _title_values(cells: dict[str, ET.Element]) -> dict[str, str]:
     labels = {
         cid.removesuffix("-lab"): cell.get("value") or ""
         for cid, cell in cells.items()
         if cid.startswith("tb-") and cid.endswith("-lab")
     }
-    value = {label: cells[f"{cid}-val"].get("value") or "" for cid, label in labels.items()}
-    assert value["Drawing no."] == contract.contract_id
+    return {label: cells[f"{cid}-val"].get("value") or "" for cid, label in labels.items()}
+
+
+def _model_for(contract: HarnessContract) -> dict[str, ET.Element]:
+    mxfile = ET.fromstring(_harness_mxfile(contract))
+    model = mxfile.find("diagram/mxGraphModel")
+    assert model is not None
+    return _cells(model)
+
+
+def test_title_block_fields() -> None:
+    contract = _contract()
+    value = _title_values(_cells(_model()))
+    assert value["Identification number"] == contract.contract_id
+    assert value["Title, Supplementary title"] == contract.name
     assert value["Rev."] == contract.revision
     assert value["Sheet"] == "1/1"
     assert value["Scale"] == "NTS"
+    assert value["Legal owner"] == "VibeBB"
+    assert value["Lang."] == "en"
+    assert value["Workmanship"] == "IPC/WHMA-A-620 Class 2"
+    assert value["Units"] == "m, mm (note 3)"
+    assert value["Document type"] == "Harness connection diagram"
+    assert value["Created by"].startswith("wire-agent/")
+    # Unset people and dates are an em dash, and the status says why.
     assert value["Approved by"] == "—"
-    # Deterministic artifacts have no wall-clock date — em dash placeholder.
     assert value["Date of issue"] == "—"
+    assert value["Document status"] == "In preparation"
     # The sheet size lives in the frame's size designation, not here.
     assert "Size" not in value and "A4" not in value.values()
-    # Rows tile the block exactly and the sheet number owns the corner.
-    for row in range(3):
-        geos = sorted(_geo(cells[cid]) for cid in labels if cid.startswith(f"tb-{row}"))
-        assert geos[0][0] == pytest.approx(outer[0], abs=0.01)
-        assert geos[-1][0] + geos[-1][2] == pytest.approx(outer[0] + outer[2], abs=0.01)
-    sheet_id = next(cid for cid, label in labels.items() if label == "Sheet")
-    sx, sy, sw_, sh_ = _geo(cells[sheet_id])
-    assert sx + sw_ == pytest.approx(outer[0] + outer[2], abs=0.01)
-    assert sy + sh_ == pytest.approx(outer[1] + outer[3], abs=0.01)
+    assert set(value) == {label for _k, label, *_rest in _TITLE_FIELDS}
+
+
+def test_frame_layer_is_locked() -> None:
+    cells = _cells(_model())
+    assert "locked=1" in (cells["frame"].get("style") or "")
+    assert "locked=1" not in (cells["1"].get("style") or "")
+
+
+def test_title_block_classification() -> None:
+    data = example_contract_data()
+    data["drawing"]["classification"] = "harness, sensor"
+    value = _title_values(_model_for(HarnessContract.model_validate(data)))
+    assert value["Classification/key words"] == "harness, sensor"
+    assert _title_values(_cells(_model()))["Classification/key words"] == "—"
+
+
+def test_title_block_binds_the_contract_digest() -> None:
+    contract = _contract()
+    value = _title_values(_cells(_model()))
+    assert contract_sha256(contract).startswith(value["Contract sha256"])
+    assert len(value["Contract sha256"]) == 16
+
+
+def test_title_block_supplementary_title() -> None:
+    contract = _contract()
+    cells = _cells(_model())
+    assert cells["tb-title-sup"].get("value") == contract.drawing.supplementary_title
+    data = example_contract_data()
+    del data["drawing"]["supplementary_title"]
+    derived = _model_for(HarnessContract.model_validate(data))
+    assert derived["tb-title-sup"].get("value") == "3 wires · 2 connectors · 2 routes"
+
+
+def test_title_block_arrangement() -> None:
+    cells = _cells(_model())
+    frame = _frame_geometry(880.0, 274.0)
+    outer = _geo(cells["tb-outer"])
+    assert outer[0] + outer[2] == pytest.approx(frame["w"] - _mm(_BORDER_MM), abs=0.01)
+    assert outer[2] == pytest.approx(_mm(_TITLE_BLOCK_W_MM), abs=0.01)
+    right, bottom = outer[0] + outer[2], outer[1] + outer[3]
+    boxes = {key: _geo(cells[f"tb-{key}"]) for key, *_rest in _TITLE_FIELDS}
+    # The cells tile the block exactly: no gaps, no overlaps.
+    assert sum(w * h for _x, _y, w, h in boxes.values()) == pytest.approx(
+        outer[2] * outer[3], rel=1e-4
+    )
+    items = list(boxes.items())
+    for i, (a, (ax, ay, aw, ah)) in enumerate(items):
+        assert ax >= outer[0] - 0.01 and ax + aw <= right + 0.01, a
+        assert ay >= outer[1] - 0.01 and ay + ah <= bottom + 0.01, a
+        for b, (bx, by, bw, bh) in items[i + 1 :]:
+            overlap_w = min(ax + aw, bx + bw) - max(ax, bx)
+            overlap_h = min(ay + ah, by + bh) - max(ay, by)
+            assert overlap_w <= 0.01 or overlap_h <= 0.01, (a, b)
+    # Sheet number owns the bottom-right corner; the identification row
+    # (rev, date of issue, language, sheet) runs along the bottom edge.
+    sx, sy, sw_, sh_ = boxes["sheet"]
+    assert sx + sw_ == pytest.approx(right, abs=0.01)
+    assert sy + sh_ == pytest.approx(bottom, abs=0.01)
+    for key in ("rev", "issued", "lang"):
+        assert boxes[key][1] + boxes[key][3] == pytest.approx(bottom, abs=0.01)
+    number = boxes["number"]
+    assert number[0] + number[2] == pytest.approx(right, abs=0.01)
+    assert number[1] + number[3] == pytest.approx(boxes["sheet"][1], abs=0.01)
+    # Legal owner runs down the left edge through the lower three rows.
+    owner = boxes["owner"]
+    assert owner[0] == pytest.approx(outer[0], abs=0.01)
+    assert owner[1] + owner[3] == pytest.approx(bottom, abs=0.01)
+    assert owner[3] == pytest.approx(3 * _mm(_TITLE_ROW_MM), abs=0.01)
+    # Technical data strip is the top row, above the administrative row.
+    for key in ("workmanship", "units", "scale", "contract"):
+        assert boxes[key][1] == pytest.approx(outer[1], abs=0.01)
+    assert boxes["creator"][1] == pytest.approx(outer[1] + _mm(_TITLE_ROW_MM), abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("drawing", "status"),
+    [
+        ({}, "In preparation"),
+        ({"approved_by": "J. Smith"}, "In approval"),
+        ({"approved_by": "J. Smith", "date_of_issue": "2026-10-05"}, "Released"),
+    ],
+)
+def test_title_block_document_status(drawing: dict[str, str], status: str) -> None:
+    data = example_contract_data()
+    data["drawing"] = {"legal_owner": "Acme", "created_by": "A. Author", **drawing}
+    value = _title_values(_model_for(HarnessContract.model_validate(data)))
+    assert value["Document status"] == status
+    assert value["Approved by"] == drawing.get("approved_by", "—")
+    assert value["Date of issue"] == drawing.get("date_of_issue", "—")
+    assert value["Created by"] == "A. Author"
+    assert value["Legal owner"] == "Acme"
+
+
+@pytest.mark.parametrize(
+    "drawing",
+    [
+        {"date_of_issue": "2026-10-05"},
+        {"approved_by": "J. Smith", "date_of_issue": "2026-02-30"},
+        {"language": "English"},
+        {"legal_owner": ""},
+        {"status": "Released"},
+    ],
+)
+def test_drawing_info_rejects_unreleasable_metadata(drawing: dict[str, str]) -> None:
+    data = example_contract_data()
+    data["drawing"] = drawing
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)
+
+
+def test_title_block_values_never_spill_over_cell_rules() -> None:
+    data = example_contract_data()
+    data["name"] = "rear-left-door-harness-with-window-lift-and-mirror-fold"
+    data["revision"] = "rev-AB-2026-candidate"
+    cells = _model_for(HarnessContract.model_validate(data))
+    for key, *_rest in _TITLE_FIELDS:
+        val = cells[f"tb-{key}-val"]
+        text = val.get("value") or ""
+        size = float(
+            dict(item.split("=", 1) for item in (val.get("style") or "").split(";") if "=" in item)[
+                "fontSize"
+            ]
+        )
+        width = _geo(cells[f"tb-{key}"])[2]
+        assert len(text) * _MONO_ADVANCE * size <= width - _CELL_PAD_PX + 0.01, key
+    assert cells["tb-title-val"].get("value") == data["name"]
+    assert cells["tb-rev-val"].get("value", "").endswith("…")
 
 
 def test_size_designation_in_bottom_border() -> None:
@@ -266,7 +408,7 @@ def test_doc_notes_carry_manufacturing_context() -> None:
     contract = _contract()
     rows = _doc_rows(_cells(_model()), "doc-notes")
     text = " ".join(rows)
-    assert f"IPC-A-620 cl.{contract.ipc_class}" in text
+    assert f"IPC/WHMA-A-620 class {contract.ipc_class}" in text
     assert f"{contract.ambient_temperature_c:g} °C" in text
     # Companion artifacts a no-context shop floor needs, named on the sheet.
     for artifact in ("wire-list.csv", "cut-table.csv", "bom.csv"):
@@ -315,3 +457,87 @@ def test_frame_cells_avoid_lint_checks() -> None:
     report = lint_text(_harness_mxfile(_contract()), source=Path("d.drawio"))
     assert report.verdict == "pass"
     assert report.errors == 0
+
+
+def test_producer_mark_sits_in_the_bottom_border_clear_of_zone_marks() -> None:
+    from wire.diagram import _zone_segments
+    from wire.mark import MARK_ASPECT, MARK_SVG, mark_data_uri
+
+    cells = _cells(_model())
+    mark = cells["frame-mark"]
+    assert mark.get("parent") == "frame"
+    assert mark_data_uri() in (mark.get("style") or "")
+    assert "<text" not in MARK_SVG and "board-preview" not in MARK_SVG
+    x, y, w, h = _geo(mark)
+    sheet_h = PX_A4[1]
+    assert y >= sheet_h - _mm(_BORDER_MM) and y + h <= sheet_h
+    assert w == pytest.approx(h * MARK_ASPECT, rel=1e-3)
+    seg0, seg1 = _zone_segments(PX_A4[0] / 2, PX_A4[0] / 2)[0]
+    numeral = cells["frame-lab-b0"]
+    nx, _ny, nw, _nh = _geo(numeral)
+    numeral_right = nx + nw / 2 + _mm(3.5) / 2
+    assert x > numeral_right and x + w < seg1
+    assert seg0 < x
+
+
+def _logo_contract(tmp_path: Path, payload: bytes, path: str = "logo.svg") -> HarnessContract:
+    import hashlib
+
+    (tmp_path / path).write_bytes(payload)
+    data = example_contract_data()
+    data["drawing"]["owner_logo"] = {"path": path, "sha256": hashlib.sha256(payload).hexdigest()}
+    return HarnessContract.model_validate(data)
+
+
+_LOGO = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 5">'
+    b'<rect width="10" height="5"/></svg>'
+)
+
+
+def test_owner_logo_renders_in_the_legal_owner_cell(tmp_path: Path) -> None:
+    from wire.contract import read_owner_logo
+
+    contract = _logo_contract(tmp_path, _LOGO)
+    logo = read_owner_logo(contract, tmp_path)
+    assert logo == _LOGO
+    mxfile = ET.fromstring(_harness_mxfile(contract, logo))
+    model = mxfile.find("diagram/mxGraphModel")
+    assert model is not None
+    cells = _cells(model)
+    image = cells["tb-owner-logo"]
+    assert image.get("parent") == "frame"
+    assert "data:image/svg+xml," in (image.get("style") or "")
+    ox, oy, ow, oh = _geo(cells["tb-owner"])
+    lx, ly, lw, lh = _geo(image)
+    _vx, vy, _vw, vh = _geo(cells["tb-owner-val"])
+    assert ox < lx and lx + lw < ox + ow
+    assert oy < ly and ly + lh <= vy
+    assert vy + vh == pytest.approx(oy + oh, abs=0.01)
+    assert cells["tb-owner-val"].get("value") == "VibeBB"
+
+
+def test_owner_logo_absent_without_declaration() -> None:
+    assert "tb-owner-logo" not in _cells(_model())
+
+
+def test_owner_logo_fails_closed(tmp_path: Path) -> None:
+    from wire.contract import read_owner_logo
+
+    contract = _logo_contract(tmp_path, _LOGO)
+    with pytest.raises(ValueError, match="contract directory"):
+        read_owner_logo(contract, None)
+    (tmp_path / "logo.svg").write_bytes(_LOGO + b" ")
+    with pytest.raises(ValueError, match="sha256 mismatch"):
+        read_owner_logo(contract, tmp_path)
+    (tmp_path / "logo.svg").unlink()
+    with pytest.raises(ValueError, match="could not read"):
+        read_owner_logo(contract, tmp_path)
+
+
+@pytest.mark.parametrize("path", ["../logo.svg", "/abs/logo.svg", "a/../../logo.svg", "logo.gif"])
+def test_owner_logo_path_must_stay_inside_the_contract_directory(path: str) -> None:
+    data = example_contract_data()
+    data["drawing"]["owner_logo"] = {"path": path, "sha256": "0" * 64}
+    with pytest.raises(ValidationError):
+        HarnessContract.model_validate(data)

@@ -62,6 +62,7 @@ hardening.
 | `standards.py` | wire specs, derating, bend factors, connector families |
 | `gates.py` | the gate runner (only pass/fail authority) |
 | `export.py` | wire list, cut table, BOM, harness diagram, manifest, provenance |
+| `mark.py` | VibeBB producer-mark SVG printed in the sheet frame |
 | `route_plan.py` | route plan drawio projection from placed anchors |
 | `drawio_cli.py` | drawio-desktop subprocess adapter |
 | `drawio_lint.py` | advisory diagram readability lint |

@@ -101,6 +101,7 @@ def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
             out_dir,
             png=getattr(args, "png", False),
             drawio=_drawio_formats(args),
+            asset_root=Path(args.contract).parent,
         )
     except (KeyError, RuntimeError) as exc:
         return {"verdict": "fail", "stage": "export", "detail": str(exc)}
@@ -123,6 +124,7 @@ def cmd_export(args: argparse.Namespace) -> dict[str, Any]:
             out_dir,
             png=getattr(args, "png", False),
             drawio=_drawio_formats(args),
+            asset_root=Path(args.contract).parent,
         )
     except (KeyError, RuntimeError) as exc:
         return {"verdict": "fail", "stage": "export", "detail": str(exc)}

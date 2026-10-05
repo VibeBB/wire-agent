@@ -43,17 +43,56 @@ Two constraints shape the design:
   `round(half/50)` per half reproduces Table 2 (A4: 6×4, A3: 8×6,
   A2: 12×8, A1: 16×12, A0: 24×16) and covers custom sheets; the size
   designation sits in the bottom border at the right corner.
-- ISO 7200 title block: bottom-right of the drawing space, 180 mm ×
-  3 rows on a 12-unit (15 mm) column grid, read bottom-up:
-  - identification row (bottom): legal owner, drawing number, revision
-    index, date of issue, and the sheet number in the bottom-right corner;
-  - responsibility row: drawn by, approved by, scale, IPC class, units;
-  - title row (top): title and document type.
-  The sheet size is not repeated in the title block — the frame's size
-  designation carries it. Every value derives from the contract; `Date of
-  issue` and `Approved by` are rendered `—` because a deterministic
-  artifact cannot carry a wall-clock date and approval is a human
-  sign-off.
+- ISO 7200 title block: bottom-right of the drawing space, 180 mm wide,
+  in the ISO 7200 / ISO 29845 arrangement (four 9 mm rows, read
+  bottom-up):
+  - identification row (bottom): revision index, date of issue, language
+    code and the sheet number in the bottom-right corner;
+  - title row: title (largest text) with the supplementary title below,
+    and the identification number (contract id, same size) above the
+    identification row;
+  - document row: document type, classification/key words and document
+    status;
+  - administrative row (top): responsible department, technical
+    reference, created by, approved by;
+  - the legal owner spans the lower three rows down the left edge.
+  A technical-data strip above the block carries the harness fields ISO
+  7200 §4 keeps out of the title block proper: workmanship standard
+  (IPC/WHMA-A-620 class), units, scale and the first 16 hex digits of the
+  contract sha256 recorded in the manifest and provenance, which binds
+  the printed sheet to its source bytes. The sheet size is not repeated —
+  the frame's size designation carries it.
+- Values derive from the contract only, never the wall clock. People,
+  owner and release data come from the optional `drawing` block
+  (`DrawingInfo`); unset fields print `—` and the creator falls back to
+  `wire-agent/<version>`. The document status is derived, not declared:
+  `In preparation` without an approver, `In approval` with one, and
+  `Released` once `date_of_issue` is also set — a date of issue without
+  an approver is rejected, so an unapproved sheet can never look issued.
+  Values that would overflow their cell shrink to 6 pt, then truncate
+  with an ellipsis; they never spill over a rule.
+- Compared with KiCad's default drawing sheet (title, company, size,
+  date, rev, id, file, sheet path, four comments) the block adopts the
+  emphasised title and identification number and a source binding
+  (contract digest instead of a file name), and adds the approval and
+  status fields KiCad lacks; it drops the size field and free comments
+  (the drawing's notes block carries those).
+- Logos. The legal owner's logo is optional: `drawing.owner_logo`
+  names an SVG or PNG relative to the contract directory together with
+  its sha256 (≤256 KiB). The export resolves it under that directory and
+  fails closed on a missing file, a path escape or a digest mismatch,
+  then embeds it as a data URI in the upper part of the Legal owner cell
+  above the owner name. Because the pin lives in the contract, swapping
+  the file changes nothing silently — it stops the export. The VibeBB
+  mark is a producer mark, not an owner mark: it is printed small in the
+  bottom border, centred between the first zone numeral and the first
+  zone tick, outside the drawing space and the title block. Its geometry
+  (`src/wire/mark.py`) is the `silkscreen` group of
+  `assets/vibebb-silkscreen.svg` in VibeBB/www.vibebb.org at commit
+  2ad2267, recoloured black with the board-preview plate dropped; it is
+  pure stroke paths, so it renders without fonts and byte-identically.
+- The `frame` layer cell carries `locked=1`, so drawio shows it locked
+  and a hand edit cannot move the border or title block.
 - `drawio_lint` treats the `frame` layer as outside content checks (it
   already only inspects `parent="1"` vertices) and skips the
   `page_underutilized` coverage warning when a frame layer exists — the
@@ -68,5 +107,6 @@ Two constraints shape the design:
   large harnesses grow through the sheet ladder automatically.
 - The frame is a projection like the rest — regenerated, never edited;
   changes land in `export.py`.
-- `Date of issue` stays `—` until provenance carries a real issue date
-  (e.g. an intake field) that still hashes deterministically.
+- Releasing a drawing is a contract edit (`drawing.approved_by` plus
+  `drawing.date_of_issue`), so the release is hashed, re-gated and
+  visible in provenance like any other change.

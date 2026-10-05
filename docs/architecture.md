@@ -60,6 +60,7 @@ src/wire/
 ├── gates.py              # authoritative gate runner
 ├── export.py             # projections + manifest/provenance
 ├── drawio_lint.py        # advisory drawio readability lint (never a verdict)
+├── mark.py               # VibeBB producer mark (sheet frame)
 ├── route_plan.py         # route plan projection from placed anchors
 ├── drawio_cli.py         # drawio-desktop subprocess adapter
 ├── render.py             # sha256 visual baseline

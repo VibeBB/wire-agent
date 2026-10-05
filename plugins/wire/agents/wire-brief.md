@@ -73,7 +73,9 @@ You are the wire harness intake sub-agent. Following
    `src/wire/contract.py` — connectors with cavities and ratings, wire types
    (prefer a `spec` from `wire_standards` unless the user gives datasheet
    values), nets, wires, routes with declared `min_bend_radius_mm`,
-   segregations, and service expectations.
+   segregations, service expectations, and the `drawing` title-block
+   block (legal owner, creator; approver and date of issue only after a
+   human sign-off).
 3. Write `<name>.intake.json` binding every element id (C*, WT*, N*, W*,
    RT*, SP*) to R*/A*/Q*/I* source ids. Requirements the user actually
    stated become R*; anything you inferred — including from images —

@@ -22,6 +22,7 @@ unknown fields unless noted.
 | `segregations[]` | `SegregationPolicy` | `classes` (pair of signal classes), `rule` (`no_shared_route`, `no_shared_connector`) |
 | `service` | `ServiceExpectation` | `mating_cycles`, `flex_cycles` |
 | `imported_sources[]` | `ImportedSource` | `id` `I<n>`, `system` (`manual`, `circuit`, `mech`, `csv`, `kbl`, `vec`), `ref` (workspace-relative path), `sha256`, `description`, `anchors[]`, `anchor_points[]` (`name`, `kind` `clip`/`grommet`/`breakout`/`other`, `position_mm` `[x, y, z]`) |
+| `drawing` | `DrawingInfo` | ISO 7200 title-block data: `legal_owner` (≤40), `responsible_dept` (≤20), `technical_reference` (≤30), `created_by`/`approved_by` (≤30), `date_of_issue` (`YYYY-MM-DD`, requires `approved_by`), `supplementary_title` (≤60), `classification` (key words, ≤25), `language` (ISO 639, default `en`), `owner_logo` (`{path, sha256}`: an `.svg`/`.png` relative to the contract directory, ≤256 KiB, printed in the Legal owner cell; a missing file, path escape or digest mismatch fails the export); the document status is derived (`In preparation` → `In approval` → `Released`) |
 
 Element `source` (`system`, `ref`) records where an imported element came
 from.
