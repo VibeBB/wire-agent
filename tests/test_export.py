@@ -198,7 +198,9 @@ def test_title_block_reports_real_units() -> None:
     from wire.export import _harness_mxfile
 
     contract = HarnessContract.model_validate(example_contract_data())
-    assert "px = 0.254 mm" in _harness_mxfile(contract)
+    model = _harness_mxfile(contract)
+    assert "m, mm (note 3)" in model
+    assert "units: wire m, strip mm, cavity mm2" in model
 
 
 @requires_drawio

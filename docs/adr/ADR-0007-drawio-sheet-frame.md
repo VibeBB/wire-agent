@@ -30,21 +30,30 @@ Two constraints shape the design:
   plus the title block; larger content falls back to a custom sheet built
   the same way. px is fixed at 100 px/inch (drawio convention), so
   millimetre rules convert exactly.
-- ISO 5457 geometry: 20 mm left filing border, 10 mm elsewhere; 0.7 mm
+- ISO 5457 geometry: 10 mm borders on all four sides — JIS Z 8311 lets an
+  unbound sheet omit the 20 mm filing margin, and equal borders keep the
+  left and right grid-reference strips the same width; 0.7 mm
   drawing-frame line; 0.35 mm zone ticks; centring marks on all four
-  symmetry-axis ends reaching 10 mm into the drawing space; ~50 mm zone
+  symmetry-axis ends running from the sheet edge to the drawing frame
+  only (never into the drawing space, where they would cross content or
+  the title block); ~50 mm zone
   fields measured from the sheet symmetry axes with corner fields
   absorbing the remainder, letters (I and O excluded) top-to-bottom on the
   side borders, numerals left-to-right on the top and bottom borders —
   `round(half/50)` per half reproduces Table 2 (A4: 6×4, A3: 8×6,
   A2: 12×8, A1: 16×12, A0: 24×16) and covers custom sheets; the size
   designation sits in the bottom border at the right corner.
-- ISO 7200 title block: bottom-right of the drawing space, ~180 mm ×
-  3 rows × 4 columns — legal owner, title, drawing number, revision index,
-  scale, segment/sheet number, size, IPC class, drawn-by, document type,
-  date of issue, units. Every value derives from the contract; `Date of
-  issue` is rendered `—` because a deterministic artifact cannot carry a
-  wall-clock date.
+- ISO 7200 title block: bottom-right of the drawing space, 180 mm ×
+  3 rows on a 12-unit (15 mm) column grid, read bottom-up:
+  - identification row (bottom): legal owner, drawing number, revision
+    index, date of issue, and the sheet number in the bottom-right corner;
+  - responsibility row: drawn by, approved by, scale, IPC class, units;
+  - title row (top): title and document type.
+  The sheet size is not repeated in the title block — the frame's size
+  designation carries it. Every value derives from the contract; `Date of
+  issue` and `Approved by` are rendered `—` because a deterministic
+  artifact cannot carry a wall-clock date and approval is a human
+  sign-off.
 - `drawio_lint` treats the `frame` layer as outside content checks (it
   already only inspects `parent="1"` vertices) and skips the
   `page_underutilized` coverage warning when a frame layer exists — the

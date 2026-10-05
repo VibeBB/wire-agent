@@ -68,8 +68,8 @@ def test_sheet_ladder_picks_smallest_that_fits() -> None:
         (3500.0, 500.0, "A0"),
         (700.0, 5000.0, "A0x2"),
         (700.0, 8000.0, "A0x3"),
-        (700.0, 12000.0, "210x3115"),  # custom: mm dims as designation
-        (6000.0, 400.0, "1554x169"),  # wider than any sheet's drawing space
+        (700.0, 12000.0, "200x3115"),  # custom: mm dims as designation
+        (6000.0, 400.0, "1544x169"),  # wider than any sheet's drawing space
     ]
     for w, h, expected in cases:
         assert _frame_geometry(w, h)["name"] == expected, (w, h, expected)
@@ -125,16 +125,34 @@ def test_model_page_is_sheet_and_frame_layer_is_bottom() -> None:
 def test_frame_border_and_centring_marks() -> None:
     cells = _cells(_model())
     border = _geo(cells["frame-border"])
-    assert border == pytest.approx((78.7402, 39.3701, 1050.89, 748.26), abs=0.01)
+    assert border == pytest.approx((39.3701, 39.3701, 1090.26, 748.26), abs=0.01)
     sheet = _geo(cells["frame-sheet"])
     assert sheet == pytest.approx((0.0, 0.0, *PX_A4), abs=0.01)
-    # Centring marks cross the border strip at each symmetry-axis end.
+    # Centring marks span the border strip only: sheet edge to frame line,
+    # never into the drawing space.
     cy = PX_A4[1] / 2
+    bx, by, bw, bh = border
     lm = _geo(cells["frame-cmark-left"])
     assert lm[0] == 0.0 and lm[1] == pytest.approx(cy, abs=2.0)
-    assert lm[2] == pytest.approx(_mm(_BORDER_LEFT_MM) + _mm(10.0), abs=0.05)
+    assert lm[0] + lm[2] == pytest.approx(bx, abs=0.01)
     rm = _geo(cells["frame-cmark-right"])
+    assert rm[0] == pytest.approx(bx + bw, abs=0.01)
     assert rm[0] + rm[2] == pytest.approx(PX_A4[0], abs=0.01)
+    tm = _geo(cells["frame-cmark-top"])
+    assert tm[1] == 0.0 and tm[1] + tm[3] == pytest.approx(by, abs=0.01)
+    bm = _geo(cells["frame-cmark-bottom"])
+    assert bm[1] == pytest.approx(by + bh, abs=0.01)
+    assert bm[1] + bm[3] == pytest.approx(PX_A4[1], abs=0.01)
+
+
+def test_left_and_right_border_strips_match() -> None:
+    cells = _cells(_model())
+    left = [_geo(c) for cid, c in cells.items() if cid.startswith("frame-lab-l")]
+    right = [_geo(c) for cid, c in cells.items() if cid.startswith("frame-lab-r")]
+    assert left and len(left) == len(right)
+    for geo in left + right:
+        assert geo[2] == pytest.approx(_mm(_BORDER_MM))
+    assert _mm(_BORDER_LEFT_MM) == pytest.approx(_mm(_BORDER_MM))
 
 
 def test_frame_zone_ticks_and_labels() -> None:
@@ -168,20 +186,30 @@ def test_title_block_fields() -> None:
     frame = _frame_geometry(880.0, 274.0)
     outer = _geo(cells["tb-outer"])
     assert outer[0] + outer[2] == pytest.approx(frame["w"] - _mm(_BORDER_MM), abs=0.01)
-    values = [
-        cells[f"tb-{r}{c}{suffix}"].get("value") or ""
-        for r in range(3)
-        for c in range(4)
-        for suffix in ("-lab", "-val")
-    ]
-    text = " ".join(values)
-    assert contract.contract_id in text
-    assert contract.revision in text
-    assert "1/1" in text  # segment / total sheets
-    assert "NTS" in text  # scale
-    assert "A4" in text  # size designation
+    labels = {
+        cid.removesuffix("-lab"): cell.get("value") or ""
+        for cid, cell in cells.items()
+        if cid.startswith("tb-") and cid.endswith("-lab")
+    }
+    value = {label: cells[f"{cid}-val"].get("value") or "" for cid, label in labels.items()}
+    assert value["Drawing no."] == contract.contract_id
+    assert value["Rev."] == contract.revision
+    assert value["Sheet"] == "1/1"
+    assert value["Scale"] == "NTS"
+    assert value["Approved by"] == "—"
     # Deterministic artifacts have no wall-clock date — em dash placeholder.
-    assert "Date of issue" in text and "—" in text
+    assert value["Date of issue"] == "—"
+    # The sheet size lives in the frame's size designation, not here.
+    assert "Size" not in value and "A4" not in value.values()
+    # Rows tile the block exactly and the sheet number owns the corner.
+    for row in range(3):
+        geos = sorted(_geo(cells[cid]) for cid in labels if cid.startswith(f"tb-{row}"))
+        assert geos[0][0] == pytest.approx(outer[0], abs=0.01)
+        assert geos[-1][0] + geos[-1][2] == pytest.approx(outer[0] + outer[2], abs=0.01)
+    sheet_id = next(cid for cid, label in labels.items() if label == "Sheet")
+    sx, sy, sw_, sh_ = _geo(cells[sheet_id])
+    assert sx + sw_ == pytest.approx(outer[0] + outer[2], abs=0.01)
+    assert sy + sh_ == pytest.approx(outer[1] + outer[3], abs=0.01)
 
 
 def test_size_designation_in_bottom_border() -> None:

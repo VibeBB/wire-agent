@@ -18,7 +18,6 @@ __all__ = [
     "SVG_NS",
     "_BORDER_LEFT_MM",
     "_BORDER_MM",
-    "_CENTRE_REACH_MM",
     "_COL_X",
     "_CONN_W",
     "_DOC_GAP_TOP",
@@ -171,14 +170,17 @@ _SHEETS: tuple[tuple[str, float, float], ...] = (
     ("A0x2", 1189.0, 1682.0),
     ("A0x3", 1189.0, 2523.0),
 )
-_BORDER_LEFT_MM = 20.0  # filing margin (ISO 5457 §4.2)
-_BORDER_MM = 10.0  # other three sides
+# JIS Z 8311 lets an unbound sheet omit the 20 mm filing margin; harness
+# drawings are not filed by binding, so all four borders (and therefore the
+# grid-reference strips) are the same 10 mm.
+_BORDER_LEFT_MM = 10.0
+_BORDER_MM = 10.0
 _FRAME_STROKE_MM = 0.7  # drawing-space frame line
 _GRID_STROKE_MM = 0.35  # grid-reference tick lines
 _ZONE_FIELD_MM = 50.0  # nominal zone field length
 _ZONE_TEXT_MM = 3.5  # zone letter/numeral height
-_CENTRE_REACH_MM = 10.0  # centring mark reach past the drawing frame
 _TITLE_BLOCK_W_MM = 180.0  # ISO 7200 recommended title-block width
+_TITLE_UNITS = 12  # title-block column grid: 12 units of 15 mm
 _TITLE_ROW_MM = 13.0
 _TITLE_ROWS = 3
 _TITLE_GAP_MM = 8.0  # clearance between content and the title block
@@ -463,7 +465,6 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
     rm, bm = _mm(_BORDER_MM), _mm(_BORDER_MM)
     grid = _mm(_GRID_STROKE_MM)
     thick = _mm(_FRAME_STROKE_MM)
-    reach = _mm(_CENTRE_REACH_MM)
     cx, cy = sw / 2, sh / 2
 
     def rect(cid: str, x: float, y: float, w: float, h: float, style: str) -> str:
@@ -488,12 +489,13 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
     sheet_style = "rounded=0;fillColor=none;strokeColor=#000000;strokeWidth=0.5;"
     parts = [
         rect("frame-sheet", 0.0, 0.0, sw, sh, sheet_style),
-        # Centring marks: at the ends of the sheet's symmetry axes, reaching
-        # 10 mm past the drawing frame into the drawing space (§4.3).
-        rect("frame-cmark-left", 0.0, cy - thick / 2, ds_x + reach, thick, fill),
-        rect("frame-cmark-right", sw - rm - reach, cy - thick / 2, rm + reach, thick, fill),
-        rect("frame-cmark-top", cx - thick / 2, 0.0, thick, ds_y + reach, fill),
-        rect("frame-cmark-bottom", cx - thick / 2, sh - bm - reach, thick, bm + reach, fill),
+        # Centring marks: at the ends of the sheet's symmetry axes, from the
+        # sheet edge to the drawing frame only — never into the drawing
+        # space, where they would cut through content or the title block.
+        rect("frame-cmark-left", 0.0, cy - thick / 2, ds_x, thick, fill),
+        rect("frame-cmark-right", sw - rm, cy - thick / 2, rm, thick, fill),
+        rect("frame-cmark-top", cx - thick / 2, 0.0, thick, ds_y, fill),
+        rect("frame-cmark-bottom", cx - thick / 2, sh - bm, thick, bm, fill),
         # Drawing-space frame (0.7 mm).
         rect("frame-border", ds_x, ds_y, ds_w, ds_h, frame_style),
     ]
@@ -564,34 +566,40 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
         )
     )
 
-    # ISO 7200 title block, bottom-right of the drawing space. Fields are
-    # contract-derived only — no wall-clock data, so the artifact stays
-    # byte-deterministic; "Date of issue" is an em dash placeholder.
-    fields = [
+    # ISO 7200 title block, bottom-right of the drawing space. The bottom
+    # row is the identification zone read first when filing: owner, drawing
+    # number, revision, date of issue, and the sheet number in the
+    # bottom-right corner. The sheet size is not repeated here — it is the
+    # frame's size designation. Spans are in 15 mm units (12 per row).
+    # Values are contract-derived only, with no wall-clock data, so the
+    # artifact stays byte-deterministic; unsigned fields are an em dash.
+    fields: list[list[tuple[str, str, int]]] = [
         [
-            ("Legal owner", "VibeBB"),
-            ("Title", _esc(frame["title"])),
-            ("Drawing no.", _esc(frame["drawing_no"])),
-            ("Rev.", _esc(frame["revision"])),
+            ("Title", _esc(frame["title"]), 8),
+            ("Document type", "Wire harness pin table", 4),
         ],
         [
-            ("Scale", "NTS"),
-            ("Sheet", "1/1"),
-            ("Size", _esc(frame["name"])),
-            ("IPC class", str(frame["ipc_class"])),
+            ("Drawn by", _esc(frame["drawn_by"]), 3),
+            ("Approved by", "—", 3),
+            ("Scale", "NTS", 2),
+            ("IPC class", str(frame["ipc_class"]), 2),
+            ("Units", "m, mm (note 3)", 2),
         ],
         [
-            ("Drawn by", _esc(frame["drawn_by"])),
-            ("Document type", "wire harness pin table"),
-            ("Date of issue", "—"),
-            ("Units", "px = 0.254 mm"),
+            ("Legal owner", "VibeBB", 3),
+            ("Drawing no.", _esc(frame["drawing_no"]), 4),
+            ("Rev.", _esc(frame["revision"]), 1),
+            ("Date of issue", "—", 2),
+            ("Sheet", "1/1", 2),
         ],
     ]
-    col_w, row_h = tb_w / 4, _mm(_TITLE_ROW_MM)
+    unit_w, row_h = tb_w / _TITLE_UNITS, _mm(_TITLE_ROW_MM)
     lab_h = row_h * 0.45
     for row, entries in enumerate(fields):
-        for col, (label, value) in enumerate(entries):
-            x, y = tb_x + col * col_w, tb_y + row * row_h
+        assert sum(span for _l, _v, span in entries) == _TITLE_UNITS
+        x = tb_x
+        for col, (label, value, span) in enumerate(entries):
+            y, col_w = tb_y + row * row_h, span * unit_w
             cell_id = f"tb-{row}{col}"
             # Plain-text caption/value pairs keep the model free of HTML
             # labels so drawio exports SVG text instead of foreignObjects.
@@ -616,6 +624,7 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
                 f'<mxGeometry x="{_num(x)}" y="{_num(y + lab_h)}" '
                 f'width="{_num(col_w)}" height="{_num(row_h - lab_h)}" as="geometry" /></mxCell>'
             )
+            x += col_w
     parts.append(rect("tb-outer", tb_x, tb_y, tb_w, tb_h, frame_style))
     return parts
 
