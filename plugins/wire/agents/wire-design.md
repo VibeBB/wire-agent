@@ -79,6 +79,8 @@ directory verbatim.
 Record these without being asked; the Stop hook refuses to finish a
 session that still owes them (see `docs/records-protocol.md`).
 
+Use stage `design`. Typical decisions: each contract repair for a failing gate (gauge, route length or split, segregation, connector rating) with the measured value and limit it answers.
+
 - **Decision** (`wire_record_decision`) for every non-trivial choice:
   the question, the first principles / physical laws / standards it rests
   on, at least two options with pros and cons, the chosen option, a

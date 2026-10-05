@@ -36,7 +36,14 @@ conversation ──▶ <name>.contract.json + <name>.intake.json   (truth)
                    bom.json/.csv
                    harness-diagram.drawio.svg (ISO 5457 frame + ISO 7200 title block)
                    harness-diagram.drawio_lint.json (advisory)
+                   harness-diagram.png (vision render)
+                   route-plan.drawio.svg / .png (placed mech anchors)
                    manifest.json / provenance.json
+
+liaison/<id>.ux-request.json ──▶ wire_ux_inbox ──▶ stages ──▶ wire_ux_respond
+                                                             └▶ liaison/<id>.ux-response.json
+mech *.envelope.json / circuit connectivity ──▶ wire_import ──▶ contract (I* sources)
+every viewed image / stage end / choice ──▶ observations/wire/*.jsonl (VRP)
 ```
 
 Gate verdicts are the only pass/fail authority; `unknown` fails closed.
@@ -53,10 +60,17 @@ src/wire/
 ├── gates.py              # authoritative gate runner
 ├── export.py             # projections + manifest/provenance
 ├── drawio_lint.py        # advisory drawio readability lint (never a verdict)
-├── report.py             # design-report.json/md
+├── route_plan.py         # route plan projection from placed anchors
+├── drawio_cli.py         # drawio-desktop subprocess adapter
+├── render.py             # sha256 visual baseline
+├── advisory.py           # typed visual review records
+├── records.py            # VRP writers and status
+├── liaison.py            # SLP v2 inbox and responder
+├── workspace.py          # workspace root + path containment
+├── report.py             # design-report.json/md + vision points
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
-├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import,review-record}
+├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import,review-record,record,ux}
 └── mcp_server.py         # stdio MCP boundary
 plugins/wire/
 ├── .plugin/plugin.json
@@ -65,7 +79,8 @@ plugins/wire/
 │                         # wire-connectivity
 ├── agents/               # wire-brief, wire-design, wire-review
 ├── commands/             # /wire:design, /wire:doctor, /wire:gates, /wire:export
-├── hooks/                # session doctor, artifact guard, status report
+├── hooks/                # doctor, attachments, profiles, records, artifact guard,
+│                         # safety rail, vision/image observation, status report
 └── scripts/wire_launcher.py
 tests/                    # schema, gates (+negative), export, intake, plugin assets
 scripts/                  # verify_all, verify_docs, check_plugin_load, e2e
@@ -76,9 +91,10 @@ docker/                   # wire-tools image definition + digest lock
 
 ## Cooperation model
 
-Per ADR-0003, wire-agent interoperates with mechanical-agent,
-electrical-circuit-agent, and bard-agent through JSON contract files in
-the shared workspace plus `task`-tool delegation — never package imports.
+Per ADR-0003, wire-agent interoperates with its sister plugins through
+JSON files in the shared workspace plus `task`-tool delegation — never
+package imports. UX-creator directs the family through SLP v2 liaison
+files (ADR-0010, [sister-cooperation.md](sister-cooperation.md)).
 There is no acd-agent dependency anywhere in the repository.
 
 ## Determinism rules

@@ -158,6 +158,8 @@ need two steps, and write files with `file_editor` rather than multi-line heredo
 Record these without being asked; the Stop hook refuses to finish a
 session that still owes them (see `docs/records-protocol.md`).
 
+Stages are `brief`, `design`, `review` and `liaison`. At `liaison`, record the decision to accept, defer, reject or ask for information on each UX request, and cite the impression's event id in the response.
+
 - **Decision** (`wire_record_decision`) for every non-trivial choice:
   the question, the first principles / physical laws / standards it rests
   on, at least two options with pros and cons, the chosen option, a

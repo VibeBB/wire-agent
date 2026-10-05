@@ -99,6 +99,8 @@ output that matters; do not author artifacts.
 Record these without being asked; the Stop hook refuses to finish a
 session that still owes them (see `docs/records-protocol.md`).
 
+Use stage `brief`. Typical decisions: connector family and housing, wire spec per net, whether an image claim becomes an assumption or a question, and how a UX request maps to requirements.
+
 - **Decision** (`wire_record_decision`) for every non-trivial choice:
   the question, the first principles / physical laws / standards it rests
   on, at least two options with pros and cons, the chosen option, a

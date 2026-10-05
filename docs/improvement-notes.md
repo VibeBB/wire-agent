@@ -50,8 +50,8 @@ repository), **open** (stays inside this repository but not done yet) or
 14. **done** — No SLP v2: `wire_ux_inbox` / `wire_ux_respond` (MCP + CLI)
     with strict local mirrors of the UX-creator request/response schema.
 15. **done** — Agent prompts carried a generic "Records you must leave"
-    section; they now name wire's stages (`intake`, `contract`, `import`,
-    `author`, `review`, `liaison`) and the decisions that need a record.
+    section; they now name wire's stages (`brief`, `design`, `review`,
+    `liaison`) and the decisions that need a record.
 16. **done** — README mixed user-facing and contributor content; it is
     now a non-engineer guide (English then Japanese) and the technical
     material lives in `docs/`.

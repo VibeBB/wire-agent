@@ -1,18 +1,38 @@
 # wire-agent documentation
 
-Specifications and operating policy for the wire harness design agent.
-The README is the product overview; this directory holds the authoritative
-specifications and design decisions.
+Technical documentation for the wire harness design plugin. The
+[README](../README.md) is the user-facing overview; everything here is
+for engineers and agents.
 
-## Architecture
+## Using and extending the plugin
 
-- [Architecture](architecture.md) — repository layout, layers, data flow
-- [Operations](operations.md) — release, dependency-update, and CI policy
+- [Architecture](architecture.md) — layers, data flow, modules
+- [Workflow](workflow.md) — stages, what happens, records left
+- [Agents](agents.md) — `wire-brief`, `wire-design`, `wire-review`
+- [Skills](skills.md) — every SKILL and what it enforces
+- [Commands](commands.md) — slash commands and the `python -m wire` CLI
+- [MCP tools](mcp.md) — every tool: inputs, outputs, errors, read/write
+- [Hooks](hooks.md) — every hook by event
+- [Contracts](contracts.md) — every JSON schema wire reads or writes
+- [Records and vision](records-and-vision.md) — VRP for wire, vision points
+- [VibeBB Record Protocol](records-protocol.md) — the family protocol
+- [Sister cooperation](sister-cooperation.md) — imports, outputs, SLP v2
+- [Performance and limits](performance-and-limits.md) — budgets, sandbox, modelling limits
+
+## Running the project
+
+- [Operations](operations.md) — release, images, CI, hardening policy
+- [Development](development.md) — setup, verify stages, change rules
+- [Dependency updates](dependency-updates.md) — update policy and deferrals
+- [Improvement notes](improvement-notes.md) — done, open and family items
 
 ## Research
 
 - [Wire harness domains](research/wire-harness-domains.md) — task taxonomy,
   commercial tools, and standards surveyed before design
+- [SDK v1.49.5 feature evaluation](research/sdk-v1.49.5-feature-evaluation.md)
+- [SDK v1.49.6 feature evaluation](research/sdk-v1.49.6-feature-evaluation.md)
+- [drawio-desktop 31.7.0 feature evaluation](research/drawio-31.7.0-feature-evaluation.md)
 - [SDK v1.50.0 feature evaluation](research/sdk-v1.50.0-feature-evaluation.md) —
   SDK, uv, and drawio-desktop update decisions
 - [SDK v1.50.1 feature evaluation](research/sdk-v1.50.1-feature-evaluation.md) —
@@ -35,3 +55,4 @@ specifications and design decisions.
 | [ADR-0007](adr/ADR-0007-drawio-sheet-frame.md) | ISO 5457 drawing frame + ISO 7200 title block on the drawio diagram | Accepted |
 | [ADR-0008](adr/ADR-0008-attest-published-tools-images.md) | Attest published tools images | Accepted |
 | [ADR-0009](adr/ADR-0009-vibebb-record-protocol.md) | VibeBB Record Protocol | Accepted |
+| [ADR-0010](adr/ADR-0010-liaison-route-geometry-and-vision-points.md) | SLP v2 responder, anchor geometry and vision points | Accepted |

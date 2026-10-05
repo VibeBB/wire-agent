@@ -182,6 +182,8 @@ review record binds the judgment to those provenance entries.
 Record these without being asked; the Stop hook refuses to finish a
 session that still owes them (see `docs/records-protocol.md`).
 
+Use stage `review`. Typical decisions: whether a finding becomes a contract change, and which drawing gaps are accepted for this revision.
+
 - **Decision** (`wire_record_decision`) for every non-trivial choice:
   the question, the first principles / physical laws / standards it rests
   on, at least two options with pros and cons, the chosen option, a

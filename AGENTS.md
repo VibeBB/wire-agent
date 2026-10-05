@@ -22,10 +22,15 @@ src/wire/                 # deterministic wire-harness core
 ├── export.py             # wire list/cut table/BOM/diagram + manifest/provenance
 ├── render.py             # sha256 visual baseline for rendered images
 ├── advisory.py           # typed L2 visual-review records (never verdicts)
-├── report.py             # design-report.json/md
+├── route_plan.py         # route plan projection from placed mech anchors
+├── drawio_cli.py         # drawio-desktop subprocess adapter
+├── records.py            # VibeBB Record Protocol writers and status
+├── liaison.py            # SLP v2 inbox/responder for UX-creator requests
+├── workspace.py          # workspace root + path containment
+├── report.py             # design-report.json/md + vision points
 ├── doctor.py             # environment probe
 ├── imports.py            # connectivity/envelope import adapters
-├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import,review-record}
+├── cli.py                # python -m wire {doctor,intake,author,gates,export,drawio,drawio-lint,import,review-record,record,ux}
 └── mcp_server.py         # stdio MCP boundary
 plugins/wire/             # OpenHands plugin
 ├── skills/               # wire-workflow, wire-contract, wire-gates,

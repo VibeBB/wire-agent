@@ -14,8 +14,8 @@ plugin launcher. Resolve the plugin root the same way the hooks do
 
 Run `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" export --contract <file> --out <dir>` to write
 `wire-list.csv`, `cut-table.csv`, `bom.json`, `bom.csv`,
-`harness-diagram.drawio.svg` (or `harness-diagram.drawio` when
-drawio-desktop is absent), `manifest.json`, and `provenance.json`.
+`harness-diagram.drawio.svg`, `route-plan.drawio.svg` when imported
+mech anchors carry `position_mm`, `manifest.json`, and `provenance.json`.
 The `.drawio.svg` is rendered by drawio-desktop itself — a WireViz-style
 pin-table diagram that displays as SVG and embeds the editable drawio
 model; opening it in diagrams.net exposes two layers (the `harness`
@@ -32,7 +32,7 @@ projections through `drawio -x` in the tools image: png/jpg are 2×
 vision-review rasters (the FileEditorTool sends them to the vision LLM
 directly), pdf/html/xml are review or interchange copies, and `svg` is
 the same drawing without the embedded model. `--png` is a shorthand for
-`--drawio png`. Rendered bytes depend on the drawio/font versions on the
+`--drawio png` and also writes `route-plan.png` when a route plan exists. Rendered bytes depend on the drawio/font versions on the
 host, so treat them as review aids — the manifest records actual hashes.
 
 Every rendered raster must then be vision-inspected — required, not
