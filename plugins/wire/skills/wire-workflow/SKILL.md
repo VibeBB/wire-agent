@@ -33,6 +33,32 @@ plugin launcher. Resolve the plugin root the same way the hooks do
    never in the artifacts, until `verdict: pass`.
 3. `wire-review` — L2 advisory pass over values, topology, and the
    diagram. Findings feed the contract, never a verdict.
+4. Liaison — when the workspace has a `liaison/` directory, answer every
+   UX-creator request addressed to wire (see "UX-creator liaison" below).
+
+## UX-creator liaison (SLP v2)
+
+UX-creator writes `liaison/<id>.ux-request.json`; wire answers with
+`liaison/<id>.ux-response.json`. At session start and before the final
+answer, call `wire_ux_inbox` (`python -m wire ux inbox`): it lists each
+request for wire with a `state` — `new`, `answered`, `stale` (an input
+changed since the request or since the response), `blocked` (a
+`depends_on` request is unanswered) — and every malformed liaison file.
+
+- Work `new` requests through the normal brief → design → review stages;
+  the request's `requested_changes`, `expected_deliverables` and
+  `acceptance` become intake requirements.
+- Answer with `wire_ux_respond` (`python -m wire ux respond --json f`):
+  give `request`, `status`, `reason`, the delivered `artifacts`, the
+  `design_reports` whose checks become `gate_verdicts`, and the VRP
+  `decision_refs` / `impression_refs` (event_ids from `wire_record_*`).
+  The writer hashes the inputs and artifacts itself.
+- `done` is refused while any gate is `fail`/`unknown`, while the request
+  is stale or blocked, without artifacts, or without an impression ref:
+  answer `needs_info` (with `questions_for_user`) or `rejected` with a
+  20+ character reason instead. Never hand-edit a response file (the
+  `protect-generated` hook blocks it).
+- Re-answer `stale` requests after re-running the affected stages.
 
 ## Vision uses (L2 only)
 
@@ -62,6 +88,13 @@ user-provided harness photos, not workspace renders like
   `--drawio` takes more
   formats (jpg, pdf, html, svg, xml); `wire_drawio` / `python -m wire
   drawio` expose the full `drawio -x` surface for arbitrary inputs.
+- **Route plan**: when imported mech anchors carry `position_mm`,
+  `wire_author` also renders `route-plan.png` (top view of anchors and
+  route polylines with length vs anchor span). Review it with the
+  `route_plan` checklist; `route_geometry` is the gate on the same data.
+- **Any workspace image**: `wire_view_image` returns a PNG/JPEG inline
+  (sister renders, built-harness photos) so a vision-capable model sees
+  it without the file editor.
 - **Manufactured-harness crosscheck**: a photo of a built harness vs the
   PNG can flag obvious mismatches (missing cavity population, wrong
   insulation color) as observations for the user — the contract is not
@@ -72,7 +105,9 @@ user-provided harness photos, not workspace renders like
 - 論理設計 (logical): connectors + cavities, nets, wires, wire types,
   terminal assignment — flagship v0.1 path.
 - 経路 (routing): declared route segments with min bend radius, protection,
-  flex requirements, anchors — declared, not 3D-computed, in v0.1.
+  flex requirements, anchors — declared, not 3D-computed. Anchor positions
+  imported from a mech envelope feed the `route_geometry` gate (route
+  length must cover the anchor polyline) and the route plan render.
 - 分離 (segregation): signal-class separation policies over routes and
   connectors.
 - 製造 (manufacturing): wire list, cut table, BOM, harness diagram
@@ -107,6 +142,10 @@ user-provided harness photos, not workspace renders like
   intake instead of duplicating imported values as R*/A*. Without
   `out_path`, the merged contract is written to
   `<contract-stem>.merged.contract.json` next to the contract.
+- Re-importing the same source refreshes its `I*` entry (new sha256,
+  anchors and anchor geometry) and appends only connectors/nets whose
+  refs are new. The `import_freshness` gate fails when a recorded source
+  file changed after the import, so re-import instead of editing hashes.
 
 ## Terminal tool notes
 

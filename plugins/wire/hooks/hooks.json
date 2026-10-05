@@ -94,7 +94,7 @@
       ]
     },
     {
-      "matcher": "file_editor|wire_drawio|wire_author",
+      "matcher": "file_editor|wire_drawio|wire_author|wire_view_image",
       "hooks": [
         {
           "type": "command",

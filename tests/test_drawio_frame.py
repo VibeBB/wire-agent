@@ -270,7 +270,7 @@ def test_doc_notes_cover_declared_features() -> None:
     assert "splice SP1 crimp" in text
     assert f"twisted {data['nets'][0]['id']}⇄{data['nets'][1]['id']}" in text
     assert f"net {data['nets'][2]['id']} shielded" in text
-    assert "flex" in text and "anchors A2,B1" in text
+    assert "flex" in text and "anchors B1 > A2" in text
     assert "500 flex" in text
 
 

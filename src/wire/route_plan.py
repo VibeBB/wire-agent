@@ -21,6 +21,7 @@ ROUTE_PLAN_PNG = "route-plan.png"
 _CANVAS_PX = 760.0
 _MARGIN_PX = 80.0
 _ANCHOR_PX = 18.0
+_LABEL_PX = 240.0
 _ROUTE_COLORS = ("#1565c0", "#c00000", "#2e7d32", "#6a3fb5", "#ef6c00", "#00838f")
 _ANCHOR_SHAPES = {
     "clip": "ellipse;fillColor=#ffffff;strokeColor=#1a1a1a;",
@@ -81,7 +82,7 @@ def route_plan_mxfile(contract: HarnessContract) -> str | None:
     for name, point in placed.items():
         x, y = at(point)
         assert point.position_mm is not None
-        label = f"{name} ({point.kind})\nz={point.position_mm[2]:g}"
+        label = f"{name} ({point.kind}) z={point.position_mm[2]:g}"
         style = _ANCHOR_SHAPES[point.kind] + "html=0;whiteSpace=wrap;"
         cells.append(
             f'<mxCell id="anchor-{_esc(name)}" value="" style="{style}" vertex="1" parent="1">'
@@ -90,8 +91,10 @@ def route_plan_mxfile(contract: HarnessContract) -> str | None:
         )
         cells.append(
             f'<mxCell id="anchor-label-{_esc(name)}" value="{_esc(label)}" '
-            'style="text;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">'
-            f'<mxGeometry x="{x + _ANCHOR_PX}" y="{y - _ANCHOR_PX}" width="140" height="34" '
+            'style="text;fontSize=11;align=left;verticalAlign=middle;whiteSpace=wrap;" '
+            'vertex="1" parent="1">'
+            f'<mxGeometry x="{x + _ANCHOR_PX}" y="{y - _ANCHOR_PX}" width="{_LABEL_PX}" '
+            'height="36" '
             'as="geometry"/></mxCell>'
         )
     legend_y = _MARGIN_PX * 2 + _CANVAS_PX
@@ -122,7 +125,8 @@ def route_plan_mxfile(contract: HarnessContract) -> str | None:
             'as="geometry"/></mxCell>'
         )
     model = (
-        '<mxGraphModel dx="1000" dy="1000" grid="0" page="1" pageWidth="1000" '
+        f'<mxGraphModel dx="1000" dy="1000" grid="0" page="1" '
+        f'pageWidth="{int(_MARGIN_PX * 2 + _CANVAS_PX + _LABEL_PX)}" '
         f'pageHeight="{int(legend_y + 40 + 22 * len(contract.routes))}">'
         f"<root>{''.join(cells)}</root></mxGraphModel>"
     )

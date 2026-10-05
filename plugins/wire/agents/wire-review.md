@@ -103,9 +103,21 @@ a subjective `impression` — what the sheet communicates well, what it
 leaves unsaid, whether a stranger could build from it. The impression is
 a multi-sentence reading, not a verdict line: cover all three axes,
 naming strengths and residual gaps concretely (the record validator
-rejects anything under 240 characters or with fewer than two sentences,
-so a one-liner never reaches the file). Write it in your reply and
+rejects anything under 400 characters or with fewer than three sentences,
+so a one-liner never reaches the file). Cover accuracy against the
+contract, ambiguity a stranger could misread, whether the design intent
+comes across, usefulness to the maker and the end user, and the next step. Write it in your reply and
 record it in the record's `impression` field.
+
+`design-report.json` lists the rasters that need a review under
+`vision_points` (`harness-diagram.png` → `harness_diagram`,
+`route-plan.png` → `route_plan`). On a `route_plan` image check that
+every route passes through its anchors in declared order, that no route
+legend says `TOO SHORT`, that clips/grommets/breakouts read as the
+right kind, and that the plan agrees with the mechanical layout you were
+given. Use `wire_view_image` to see any workspace PNG/JPEG inline (a
+sister's render, a photo of the built harness) and record it with
+`wire_record_vision_review` as well.
 
 Visual review records are mandatory, not optional: every rendered image
 in the export directory — each `*.png`, `*.jpg`, and `*.svg` projection —
@@ -149,9 +161,10 @@ detail, and writes the record (fail-closed on a bad payload):
 }
 ```
 
-`checklist` is `harness_diagram` or `intake_image`; `impression` is
-required and floored at 240 characters with at least two sentences (a
-terse record fails validation and is discarded); finding
+`checklist` is `harness_diagram`, `route_plan`, `intake_image`,
+`built_harness_photo` or `sister_artifact`; `impression` is required and
+floored at 400 characters with at least three sentences (a terse record
+fails validation and is discarded); finding
 categories are `missing_connection`, `wrong_connector`, `routing_anomaly`,
 `label_collision`, `text_outside_frame`, `dimension_legibility`,
 `ambiguous_notation`, `missing_dimension`, `missing_manufacturing_info`,
