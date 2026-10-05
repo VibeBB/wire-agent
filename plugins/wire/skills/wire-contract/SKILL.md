@@ -70,6 +70,13 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
   mech envelope (`anchor_resolution`).
 - **segregations**: declare incompatible signal-class pairs; violations
   fail the gate.
+- **drawing**: ISO 7200 title-block data. Ask the user for the
+  `legal_owner` (their organisation, never "VibeBB" unless it is a VibeBB
+  example), `created_by` and an optional `supplementary_title`; set
+  `approved_by` and `date_of_issue` only when a human has actually
+  approved and issued the drawing. A date of issue without an approver is
+  rejected; the sheet then reads `In preparation` / `In approval` /
+  `Released` accordingly.
 - **service**: `mating_cycles` is checked against connector ratings;
   `flex_cycles` is recorded for v0.2 flex-endurance checks.
 

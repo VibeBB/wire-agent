@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import textwrap
 from typing import Any
 
@@ -12,6 +13,7 @@ from .contract import (
     HarnessNet,
     HarnessWire,
     WireType,
+    contract_sha256,
 )
 
 __all__ = [
@@ -180,9 +182,40 @@ _GRID_STROKE_MM = 0.35  # grid-reference tick lines
 _ZONE_FIELD_MM = 50.0  # nominal zone field length
 _ZONE_TEXT_MM = 3.5  # zone letter/numeral height
 _TITLE_BLOCK_W_MM = 180.0  # ISO 7200 recommended title-block width
-_TITLE_UNITS = 12  # title-block column grid: 12 units of 15 mm
-_TITLE_ROW_MM = 13.0
-_TITLE_ROWS = 3
+_TITLE_ROW_MM = 9.0
+_TITLE_ROWS = 5  # technical-data strip + the four ISO 7200 rows
+_MONO_ADVANCE = 0.6  # monospace glyph advance per unit of font size
+_CELL_PAD_PX = 8.0  # spacingLeft plus the right-hand clearance
+_DOCUMENT_TYPE = "Harness connection diagram"
+# (key, label, x0 mm, x1 mm, first row, end row) over the 180 mm block.
+_TITLE_FIELDS: tuple[tuple[str, str, float, float, int, int], ...] = (
+    ("workmanship", "Workmanship", 0.0, 55.0, 0, 1),
+    ("units", "Units", 55.0, 95.0, 0, 1),
+    ("scale", "Scale", 95.0, 115.0, 0, 1),
+    ("contract", "Contract sha256", 115.0, 180.0, 0, 1),
+    ("dept", "Responsible dept.", 0.0, 40.0, 1, 2),
+    ("techref", "Technical reference", 40.0, 85.0, 1, 2),
+    ("creator", "Created by", 85.0, 130.0, 1, 2),
+    ("approver", "Approved by", 130.0, 180.0, 1, 2),
+    ("owner", "Legal owner", 0.0, 40.0, 2, 5),
+    ("doctype", "Document type", 40.0, 95.0, 2, 3),
+    ("classification", "Classification/key words", 95.0, 135.0, 2, 3),
+    ("status", "Document status", 135.0, 180.0, 2, 3),
+    ("title", "Title, Supplementary title", 40.0, 110.0, 3, 5),
+    ("number", "Identification number", 110.0, 180.0, 3, 4),
+    ("rev", "Rev.", 110.0, 125.0, 4, 5),
+    ("issued", "Date of issue", 125.0, 150.0, 4, 5),
+    ("lang", "Lang.", 150.0, 162.0, 4, 5),
+    ("sheet", "Sheet", 162.0, 180.0, 4, 5),
+)
+# Value font (size, extra style); unlisted keys are 10 pt bold. The title
+# and identification number are the largest text, as on KiCad's sheet.
+_TITLE_VALUE_STYLE: dict[str, tuple[float, str]] = {
+    "title": (13.0, "fontStyle=1;"),
+    "number": (13.0, "fontStyle=1;"),
+    "owner": (12.0, "fontStyle=1;"),
+    "contract": (10.0, ""),
+}
 _TITLE_GAP_MM = 8.0  # clearance between content and the title block
 _ZONE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"  # I and O excluded (ISO 5457 §4.4)
 
@@ -348,7 +381,7 @@ def _doc_legend_rows() -> list[str]:
 def _doc_notes_rows(contract: HarnessContract, unused_cavities: int) -> list[str]:
     """Manufacturing notes the shop floor needs without design context."""
     lines = [
-        f"build+inspect: IPC-A-620 cl.{contract.ipc_class}",
+        f"build+inspect: IPC/WHMA-A-620 class {contract.ipc_class}",
         f"ambient service {_num(contract.ambient_temperature_c)} °C",
         "units: wire m, strip mm, cavity mm2",
         "wire list: wire-list.csv",
@@ -566,67 +599,113 @@ def _frame_cells(frame: dict[str, Any]) -> list[str]:
         )
     )
 
-    # ISO 7200 title block, bottom-right of the drawing space. The bottom
-    # row is the identification zone read first when filing: owner, drawing
-    # number, revision, date of issue, and the sheet number in the
-    # bottom-right corner. The sheet size is not repeated here — it is the
-    # frame's size designation. Spans are in 15 mm units (12 per row).
-    # Values are contract-derived only, with no wall-clock data, so the
-    # artifact stays byte-deterministic; unsigned fields are an em dash.
-    fields: list[list[tuple[str, str, int]]] = [
-        [
-            ("Title", _esc(frame["title"]), 8),
-            ("Document type", "Wire harness pin table", 4),
-        ],
-        [
-            ("Drawn by", _esc(frame["drawn_by"]), 3),
-            ("Approved by", "—", 3),
-            ("Scale", "NTS", 2),
-            ("IPC class", str(frame["ipc_class"]), 2),
-            ("Units", "m, mm (note 3)", 2),
-        ],
-        [
-            ("Legal owner", "VibeBB", 3),
-            ("Drawing no.", _esc(frame["drawing_no"]), 4),
-            ("Rev.", _esc(frame["revision"]), 1),
-            ("Date of issue", "—", 2),
-            ("Sheet", "1/1", 2),
-        ],
-    ]
-    unit_w, row_h = tb_w / _TITLE_UNITS, _mm(_TITLE_ROW_MM)
-    lab_h = row_h * 0.45
-    for row, entries in enumerate(fields):
-        assert sum(span for _l, _v, span in entries) == _TITLE_UNITS
-        x = tb_x
-        for col, (label, value, span) in enumerate(entries):
-            y, col_w = tb_y + row * row_h, span * unit_w
-            cell_id = f"tb-{row}{col}"
-            # Plain-text caption/value pairs keep the model free of HTML
-            # labels so drawio exports SVG text instead of foreignObjects.
+    # ISO 7200 title block, bottom-right of the drawing space, in the
+    # ISO 7200 / ISO 29845 arrangement: administrative row on top, legal
+    # owner down the left, title in the middle, and the identification
+    # fields along the bottom with the sheet number in the bottom-right
+    # corner. Harness-specific technical data (workmanship standard,
+    # units, scale, contract digest) sits in its own strip above it, as
+    # ISO 7200 §4 keeps such fields out of the title block proper. The
+    # sheet size is not repeated — it is the frame's size designation.
+    values = frame["block"]
+    row_h = _mm(_TITLE_ROW_MM)
+    for key, label, x0_mm, x1_mm, row0, row1 in _TITLE_FIELDS:
+        x, y = tb_x + _mm(x0_mm), tb_y + row0 * row_h
+        w, h = _mm(x1_mm - x0_mm), (row1 - row0) * row_h
+        cell_id = f"tb-{key}"
+        size, style = _TITLE_VALUE_STYLE.get(key, (10.0, "fontStyle=1;"))
+        # Plain-text caption/value pairs keep the model free of HTML
+        # labels so drawio exports SVG text instead of foreignObjects.
+        parts.append(
+            f'<mxCell id="{cell_id}" value="" '
+            'style="rounded=0;whiteSpace=wrap;strokeColor=#000000;'
+            'strokeWidth=1;fillColor=none;" vertex="1" parent="frame">'
+            f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
+            f'width="{_num(w)}" height="{_num(h)}" as="geometry" /></mxCell>'
+        )
+        lab_h = row_h * 0.4
+        parts.append(
+            f'<mxCell id="{cell_id}-lab" value="{label}" '
+            'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
+            'fontFamily=monospace;fontSize=6;" vertex="1" parent="frame">'
+            f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
+            f'width="{_num(w)}" height="{_num(lab_h)}" as="geometry" /></mxCell>'
+        )
+        value_h = h - lab_h
+        if key == "title":
+            value_h = (h - lab_h) * 0.55
+            sup, sup_size = _fit_text(values["supplementary"], w, 8.0)
             parts.append(
-                f'<mxCell id="{cell_id}" value="" '
-                'style="rounded=0;whiteSpace=wrap;strokeColor=#000000;'
-                'strokeWidth=1;fillColor=none;" vertex="1" parent="frame">'
-                f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
-                f'width="{_num(col_w)}" height="{_num(row_h)}" as="geometry" /></mxCell>'
+                f'<mxCell id="{cell_id}-sup" value="{_esc(sup)}" '
+                'style="text;align=left;verticalAlign=top;spacingLeft=4;'
+                f'fontFamily=monospace;fontSize={_num(sup_size)};" '
+                'vertex="1" parent="frame">'
+                f'<mxGeometry x="{_num(x)}" y="{_num(y + lab_h + value_h)}" '
+                f'width="{_num(w)}" height="{_num(h - lab_h - value_h)}" '
+                'as="geometry" /></mxCell>'
             )
-            parts.append(
-                f'<mxCell id="{cell_id}-lab" value="{label}" '
-                'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
-                'fontFamily=monospace;fontSize=6;" vertex="1" parent="frame">'
-                f'<mxGeometry x="{_num(x)}" y="{_num(y)}" '
-                f'width="{_num(col_w)}" height="{_num(lab_h)}" as="geometry" /></mxCell>'
-            )
-            parts.append(
-                f'<mxCell id="{cell_id}-val" value="{value}" '
-                'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
-                'fontFamily=monospace;fontSize=10;fontStyle=1;" vertex="1" parent="frame">'
-                f'<mxGeometry x="{_num(x)}" y="{_num(y + lab_h)}" '
-                f'width="{_num(col_w)}" height="{_num(row_h - lab_h)}" as="geometry" /></mxCell>'
-            )
-            x += col_w
+        text_value, fitted = _fit_text(values[key], w, size)
+        parts.append(
+            f'<mxCell id="{cell_id}-val" value="{_esc(text_value)}" '
+            'style="text;align=left;verticalAlign=middle;spacingLeft=4;'
+            f'fontFamily=monospace;fontSize={_num(fitted)};{style}" '
+            'vertex="1" parent="frame">'
+            f'<mxGeometry x="{_num(x)}" y="{_num(y + lab_h)}" '
+            f'width="{_num(w)}" height="{_num(value_h)}" as="geometry" /></mxCell>'
+        )
     parts.append(rect("tb-outer", tb_x, tb_y, tb_w, tb_h, frame_style))
     return parts
+
+
+def _fit_text(value: str, width: float, size: float, floor: float = 6.0) -> tuple[str, float]:
+    """Shrink a monospace value until it fits its cell; below ``floor``
+    the value is cut with an ellipsis rather than spilling over a rule."""
+    room = width - _CELL_PAD_PX
+    if not value or len(value) * _MONO_ADVANCE * size <= room:
+        return value, size
+    fitted = math.floor(room / (len(value) * _MONO_ADVANCE) * 2) / 2
+    if fitted >= floor:
+        return value, fitted
+    keep = max(1, math.floor(room / (_MONO_ADVANCE * floor)) - 1)
+    return value[:keep] + "…", floor
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" + ("" if count == 1 else "s")
+
+
+def _title_block_values(contract: HarnessContract) -> dict[str, str]:
+    """Title-block values, derived from the contract only — no wall clock —
+    so identical contract bytes give identical drawings. Unset people and
+    dates print an em dash; the document status says why they are unset."""
+    drawing = contract.drawing
+    dash = "—"
+    summary = [_plural(len(contract.wires), "wire"), _plural(len(contract.connectors), "connector")]
+    if contract.splices:
+        summary.append(_plural(len(contract.splices), "splice"))
+    if contract.routes:
+        summary.append(_plural(len(contract.routes), "route"))
+    return {
+        "workmanship": f"IPC/WHMA-A-620 Class {contract.ipc_class}",
+        "units": "m, mm (note 3)",
+        "scale": "NTS",
+        "contract": contract_sha256(contract)[:16],
+        "dept": drawing.responsible_dept or dash,
+        "techref": drawing.technical_reference or dash,
+        "creator": drawing.created_by or f"wire-agent/{__version__}",
+        "approver": drawing.approved_by or dash,
+        "owner": drawing.legal_owner or dash,
+        "doctype": _DOCUMENT_TYPE,
+        "classification": drawing.classification or dash,
+        "status": drawing.status,
+        "title": contract.name,
+        "supplementary": drawing.supplementary_title or " · ".join(summary),
+        "number": contract.contract_id,
+        "rev": contract.revision,
+        "issued": drawing.date_of_issue or dash,
+        "lang": drawing.language,
+        "sheet": "1/1",
+    }
 
 
 def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
@@ -661,11 +740,7 @@ def _diagram_layout(contract: HarnessContract) -> dict[str, Any]:
     ]
     content_h = max(page_h, doc_y + max(block["h"] for block in doc_blocks) + 40.0)
     frame = _frame_geometry(page_w, content_h)
-    frame["title"] = contract.name
-    frame["drawing_no"] = contract.contract_id
-    frame["revision"] = contract.revision
-    frame["ipc_class"] = contract.ipc_class
-    frame["drawn_by"] = f"wire-agent/{__version__}"
+    frame["block"] = _title_block_values(contract)
     offset_x, offset_y = frame["ds"][0], frame["ds"][1]
     positions = {cid: (x + offset_x, y + offset_y) for cid, (x, y) in positions.items()}
     for block in doc_blocks:
@@ -849,7 +924,9 @@ def _drawio_model(contract: HarnessContract, layout: dict[str, Any]) -> str:
         f'pageWidth="{_num(frame["w"])}" pageHeight="{_num(frame["h"])}" math="0" shadow="0">',
         "<root>",
         '<mxCell id="0" />',
-        '<mxCell id="frame" value="frame" parent="0" />',
+        # The frame layer is locked so a drawio edit cannot nudge the
+        # border or title block; it stays a regenerated projection.
+        '<mxCell id="frame" value="frame" style="locked=1;" parent="0" />',
         '<mxCell id="1" value="harness" parent="0" />',
         '<mxCell id="wires" value="wires" parent="0" />',
         *_frame_cells(frame),

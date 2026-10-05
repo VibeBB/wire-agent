@@ -174,5 +174,10 @@
     {"classes": ["power", "analog"], "rule": "no_shared_route"}
   ],
   "service": {"mating_cycles": 30},
-  "imported_sources": []
+  "imported_sources": [],
+  "drawing": {
+    "legal_owner": "VibeBB",
+    "supplementary_title": "Sensor link, 4-pole JST XH, IPC class 2",
+    "language": "en"
+  }
 }

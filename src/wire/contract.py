@@ -6,6 +6,7 @@ projection of these bytes; nothing flows back into the contract.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -276,6 +277,47 @@ class ImportedSource(BaseModel):
         return self
 
 
+class DrawingInfo(BaseModel):
+    """ISO 7200 title-block data a contract cannot derive: who owns,
+    prepared and approved the drawing, and when it was released.
+
+    Length limits follow the ISO 7200 recommended character counts with
+    headroom; the document status is derived, never declared.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    legal_owner: str | None = Field(default=None, min_length=1, max_length=40)
+    responsible_dept: str | None = Field(default=None, min_length=1, max_length=20)
+    technical_reference: str | None = Field(default=None, min_length=1, max_length=30)
+    created_by: str | None = Field(default=None, min_length=1, max_length=30)
+    approved_by: str | None = Field(default=None, min_length=1, max_length=30)
+    date_of_issue: str | None = Field(default=None, pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+    supplementary_title: str | None = Field(default=None, min_length=1, max_length=60)
+    classification: str | None = Field(default=None, min_length=1, max_length=25)
+    language: str = Field(default="en", pattern=r"^[a-z]{2,3}$")
+
+    @model_validator(mode="after")
+    def validate_release(self) -> DrawingInfo:
+        if self.date_of_issue is not None:
+            try:
+                datetime.date.fromisoformat(self.date_of_issue)
+            except ValueError as exc:
+                raise ValueError(f"date_of_issue is not a calendar date: {exc}") from exc
+            if self.approved_by is None:
+                raise ValueError("date_of_issue requires approved_by: only approved drawings issue")
+        return self
+
+    @property
+    def status(self) -> str:
+        """ISO 7200 document status derived from the release fields."""
+        if self.approved_by is not None and self.date_of_issue is not None:
+            return "Released"
+        if self.approved_by is not None:
+            return "In approval"
+        return "In preparation"
+
+
 class HarnessContract(BaseModel):
     """The wire harness contract: the single source of truth for a design."""
 
@@ -296,6 +338,7 @@ class HarnessContract(BaseModel):
     segregations: list[SegregationPolicy] = Field(default_factory=list[SegregationPolicy])
     service: ServiceExpectation | None = None
     imported_sources: list[ImportedSource] = Field(default_factory=list[ImportedSource])
+    drawing: DrawingInfo = Field(default_factory=DrawingInfo)
 
     @model_validator(mode="after")
     def validate_contract(self) -> HarnessContract:
