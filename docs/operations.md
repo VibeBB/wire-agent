@@ -35,7 +35,7 @@ verdicts and artifact hashes.
 ## Dependency policy
 
 PyPI dependencies are pinned in `pyproject.toml` and `uv.lock`. The
-pinned OpenHands SDK version is `1.51.0` — the same pin as the sibling
+pinned OpenHands SDK version is `1.52.0` — the same pin as the sibling
 plugins so a merged conversation sees one SDK. Diagram rendering and
 all raster/PDF/SVG/HTML exports run the unmodified `drawio-desktop`
 binary (`draw.io`) under `xvfb-run`, plus `fonts-ipafont` for CJK

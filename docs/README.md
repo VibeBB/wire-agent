@@ -19,6 +19,8 @@ specifications and design decisions.
   SDK and tools adoption decisions
 - [SDK v1.51.0 feature evaluation](research/sdk-v1.51.0-feature-evaluation.md) —
   SDK, tools, and uv update decisions
+- [SDK v1.52.0 feature evaluation](research/sdk-v1.52.0-feature-evaluation.md) —
+  SDK and tools adoption decisions
 
 ## ADR index
 
