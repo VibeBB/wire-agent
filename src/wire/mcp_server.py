@@ -22,12 +22,29 @@ from mcp.server.stdio import stdio_server
 from . import __version__
 from .contract import HarnessContract
 from .doctor import run_doctor
+from .records import (
+    DecisionInput,
+    StageImpressionInput,
+    VisionReviewInput,
+    record_decision,
+    record_impression,
+    record_vision_review,
+    records_summary,
+)
 from .standards import CONNECTOR_FAMILIES, WIRE_SPECS
 from .workspace import workspace_path
 
 server: Server = Server(f"wire-mcp/{__version__}")
 
 _SCHEMAS: dict[str, dict[str, Any]] = {
+    "wire_record_decision": DecisionInput.model_json_schema(),
+    "wire_record_impression": StageImpressionInput.model_json_schema(),
+    "wire_record_vision_review": VisionReviewInput.model_json_schema(),
+    "wire_records_status": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
     "wire_doctor": {
         "type": "object",
         "properties": {},
@@ -168,6 +185,27 @@ async def list_tools() -> list[types.Tool]:
 
 
 _DESCRIPTIONS: dict[str, str] = {
+    "wire_record_decision": (
+        "Record a design decision (VibeBB Record Protocol): first principles, at least two "
+        "options with pros/cons, the chosen option, a rationale of 200+ chars, evidence "
+        "paths (hashed) or references, assumptions, unknowns, risks, revisit trigger. "
+        "Record one for every non-trivial choice without being asked."
+    ),
+    "wire_record_impression": (
+        "Record the long-form impression that closes a stage (400+ chars, 3+ sentences): "
+        "what you noticed, what works, what worries you, how a maker or user would read "
+        "it, what to do next. Binds the stage artifacts by sha256; record it after the "
+        "final regeneration."
+    ),
+    "wire_record_vision_review": (
+        "Record what you thought after looking at an image (400+ char impression plus "
+        "findings). Bind it to image_path (hashed) or to the source_event_id of an "
+        "inspect_image_with_vision event. Required for every image you viewed."
+    ),
+    "wire_records_status": (
+        "Counts of decision / impression / vision-review records and the last Stop-hook "
+        "verdict listing records this session still owes."
+    ),
     "wire_doctor": "Probe the wire tool environment; JSON verdict.",
     "wire_standards": "Return reference wire spec or connector family tables.",
     "wire_validate_contract": "Validate a harness contract JSON against the schema.",
@@ -204,6 +242,10 @@ def _anno(title: str, *, write: bool) -> types.ToolAnnotations:
 
 
 _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
+    "wire_record_decision": _anno("Record decision", write=True),
+    "wire_record_impression": _anno("Record stage impression", write=True),
+    "wire_record_vision_review": _anno("Record vision review", write=True),
+    "wire_records_status": _anno("Records status", write=False),
     "wire_doctor": _anno("Wire doctor", write=False),
     "wire_standards": _anno("Wire standards", write=False),
     "wire_validate_contract": _anno("Validate harness contract", write=False),
@@ -221,6 +263,14 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
 
     if name == "wire_doctor":
         return _text(run_doctor())
+    if name == "wire_record_decision":
+        return _text(record_decision(arguments))
+    if name == "wire_record_impression":
+        return _text(record_impression(arguments))
+    if name == "wire_record_vision_review":
+        return _text(record_vision_review(arguments))
+    if name == "wire_records_status":
+        return _text(records_summary())
     if name == "wire_standards":
         kind = arguments["kind"]
         if kind == "wire_specs":

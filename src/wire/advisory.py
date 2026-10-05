@@ -16,9 +16,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from .records import IMPRESSION_MIN_CHARS, impression_is_prose
+
 VISION_REVIEW_TOOL = "vision_review"
-IMPRESSION_MIN_LENGTH = 240
-_SENTENCE_MARKS = "。.!?"
+IMPRESSION_MIN_LENGTH = IMPRESSION_MIN_CHARS
 
 VisualChecklist = Literal["harness_diagram", "intake_image"]
 VisualFindingCategory = Literal[
@@ -69,12 +70,7 @@ class VisualReviewDetail(BaseModel):
     )
     findings: list[VisualFinding] = Field(default_factory=lambda: list[VisualFinding]())
 
-    @field_validator("impression")
-    @classmethod
-    def _impression_is_prose(cls, value: str) -> str:
-        if sum(value.count(mark) for mark in _SENTENCE_MARKS) < 2:
-            raise ValueError("impression must be a multi-sentence reading")
-        return value
+    _impression_is_prose = field_validator("impression")(impression_is_prose)
 
 
 class AdvisoryResult(BaseModel):

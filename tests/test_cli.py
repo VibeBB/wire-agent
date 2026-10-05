@@ -93,6 +93,10 @@ def test_review_record_writes_validated_record(tmp_path: Path) -> None:
             "C3 header, which a fabricator would trip over, and a stray label "
             "crowds the right edge. Branch lengths anchor to mating faces so a "
             "no-context reader could still kit the parts."
+            " A fabricator reading it on the shop floor would know where to start, "
+            "which cavities are populated and which connector family to order. The "
+            "remaining doubt is whether the splice note survives a monochrome "
+            "print, so the next step is a grayscale render check."
         ),
         "--findings",
         str(findings),

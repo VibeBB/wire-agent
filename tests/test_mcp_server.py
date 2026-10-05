@@ -28,6 +28,10 @@ EXPECTED = {
     "wire_import": True,
     "wire_drawio": True,
     "wire_drawio_lint": False,
+    "wire_record_decision": True,
+    "wire_record_impression": True,
+    "wire_record_vision_review": True,
+    "wire_records_status": False,
 }
 
 

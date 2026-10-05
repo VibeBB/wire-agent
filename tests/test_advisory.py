@@ -16,6 +16,10 @@ LONG_IMPRESSION = (
     "connector mating faces and every cavity carries a unique label. "
     "A no-context reader could kit the parts from the tables alone, "
     "and the visual hierarchy separates physical wiring from annotation."
+    " A fabricator reading it on the shop floor would know where to start, "
+    "which cavities are populated and which connector family to order. The "
+    "remaining doubt is whether the splice note survives a monochrome "
+    "print, so the next step is a grayscale render check."
 )
 
 
@@ -140,7 +144,7 @@ def test_parse_visual_review_rejects_terse_impression() -> None:
 
     result = _vision_result()
     result.detail["impression"] = (
-        "x" * 300  # long enough but no sentence marks
+        "x" * 500  # long enough but no sentence marks
     )
     assert parse_visual_review(result) is None
 

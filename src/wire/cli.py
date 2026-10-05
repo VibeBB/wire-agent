@@ -10,6 +10,8 @@ Subcommands:
   gates     re-run all gates on existing artifacts
   import    merge a connectivity or envelope source into a contract
   review-record  write a validated visual-review advisory JSON for an image
+  record    append a VibeBB Record Protocol record (decision, impression,
+            vision-review) or print the records status
 
 All commands print a JSON verdict to stdout; the verdict is fail-closed.
 """
@@ -201,7 +203,46 @@ def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return {"verdict": "fail", "stage": "review-record", "detail": str(exc)}
-    return {"verdict": "pass", "record": str(path)}
+    return {"verdict": "pass", "record": str(path), "vision_log": _log_vision_review(path)}
+
+
+def _log_vision_review(advisory_path: Path) -> str:
+    """Mirror the advisory into the VRP vision-review log when the image is in the workspace."""
+    from .records import record_vision_review
+
+    detail = json.loads(advisory_path.read_text(encoding="utf-8"))["detail"]
+    try:
+        logged = record_vision_review(
+            {
+                "image_path": detail["image_path"],
+                "model": detail["model"],
+                "checklist": detail["checklist"].replace("_", "-"),
+                "findings": [
+                    {"category": f["category"], "severity": f["severity"], "note": f["note"]}
+                    for f in detail["findings"]
+                ],
+                "impression": detail["impression"],
+            }
+        )
+    except ValueError as exc:
+        return f"skipped: {exc}"
+    return str(logged["path"])
+
+
+def cmd_record(args: argparse.Namespace) -> dict[str, Any]:
+    from pydantic import ValidationError
+
+    from .records import RECORDERS, records_summary
+
+    if args.kind == "status":
+        return records_summary()
+    try:
+        raw: Any = json.loads(Path(args.json).read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("record JSON must be an object")
+        return RECORDERS[args.kind](cast(dict[str, Any], raw))
+    except (OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
+        return {"verdict": "fail", "stage": "record", "detail": str(exc)}
 
 
 def cmd_import(args: argparse.Namespace) -> dict[str, Any]:
@@ -348,7 +389,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--summary", default=None)
     p.add_argument("--out", default=None, help="output dir (default: image dir)")
 
+    p = sub.add_parser("record", help="append a VibeBB Record Protocol record")
+    p.add_argument("kind", choices=["decision", "impression", "vision-review", "status"])
+    p.add_argument("--json", default=None, help="JSON object file with the record fields")
+
     args = parser.parse_args(argv)
+    if args.command == "record" and args.kind != "status" and not args.json:
+        parser.error("record decision|impression|vision-review requires --json")
     if args.command == "doctor":
         return _emit_doctor(args)
     handlers = {
@@ -360,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         "gates": cmd_gates,
         "import": cmd_import,
         "review-record": cmd_review_record,
+        "record": cmd_record,
     }
     return _emit(handlers[args.command](args))
 

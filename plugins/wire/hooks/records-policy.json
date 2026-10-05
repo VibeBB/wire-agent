@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "plugin": "wire",
+  "records_dir": "observations/wire",
+  "artifact_globs": [
+    "**/*.contract.json",
+    "**/*.intake.json",
+    "**/design-report.json",
+    "**/wire-list.csv",
+    "**/cut-table.csv",
+    "**/bom.csv",
+    "**/bom.json",
+    "**/harness-diagram.*",
+    "**/*.kbl",
+    "**/*.vec"
+  ],
+  "ignore_globs": ["examples/**", "tests/**", ".devin/**"],
+  "max_stop_denials": 2,
+  "record_hint": "Use the MCP tools wire_record_decision, wire_record_impression and wire_record_vision_review (or `python -m wire record decision|impression|vision-review --json <file>`). Impressions need at least 400 characters and 3 sentences: what you noticed, what works, what worries you, how a maker or user would read it, and what to do next."
+}

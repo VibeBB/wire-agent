@@ -25,6 +25,10 @@ from typing import Any, cast
 
 ARTIFACT_SUFFIXES = (".svg", ".kbl", ".vec")
 ARTIFACT_NAMES = (
+    "decisions.jsonl",
+    "impressions.jsonl",
+    "vision-reviews.jsonl",
+    "records-status.json",
     "wire-list.csv",
     "cut-table.csv",
     "bom.json",
