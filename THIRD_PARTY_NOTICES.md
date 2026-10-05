@@ -9,8 +9,8 @@ components the project depends on and how they are used.
 | --- | --- | --- |
 | [pydantic](https://github.com/pydantic/pydantic) | MIT | Schema validation for contract/intake/report contracts |
 | [mcp](https://github.com/modelcontextprotocol/python-sdk) | MIT | stdio MCP server boundary |
-| [openhands-sdk](https://github.com/OpenHands/software-agent-sdk) 1.51.0 | MIT | Plugin framework (skills, agents, commands, hooks, task sub-agents) |
-| openhands-tools 1.51.0 | MIT | SDK builtin tools used by sub-agents |
+| [openhands-sdk](https://github.com/OpenHands/software-agent-sdk) 1.52.0 | MIT | Plugin framework (skills, agents, commands, hooks, task sub-agents) |
+| openhands-tools 1.52.0 | MIT | SDK builtin tools used by sub-agents |
 
 Indirect dependencies pinned in `uv.lock` follow each distribution's own
 metadata on PyPI.
