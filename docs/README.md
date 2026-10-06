@@ -23,6 +23,8 @@ for engineers and agents.
 
 - [Operations](operations.md) — release, images, CI, hardening policy
 - [Development](development.md) — setup, verify stages, change rules
+- [Test coverage and test design](test-coverage.md) — C0/C1/C2/MCC/MC/DC,
+  boundary coverage, floors and test-design techniques
 - [Dependency updates](dependency-updates.md) — update policy and deferrals
 - [Improvement notes](improvement-notes.md) — done, open and family items
 
@@ -57,3 +59,4 @@ for engineers and agents.
 | [ADR-0009](adr/ADR-0009-vibebb-record-protocol.md) | VibeBB Record Protocol | Accepted |
 | [ADR-0010](adr/ADR-0010-liaison-route-geometry-and-vision-points.md) | SLP v2 responder, anchor geometry and vision points | Accepted |
 | [ADR-0011](adr/ADR-0011-vrp-v2-impressions.md) | VRP v2 — impressions as chained, grounded, answerable records | Accepted |
+| [ADR-0012](adr/ADR-0012-structural-coverage.md) | Structural coverage gate (C0, C1, C2, MC/DC, boundaries) | Accepted |

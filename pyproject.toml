@@ -36,6 +36,15 @@ line-length = 100
 target-version = "py312"
 src = ["src", "scripts", "tests"]
 
+[tool.ruff.format]
+# Family-canonical files are byte-identical across repos (formatted at 88).
+exclude = [
+  "scripts/mutation_probe.py",
+  "scripts/structural_coverage.py",
+  "tests/test_mutation_probe.py",
+  "tests/test_structural_coverage.py",
+]
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 
@@ -58,7 +67,24 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["src/wire"]
-branch = false
+branch = true
+
+[tool.vibebb-coverage]
+# Ratchet floors (percent) for scripts/structural_coverage.py, measured on
+# main (after VRP v2) minus one point for interpreter variance. Raise them,
+# never lower.
+c0 = 80
+c1 = 69
+decision = 62
+c2 = 58
+mcdc = 33
+boundary = 58
+
+[tool.vibebb-mutation]
+# Advisory weekly mutation probe (scripts/mutation_probe.py); never a gate.
+targets = ["src/wire/gates.py"]
+tests = ["tests/test_gates.py", "tests/test_gate_boundaries.py"]
+max_mutants = 400
 
 [tool.coverage.report]
-fail_under = 73
+fail_under = 77
