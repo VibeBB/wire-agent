@@ -29,6 +29,7 @@ from typing import Any, Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from . import _vrp
 from .records import LOG_FILES, records_dir, sha256_file, tree_sha256
 from .workspace import workspace_path, workspace_root
 
@@ -375,20 +376,13 @@ def inbox(root: Path | None = None) -> dict[str, Any]:
 
 
 def _event_ids(root: Path, kinds: tuple[str, ...]) -> set[str]:
+    """Event ids from intact VRP v2 logs; a broken chain refuses the answer."""
     found: set[str] = set()
     for kind in kinds:
-        path = records_dir(root) / LOG_FILES[kind]
-        if not path.is_file():
-            continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            try:
-                value: Any = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(value, dict) and isinstance(
-                cast(dict[str, Any], value).get("event_id"), str
-            ):
-                found.add(str(cast(dict[str, Any], value)["event_id"]))
+        records, problems = _vrp.verify_log(records_dir(root) / LOG_FILES[kind], kind)
+        if problems:
+            raise ValueError(f"VRP {kind} log fails integrity: {problems[0]}")
+        found.update(str(record.get("event_id")) for record in records)
     return found
 
 

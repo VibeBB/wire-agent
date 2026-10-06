@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from test_records import IMPRESSION, _decision
+from test_records import _decision, _impression
 from wire import liaison, records
 from wire.cli import main
 
@@ -63,9 +63,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _impression_ref(root: Path) -> str:
-    result = records.record_impression(
-        {"stage": "export", "artifacts": ["out"], "impression": IMPRESSION}, root
-    )
+    result = records.record_impression(_impression(), root)
     return str(result["record"]["event_id"])
 
 

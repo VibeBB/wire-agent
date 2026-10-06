@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "plugin": "wire",
   "records_dir": "observations/wire",
   "artifact_globs": [
@@ -16,7 +16,15 @@
     "**/*.kbl",
     "**/*.vec"
   ],
-  "ignore_globs": ["examples/**", "tests/**", ".devin/**"],
+  "ignore_globs": [
+    "examples/**",
+    "tests/**",
+    ".devin/**"
+  ],
+  "dual_review_globs": [
+    "**/harness-diagram.png",
+    "**/route-plan.png"
+  ],
   "max_stop_denials": 2,
-  "record_hint": "Use the MCP tools wire_record_decision, wire_record_impression and wire_record_vision_review (or `python -m wire record decision|impression|vision-review --json <file>`). Impressions need at least 400 characters and 3 sentences: what you noticed, what works, what worries you, how a maker or user would read it, and what to do next."
+  "record_hint": "Use the MCP tools wire_record_decision, wire_record_impression, wire_record_vision_review, wire_record_reconcile, wire_record_read, wire_record_insight and wire_record_song_receipt (or `python -m wire record <kind> --json <file>`). Impressions need 400+ characters, 3+ sentences, facets (observed, works, concerns, feelings, next_actions), claims quoting exact tokens from the artifacts, and an upstream entry for every sister impression you took in. Search sister impressions with wire_records_search / wire_records_digest."
 }

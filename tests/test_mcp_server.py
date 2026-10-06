@@ -31,7 +31,13 @@ EXPECTED = {
     "wire_record_decision": True,
     "wire_record_impression": True,
     "wire_record_vision_review": True,
+    "wire_record_reconcile": True,
+    "wire_record_insight": True,
+    "wire_record_song_receipt": True,
+    "wire_record_read": True,
     "wire_records_status": False,
+    "wire_records_digest": False,
+    "wire_records_search": False,
     "wire_ux_inbox": False,
     "wire_ux_respond": True,
     "wire_view_image": False,
@@ -205,3 +211,27 @@ def test_wire_ux_inbox_over_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
     payload = _payload(_call_result("wire_ux_inbox", {}))
     assert payload["requests"] == []
+
+
+def test_vrp_v2_read_tools_over_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    status = _payload(_call_result("wire_records_status", {}))
+    assert "verdict" in status
+    digest = _payload(_call_result("wire_records_digest", {}))
+    assert "systems" in digest
+    search = _payload(_call_result("wire_records_search", {"query": "W1"}))
+    assert search["results"] == []
+    bad = _call_result("wire_record_insight", {"insight": {}})
+    assert bad.isError
+
+
+def test_vrp_v2_tools_are_listed() -> None:
+    names = {spec.name for spec in tool_specs()}
+    assert {
+        "wire_record_reconcile",
+        "wire_record_insight",
+        "wire_record_song_receipt",
+        "wire_record_read",
+        "wire_records_digest",
+        "wire_records_search",
+    } <= names
