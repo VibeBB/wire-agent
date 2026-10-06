@@ -99,3 +99,22 @@ find what they missed.
 - **Mutation testing**: a mutant (a flipped comparison, a removed condition)
   that survives the suite marks an assertion that is missing even though the
   line is covered. Mutation runs are advisory evidence, not a CI gate.
+
+## Reference suite
+
+`tests/test_gate_boundaries.py` applies these techniques to the deterministic
+gates and is the pattern the sister repositories follow:
+
+- 3-value boundaries for every numeric gate limit (ampacity, voltage drop,
+  insulation voltage and temperature, connector current, voltage, mating
+  cycles and temperature), built with `math.nextafter` so the neighbours are
+  the closest representable floats;
+- decision tables for combined guards (insulation voltage x temperature,
+  identical-housing keying) and the unknown-versus-pass branches (no
+  derating curve above the reference temperature, 0 V nets without an
+  explicit drop limit);
+- equivalence classes and edges of the bundle-derating and temperature
+  derating tables, with monotonicity and range properties checked over the
+  whole integer domain and a dense float grid that includes every breakpoint;
+- schema boundaries in the contract validators (cavity wire range, cavity
+  count, duplicate cavity ids).
