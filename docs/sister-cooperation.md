@@ -27,6 +27,40 @@ than the straight-line path through its placed anchors.
 manifest and provenance. production-engineering, document and bard read
 them as files; dashboard reads `design-report.json`.
 
+## simulation-agent PDN handoff
+
+wire's own `voltage_drop` gate checks one wire at a time at its nominal
+resistance. A supply loop also drops voltage across series wires through
+splices and across the return conductor, and copper resistance rises
+with temperature. When the contract declares `simulation.rails[]`, wire
+hands those loops to simulation-agent:
+
+1. `wire sim-request` / `wire_sim_pdn_request` writes
+   `<contract_id>.pdn.sim.json` (a simulation brief with one `pdn` rail per
+   loop: every wire of the supply and return nets as a `wire` branch with
+   its contract length and `resistance_ohm_per_km`, the net voltage, the
+   net current at the load, the net drop limit — `max_voltage_drop_v`, or
+   3 % of the net voltage — and the contract ambient) and
+   `<contract_id>.pdn.sim-request.json` (`from_system: wire`, `kind: pdn`,
+   request id `<contract_id>-pdn-<brief sha256[:12]>`). Ampacity stays
+   with wire's derated `ampacity` gate and is not sent.
+2. simulation-agent answers with `sim respond`, writing
+   `<contract_id>.pdn.sim-response.json` beside the request.
+3. The `sim_pdn` gate (and `wire sim-check` / `wire_sim_pdn_check`) reads
+   `simulation.response_path`. A missing or malformed response,
+   `needs_info` or `deferred` is `unknown`. A changed request file, a
+   response to another requester or kind, a request id or brief sha256 the
+   current contract would not emit (stale), a changed report or a
+   report/response verdict mismatch is `fail`. Otherwise each simulation
+   `pdn.*` check is reported with simulation's verdict, measured drop,
+   limit, margin and guidance; a simulation `fail` or `unknown` is never
+   promoted.
+
+`response_path` is not part of the brief, so moving the response does not
+change the request id. Editing a wire length, wire type, net voltage,
+current or limit, or the ambient changes the brief and makes the old
+response stale.
+
 ## Sister Liaison Protocol (SLP) v2
 
 UX-creator directs the family. It writes one request per job; each

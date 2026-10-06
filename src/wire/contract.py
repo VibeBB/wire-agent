@@ -335,6 +335,35 @@ class DrawingInfo(BaseModel):
         return "In preparation"
 
 
+class SimRail(BaseModel):
+    """A supply loop handed to simulation-agent for a temperature-corrected PDN solve."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    net: str = Field(pattern=r"^N[0-9]+$")
+    source: Endpoint
+    load: Endpoint
+    return_net: str | None = Field(default=None, pattern=r"^N[0-9]+$")
+    return_source: Endpoint | None = None
+    return_load: Endpoint | None = None
+
+    @model_validator(mode="after")
+    def validate_return(self) -> SimRail:
+        parts = (self.return_net, self.return_source, self.return_load)
+        if any(part is None for part in parts) and any(part is not None for part in parts):
+            raise ValueError("return_net, return_source and return_load go together")
+        return self
+
+
+class SimulationLink(BaseModel):
+    """Opt-in handoff of supply loops to simulation-agent and its response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rails: list[SimRail] = Field(min_length=1)
+    response_path: str | None = Field(default=None, min_length=1)
+
+
 class HarnessContract(BaseModel):
     """The wire harness contract: the single source of truth for a design."""
 
@@ -354,6 +383,7 @@ class HarnessContract(BaseModel):
     splices: list[HarnessSplice] = Field(default_factory=list[HarnessSplice])
     segregations: list[SegregationPolicy] = Field(default_factory=list[SegregationPolicy])
     service: ServiceExpectation | None = None
+    simulation: SimulationLink | None = None
     imported_sources: list[ImportedSource] = Field(default_factory=list[ImportedSource])
     drawing: DrawingInfo = Field(default_factory=DrawingInfo)
 
@@ -402,7 +432,40 @@ class HarnessContract(BaseModel):
                         f"wire {wire.id} references unknown cavity "
                         f"{endpoint.connector}:{endpoint.cavity}"
                     )
+        if self.simulation is not None:
+            self._validate_simulation(self.simulation)
         return self
+
+    def _validate_simulation(self, link: SimulationLink) -> None:
+        nets = self.net_map()
+        seen: set[str] = set()
+        for rail in link.rails:
+            if rail.net in seen:
+                raise ValueError(f"simulation rail {rail.net} is declared twice")
+            seen.add(rail.net)
+            net = nets.get(rail.net)
+            if net is None:
+                raise ValueError(f"simulation rail references unknown net {rail.net}")
+            if net.voltage_v <= 0:
+                raise ValueError(f"simulation rail {rail.net} needs a net voltage above 0 V")
+            loops = [(rail.net, rail.source, rail.load)]
+            if rail.return_net is not None:
+                if rail.return_net not in nets or rail.return_net == rail.net:
+                    raise ValueError(f"simulation rail {rail.net} needs a distinct return net")
+                assert rail.return_source is not None and rail.return_load is not None
+                loops.append((rail.return_net, rail.return_source, rail.return_load))
+            for net_id, source, load in loops:
+                ends = [
+                    end
+                    for wire in self.wires
+                    if wire.net == net_id
+                    for end in (wire.from_endpoint, wire.to_endpoint)
+                ]
+                if source == load or source not in ends or load not in ends:
+                    raise ValueError(
+                        f"simulation rail {rail.net}: source and load must be distinct "
+                        f"wire endpoints on net {net_id}"
+                    )
 
     def element_ids(self) -> list[str]:
         """Deterministic ids of every addressable contract element."""
@@ -444,8 +507,13 @@ class HarnessContract(BaseModel):
 
 
 def contract_sha256(contract: HarnessContract) -> str:
-    """Canonical JSON digest used by the intake sidecar and provenance."""
-    payload = contract.model_dump_json()
+    """Canonical JSON digest used by the intake sidecar and provenance.
+
+    An absent ``simulation`` section is left out so contracts written before
+    the section existed keep their digest.
+    """
+    exclude = {"simulation"} if contract.simulation is None else None
+    payload = contract.model_dump_json(exclude=exclude)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

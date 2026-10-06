@@ -25,6 +25,8 @@ EXPECTED = {
     "wire_intake": False,
     "wire_author": True,
     "wire_gates": False,
+    "wire_sim_pdn_request": True,
+    "wire_sim_pdn_check": False,
     "wire_import": True,
     "wire_drawio": True,
     "wire_drawio_lint": False,

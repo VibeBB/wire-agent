@@ -144,6 +144,21 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["contract_path"],
         "additionalProperties": False,
     },
+    "wire_sim_pdn_request": {
+        "type": "object",
+        "properties": {
+            "contract_path": {"type": "string"},
+            "out_dir": {"type": "string"},
+        },
+        "required": ["contract_path"],
+        "additionalProperties": False,
+    },
+    "wire_sim_pdn_check": {
+        "type": "object",
+        "properties": {"contract_path": {"type": "string"}},
+        "required": ["contract_path"],
+        "additionalProperties": False,
+    },
     "wire_import": {
         "type": "object",
         "properties": {
@@ -311,6 +326,14 @@ _DESCRIPTIONS: dict[str, str] = {
         "diagram (and route plan, when mech anchors carry positions) come back inline."
     ),
     "wire_gates": "Re-run all deterministic gates on existing artifacts.",
+    "wire_sim_pdn_request": (
+        "Write the PDN sim brief and sim-request for the contract's simulation rails "
+        "(default: next to the contract) for simulation-agent."
+    ),
+    "wire_sim_pdn_check": (
+        "Check simulation-agent's hash-bound PDN response for the contract; "
+        "stale or tampered answers fail, missing ones are unknown."
+    ),
     "wire_import": (
         "Merge a connectivity or envelope source file into a contract; writes "
         "<contract-stem>.merged.contract.json next to the contract when out_path "
@@ -357,6 +380,8 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_intake": _anno("Intake gate", write=False),
     "wire_author": _anno("Author harness design", write=True),
     "wire_gates": _anno("Re-run gates", write=False),
+    "wire_sim_pdn_request": _anno("Simulation PDN request", write=True),
+    "wire_sim_pdn_check": _anno("Simulation PDN check", write=False),
     "wire_import": _anno("Import connectivity source", write=True),
     "wire_drawio": _anno("Drawio export", write=True),
     "wire_drawio_lint": _anno("Drawio lint", write=False),
@@ -364,7 +389,15 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
 
 
 async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
-    from .cli import cmd_author, cmd_drawio, cmd_gates, cmd_import, cmd_intake
+    from .cli import (
+        cmd_author,
+        cmd_drawio,
+        cmd_gates,
+        cmd_import,
+        cmd_intake,
+        cmd_sim_check,
+        cmd_sim_request,
+    )
 
     if name == "wire_doctor":
         return _text(run_doctor())
@@ -444,6 +477,12 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
                 )
             )
         )
+    if name == "wire_sim_pdn_request":
+        contract_file = workspace_path(arguments["contract_path"])
+        out_dir = _path_arg(arguments.get("out_dir")) or str(Path(contract_file).parent)
+        return _text(cmd_sim_request(_ns(contract=str(contract_file), out=out_dir)))
+    if name == "wire_sim_pdn_check":
+        return _text(cmd_sim_check(_ns(contract=str(workspace_path(arguments["contract_path"])))))
     if name == "wire_import":
         contract_path = Path(workspace_path(arguments["contract_path"]))
         if arguments.get("out_path"):
