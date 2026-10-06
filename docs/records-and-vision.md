@@ -1,6 +1,6 @@
 # Records and vision
 
-wire implements the VibeBB Record Protocol (VRP) v1 described in
+wire implements the VibeBB Record Protocol (VRP) v2 described in
 [records-protocol.md](records-protocol.md). This page lists what wire
 records at each stage and where vision is used.
 
@@ -14,13 +14,41 @@ records at each stage and where vision is used.
 | `liaison` | accept, defer, reject or ask for info on a UX request | `liaison/<id>.ux-response.json` | images supplied with the request |
 
 Logs live in `observations/wire/` (`decisions.jsonl`, `impressions.jsonl`,
-`vision-reviews.jsonl`, `vision-tool-events.jsonl`,
+`vision-reviews.jsonl`, `reads.jsonl`, `insights.jsonl`,
+`reconciles.jsonl`, `song-receipts.jsonl`, `vision-tool-events.jsonl`,
 `image-observations.jsonl`, `records-status.json`). Only the validated
 writers may append; `protect-generated` blocks direct edits.
 
+## Sister impressions
+
+`python -m wire import` of a circuit `*.connectivity.json` or a mech
+`*.envelope.json` logs an `upstream_read` with the producer impressions
+bound to the imported bytes (or named in the file's `impression_refs`).
+The import itself never fails on a missing impression; the read is
+`unknown` instead. Until a later wire impression answers each one in
+`upstream`, the Stop hook keeps asking. `wire_records_search` and
+`wire_records_digest` read every sister's impressions; a sister log
+with a broken chain is reported, never mixed into the results.
+
+## Blind second review
+
+`harness-diagram.png` and `route-plan.png` match `dual_review_globs`.
+After the primary review, delegate one review to `wire-blind-review`,
+whose `blind-guard` hook hides every earlier review, then reconcile with
+`wire_record_reconcile`. A split allows one tiebreak and a second
+reconcile; a split after that is unknown.
+
+`python -m wire review-record --vrp-json <body.json>` writes the typed
+advisory record and the VRP v2 vision review in one step; without
+`--vrp-json` only the advisory record is written and the vision review
+is reported as skipped.
+
 ## Thresholds
 
-- Impression: at least 400 characters and three distinct sentences.
+- Impression: at least 400 characters and three distinct sentences, two
+  observations, one thing that works, a concern (or a reason for none),
+  maker and user feelings, a next action and two grounded claims (one for
+  a vision review, plus a lookback per claim).
 - Decision: question of 10+ characters, principles of 12+ characters
   each, at least two options with pros and cons, a rationale of 200+
   characters, at least one evidence item and one risk, and a

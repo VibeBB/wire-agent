@@ -207,15 +207,33 @@ def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return {"verdict": "fail", "stage": "review-record", "detail": str(exc)}
-    return {"verdict": "pass", "record": str(path), "vision_log": _log_vision_review(path)}
+    return {
+        "verdict": "pass",
+        "record": str(path),
+        "vision_log": _log_vision_review(path, getattr(args, "vrp_json", None)),
+    }
 
 
-def _log_vision_review(advisory_path: Path) -> str:
-    """Mirror the advisory into the VRP vision-review log when the image is in the workspace."""
+def _log_vision_review(advisory_path: Path, vrp_json: str | None) -> str:
+    """Mirror the advisory into the VRP v2 vision-review log.
+
+    VRP v2 needs the structured body (facets, claims, lookback, confidence)
+    on top of the advisory; without ``--vrp-json`` nothing is logged and the
+    Stop hook keeps asking for a wire_record_vision_review.
+    """
+    from pydantic import ValidationError
+
     from .records import record_vision_review
 
+    if not vrp_json:
+        return (
+            "skipped: pass --vrp-json (facets, claims, lookback) or call wire_record_vision_review"
+        )
     detail = json.loads(advisory_path.read_text(encoding="utf-8"))["detail"]
     try:
+        extra: Any = json.loads(Path(vrp_json).read_text(encoding="utf-8"))
+        if not isinstance(extra, dict):
+            raise ValueError("--vrp-json must hold a JSON object")
         logged = record_vision_review(
             {
                 "image_path": detail["image_path"],
@@ -226,9 +244,10 @@ def _log_vision_review(advisory_path: Path) -> str:
                     for f in detail["findings"]
                 ],
                 "impression": detail["impression"],
+                **cast(dict[str, Any], extra),
             }
         )
-    except ValueError as exc:
+    except (OSError, ValueError, ValidationError) as exc:
         return f"skipped: {exc}"
     return str(logged["path"])
 
@@ -236,14 +255,20 @@ def _log_vision_review(advisory_path: Path) -> str:
 def cmd_record(args: argparse.Namespace) -> dict[str, Any]:
     from pydantic import ValidationError
 
-    from .records import RECORDERS, records_summary
+    from .records import RECORDERS, records_digest, records_search, records_summary
 
     if args.kind == "status":
         return records_summary()
+    if args.kind == "digest":
+        return records_digest()
+    if args.kind == "search" and not args.json:
+        return records_search({})
     try:
         raw: Any = json.loads(Path(args.json).read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("record JSON must be an object")
+        if args.kind == "search":
+            return records_search(cast(dict[str, Any], raw))
         return RECORDERS[args.kind](cast(dict[str, Any], raw))
     except (OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
         return {"verdict": "fail", "stage": "record", "detail": str(exc)}
@@ -291,6 +316,34 @@ def cmd_import(args: argparse.Namespace) -> dict[str, Any]:
         "design": merged.name,
         "imported_sources": [s.id for s in merged.imported_sources],
         "out": str(out),
+        "impressions": _record_import_read(source_path, args.kind),
+    }
+
+
+def _record_import_read(source_path: Path, kind: str) -> dict[str, Any]:
+    """Log the sister impressions that came with an import (VRP v2 read receipt).
+
+    Unresolvable refs are reported as unknown; they never fail the import,
+    which stays a deterministic merge. The Stop hook then asks for an
+    impression that answers each resolved ref.
+    """
+    from pydantic import ValidationError
+
+    from .records import record_read
+
+    producer = {"circuit-json": "circuit", "mech-envelope": "mech"}.get(kind)
+    if producer is None:
+        return {"verdict": "unknown", "detail": f"{kind} sources carry no producer impressions"}
+    try:
+        logged = record_read({"artifact": str(source_path.resolve()), "producer": producer})
+    except (OSError, ValueError, ValidationError) as exc:
+        return {"verdict": "unknown", "detail": str(exc)}
+    record = logged["record"]
+    return {
+        "verdict": "unknown" if record["unresolved"] else "pass",
+        "refs": record["refs"],
+        "unresolved": record["unresolved"],
+        "read_event_id": record["event_id"],
     }
 
 
@@ -403,6 +456,11 @@ def main(argv: list[str] | None = None) -> int:
         help="text file with the subjective reading (alternative to --impression)",
     )
     p.add_argument(
+        "--vrp-json",
+        default=None,
+        help="JSON object with the VRP v2 body (facets, claims, lookback, confidence, ...)",
+    )
+    p.add_argument(
         "--findings",
         required=True,
         help="JSON file: list of {category, severity, note, bbox?}",
@@ -411,7 +469,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default=None, help="output dir (default: image dir)")
 
     p = sub.add_parser("record", help="append a VibeBB Record Protocol record")
-    p.add_argument("kind", choices=["decision", "impression", "vision-review", "status"])
+    p.add_argument(
+        "kind",
+        choices=[
+            "decision",
+            "impression",
+            "vision-review",
+            "reconcile",
+            "insight",
+            "song-receipt",
+            "read",
+            "status",
+            "digest",
+            "search",
+        ],
+    )
     p.add_argument("--json", default=None, help="JSON object file with the record fields")
 
     p = sub.add_parser("ux", help="SLP v2 liaison with UX-creator (inbox, respond)")
@@ -421,8 +493,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "ux" and args.action == "respond" and not args.json:
         parser.error("ux respond requires --json")
-    if args.command == "record" and args.kind != "status" and not args.json:
-        parser.error("record decision|impression|vision-review requires --json")
+    readers = {"status", "digest", "search"}
+    if args.command == "record" and args.kind not in readers and not args.json:
+        parser.error(f"record {args.kind} requires --json")
     if args.command == "doctor":
         return _emit_doctor(args)
     handlers = {
