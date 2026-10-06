@@ -21,6 +21,7 @@ unknown fields unless noted.
 | `splices[]` | `HarnessSplice` | `id` `SP<n>`, `kind` (`crimp`, `solder`, `ultrasonic`, `ferrule`) |
 | `segregations[]` | `SegregationPolicy` | `classes` (pair of signal classes), `rule` (`no_shared_route`, `no_shared_connector`) |
 | `service` | `ServiceExpectation` | `mating_cycles`, `flex_cycles` |
+| `simulation` | `SimulationLink` | opt-in PDN handoff to simulation-agent: `rails[]` (`net`, `source`/`load` endpoints on that net, optional `return_net` + `return_source`/`return_load` on the return net, all three together) and `response_path` (relative to the contract directory). Rail nets need a voltage above 0 V; endpoints must terminate wires of their net. See [sister-cooperation.md](sister-cooperation.md#simulation-agent-pdn-handoff) |
 | `imported_sources[]` | `ImportedSource` | `id` `I<n>`, `system` (`manual`, `circuit`, `mech`, `csv`, `kbl`, `vec`), `ref` (workspace-relative path), `sha256`, `description`, `anchors[]`, `anchor_points[]` (`name`, `kind` `clip`/`grommet`/`breakout`/`other`, `position_mm` `[x, y, z]`) |
 | `drawing` | `DrawingInfo` | ISO 7200 title-block data: `legal_owner` (≤40), `responsible_dept` (≤20), `technical_reference` (≤30), `created_by`/`approved_by` (≤30), `date_of_issue` (`YYYY-MM-DD`, requires `approved_by`), `supplementary_title` (≤60), `classification` (key words, ≤25), `language` (ISO 639, default `en`), `owner_logo` (`{path, sha256}`: an `.svg`/`.png` relative to the contract directory, ≤256 KiB, printed in the Legal owner cell; a missing file, path escape or digest mismatch fails the export); the document status is derived (`In preparation` → `In approval` → `Released`) |
 
@@ -61,7 +62,7 @@ revision and sha256; `summary` counts pass/fail/unknown; each check has
 `insulation_rating`, `bend_radius`, `segregation`,
 `terminal_compatibility`, `connector_rating`, `housing_compatibility`,
 `anchor_resolution`, `route_geometry`, `import_freshness`,
-`manifest_integrity`. Any `fail` or `unknown` makes the verdict `fail`.
+`manifest_integrity`, `sim_pdn` (only with a `simulation` section). Any `fail` or `unknown` makes the verdict `fail`.
 
 `design-report.json` is the gate report plus `elements` (counts, signal
 classes, total wire length), `imported_sources` (`id`, `system`, `ref`,

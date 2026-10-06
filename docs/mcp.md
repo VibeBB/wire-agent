@@ -18,6 +18,8 @@ rejected.
 | `wire_intake` | **`contract_path`**, **`intake_path`** | intake report, `ready`/`blocked` | read |
 | `wire_author` | **`contract_path`**, **`out_dir`**, `png` (default true), `drawio` (format list), `baseline_path` | design report + inline `harness-diagram.png` and `route-plan.png` | write `out_dir` |
 | `wire_gates` | **`contract_path`**, `out_dir` | gate report | read |
+| `wire_sim_pdn_request` | **`contract_path`**, `out_dir` | request id, sim brief path and sha256 | write sim brief + request (default next to the contract) |
+| `wire_sim_pdn_check` | **`contract_path`** | `{verdict, checks[]}` over the hash-bound response | read |
 | `wire_import` | **`contract_path`**, **`source_path`**, **`kind`**: `circuit-json` \| `csv` \| `mech-envelope`, `out_path` | merge summary | write merged contract (default `<stem>.merged.contract.json`) |
 | `wire_drawio` | **`input_path`**, `output_path`, `format`, `options` (extra `drawio -x` flags), `baseline_path` | export result + inline raster | write output |
 | `wire_drawio_lint` | **`diagram_path`**, `output_path` | advisory lint report | read (write when `output_path`) |

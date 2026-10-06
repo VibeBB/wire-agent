@@ -749,8 +749,26 @@ def _check_manifest(contract: HarnessContract, out_dir: Path | None) -> list[Gat
     ]
 
 
-def run_gates(contract: HarnessContract, out_dir: Path | None = None) -> GateReport:
-    """Run every L1 check; verdict is pass iff all checks pass."""
+def _check_sim_pdn(contract: HarnessContract, base_dir: Path | None) -> list[GateCheck]:
+    from .sim_pdn import pdn_findings, resolve_response
+    from .workspace import workspace_root
+
+    root = workspace_root()
+    response = resolve_response(contract, base_dir or root)
+    return [
+        GateCheck("sim_pdn", subject, status, measured=measured, detail=detail)
+        for subject, status, measured, detail in pdn_findings(contract, response, root)
+    ]
+
+
+def run_gates(
+    contract: HarnessContract, out_dir: Path | None = None, base_dir: Path | None = None
+) -> GateReport:
+    """Run every L1 check; verdict is pass iff all checks pass.
+
+    ``base_dir`` resolves a relative ``simulation.response_path`` (default:
+    the workspace root).
+    """
     checks: list[GateCheck] = []
     checks.extend(_wrap("connectivity", _check_connectivity, contract))
     checks.extend(_wrap("cavity_occupancy", _check_cavity_occupancy, contract))
@@ -769,5 +787,6 @@ def run_gates(contract: HarnessContract, out_dir: Path | None = None) -> GateRep
     checks.extend(_wrap("route_geometry", _check_route_geometry, contract))
     checks.extend(_wrap("import_freshness", _check_import_freshness, contract))
     checks.extend(_wrap("manifest_integrity", _check_manifest, contract, out_dir))
+    checks.extend(_wrap("sim_pdn", _check_sim_pdn, contract, base_dir))
     verdict: Literal["pass", "fail"] = "pass" if all(c.status == "pass" for c in checks) else "fail"
     return GateReport(checks=checks, verdict=verdict)

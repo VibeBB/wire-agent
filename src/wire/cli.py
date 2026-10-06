@@ -9,6 +9,8 @@ Subcommands:
   drawio-lint  advisory readability lint for a drawio mxfile
   gates     re-run all gates on existing artifacts
   import    merge a connectivity or envelope source into a contract
+  sim-request  hand the contract's supply loops to simulation-agent (PDN)
+  sim-check    check simulation-agent's hash-bound PDN response
   review-record  write a validated visual-review advisory JSON for an image
   record    append a VibeBB Record Protocol record (decision, impression,
             vision-review) or print the records status
@@ -105,7 +107,7 @@ def cmd_author(args: argparse.Namespace) -> dict[str, Any]:
         )
     except (KeyError, RuntimeError) as exc:
         return {"verdict": "fail", "stage": "export", "detail": str(exc)}
-    gate_report = run_gates(contract, out_dir)
+    gate_report = run_gates(contract, out_dir, Path(args.contract).parent)
     report_path = write_report(contract, gate_report, out_dir)
     result = gate_report.to_dict(contract)
     result["report_path"] = str(report_path)
@@ -170,8 +172,42 @@ def cmd_gates(args: argparse.Namespace) -> dict[str, Any]:
         contract = _load(args.contract)
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
-    gate_report = run_gates(contract, Path(args.out) if args.out else None)
+    gate_report = run_gates(
+        contract, Path(args.out) if args.out else None, Path(args.contract).parent
+    )
     return gate_report.to_dict(contract)
+
+
+def cmd_sim_request(args: argparse.Namespace) -> dict[str, Any]:
+    """Write the PDN sim brief and request for simulation-agent."""
+    from .sim_pdn import write_sim_request
+    from .workspace import workspace_root
+
+    try:
+        contract = _load(args.contract)
+    except Exception as exc:
+        return {"verdict": "fail", "stage": "load", "detail": str(exc)}
+    if contract.simulation is None:
+        return {"verdict": "fail", "detail": "harness contract has no simulation section"}
+    out_dir = Path(args.out) if args.out else Path(args.contract).parent
+    root = workspace_root()
+    resolved = out_dir.resolve()
+    return write_sim_request(
+        contract, out_dir, root=root if resolved == root or root in resolved.parents else None
+    )
+
+
+def cmd_sim_check(args: argparse.Namespace) -> dict[str, Any]:
+    """Check simulation-agent's hash-bound PDN response for the contract."""
+    from .sim_pdn import pdn_check, resolve_response
+    from .workspace import workspace_root
+
+    try:
+        contract = _load(args.contract)
+    except Exception as exc:
+        return {"verdict": "fail", "stage": "load", "detail": str(exc)}
+    response = resolve_response(contract, Path(args.contract).parent)
+    return pdn_check(contract, response, workspace_root())
 
 
 def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:
@@ -427,6 +463,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--contract", required=True)
     p.add_argument("--out", default=None)
 
+    p = sub.add_parser("sim-request", help="hand supply loops to simulation-agent (PDN)")
+    p.add_argument("--contract", required=True)
+    p.add_argument("--out", default=None, help="output directory (default: contract directory)")
+
+    p = sub.add_parser("sim-check", help="check simulation-agent's hash-bound PDN response")
+    p.add_argument("--contract", required=True)
+
     p = sub.add_parser("import")
     p.add_argument("--contract", required=True)
     p.add_argument("--source", required=True)
@@ -505,6 +548,8 @@ def main(argv: list[str] | None = None) -> int:
         "drawio": cmd_drawio,
         "drawio-lint": cmd_drawio_lint,
         "gates": cmd_gates,
+        "sim-request": cmd_sim_request,
+        "sim-check": cmd_sim_check,
         "import": cmd_import,
         "review-record": cmd_review_record,
         "record": cmd_record,
