@@ -19,7 +19,9 @@ uv run python scripts/verify_all.py --list             # every command per stage
 ```
 
 `fast` runs `uv sync --locked`, `ruff check`, `ruff format --check`,
-strict pyright over `src`, `scripts` and `tests`, pytest (xdist) and
+strict pyright over `src`, `scripts` and `tests`, pytest (xdist) through
+`scripts/structural_coverage.py` (C0, C1, decision, C2, MC/DC and boundary
+floors; see [test-coverage.md](test-coverage.md)) and
 `scripts/verify_docs.py` (Markdown links and the ADR index). `standard`
 adds `scripts/check_plugin_load.py` (the plugin loads in the pinned SDK
 with the expected skills, agents, commands, hooks and MCP tools) and the
@@ -38,7 +40,8 @@ hardening.
 ## Rules for changes
 
 - Gates: add a negative test that corrupts the judged input
-  (`tests/test_gates.py`).
+  (`tests/test_gates.py`) and 3-value boundary tests for every limit.
+- Coverage floors in `[tool.vibebb-coverage]` only move up.
 - Projections: never edit generated files; change the exporter and its
   tests.
 - Schemas: update [contracts.md](contracts.md) and the `wire-contract`
