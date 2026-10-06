@@ -1,6 +1,6 @@
 # Agents
 
-Three task sub-agents live in `plugins/wire/agents/`. Each declares its
+Four task sub-agents live in `plugins/wire/agents/`. Each declares its
 own MCP config (the `wire` server through `wire_launcher.py`) and its own
 hooks, because plugin hooks do not propagate into task sub-agents. All run
 with `permission_mode: never_confirm` (see [operations.md](operations.md)).
@@ -10,6 +10,7 @@ with `permission_mode: never_confirm` (see [operations.md](operations.md)).
 | `wire-brief` | `vibebb-author` | terminal, file_editor, grep, glob, task_tracker, `VisionInspectTool` | protect-generated, safety-rail, record-vision-tool-event | 40 iterations, 3.0 USD |
 | `wire-design` | `vibebb-author` | terminal, file_editor, grep, glob, task_tracker | protect-generated, safety-rail | 40 iterations, 3.0 USD |
 | `wire-review` | `vibebb-review` | terminal, file_editor, grep, glob, `VisionInspectTool`, `ThinkTool` | protect-generated, safety-rail, record-vision-tool-event | 30 iterations, 2.0 USD |
+| `wire-blind-review` | `vibebb-review` | terminal, file_editor, grep, glob, `VisionInspectTool` | blind-guard, protect-generated, safety-rail, record-vision-tool-event | 20 iterations, 1.5 USD |
 
 ## wire-brief
 
@@ -38,9 +39,20 @@ agreement with the mechanical layout). Writes typed advisory records via
 `review-record` and a VRP vision review per image. Impressions are at
 least 400 characters and three sentences.
 
+## wire-blind-review
+
+Independent second (or tiebreak) reader of one important render. Its
+`blind-guard` hook denies reads of `observations/`, advisory records,
+design reports, liaison answers and songs, so it cannot be anchored by
+the first review. It records one `blind` or `tiebreak` vision review
+with claims and lookback and returns the event id; the caller
+reconciles.
+
 ## Records
 
 Every agent carries the "Records you must leave" section: a decision for
-each non-trivial choice, a stage impression after the final regeneration
-and a vision review for every image looked at
+each non-trivial choice, a structured stage impression after the final
+regeneration, answers to sister impressions, insight status changes, a
+vision review for every image looked at (blind second review for the
+harness diagram and route plan) and a receipt for every bard song
 ([records-and-vision.md](records-and-vision.md)).

@@ -28,6 +28,10 @@ ARTIFACT_NAMES = (
     "decisions.jsonl",
     "impressions.jsonl",
     "vision-reviews.jsonl",
+    "reads.jsonl",
+    "insights.jsonl",
+    "reconciles.jsonl",
+    "song-receipts.jsonl",
     "records-status.json",
     "vision-tool-events.jsonl",
     "image-observations.jsonl",
@@ -55,6 +59,8 @@ ARTIFACT_NAMES = (
 # Liaison responses are written by `wire ux respond`, which hashes inputs
 # and artifacts; a hand edit would break that binding.
 LIAISON_RESPONSE_SUFFIX = ".ux-response.json"
+# Bard song deliveries are bard's artifacts; sisters answer with a receipt.
+SONG_DELIVERY_SUFFIX = ".bard-song.json"
 WRITE_TOOLS = {"file_editor", "apply_patch"}
 VIEW_ACTIONS = {"view", "read", "undo_edit"}
 WRITE_ACTIONS = {"create", "str_replace", "insert", "edit", "write"}
@@ -108,7 +114,7 @@ def _is_protected(value: str) -> bool:
     base = normalized.rsplit("/", 1)[-1]
     if base in ARTIFACT_NAMES:
         return True
-    if base.endswith(LIAISON_RESPONSE_SUFFIX):
+    if base.endswith((LIAISON_RESPONSE_SUFFIX, SONG_DELIVERY_SUFFIX)):
         return True
     # Projected artifacts live under an export directory; contract/intake
     # inputs are never protected, so suffixes apply only to generated names.

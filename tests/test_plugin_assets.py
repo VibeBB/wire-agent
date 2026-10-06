@@ -70,7 +70,7 @@ def test_contract_skill_reference_asset() -> None:
 
 def test_agent_definitions() -> None:
     agents = {a.stem for a in (PLUGIN_ROOT / "agents").glob("*.md")}
-    assert agents == {"wire-brief", "wire-design", "wire-review"}
+    assert agents == {"wire-brief", "wire-design", "wire-review", "wire-blind-review"}
 
 
 def test_commands() -> None:

@@ -25,11 +25,21 @@ from .doctor import run_doctor
 from .liaison import RespondInput, inbox, respond
 from .records import (
     DecisionInput,
+    InsightStatusInput,
+    ReadInput,
+    ReconcileInput,
+    SongReceiptInput,
     StageImpressionInput,
     VisionReviewInput,
     record_decision,
     record_impression,
+    record_insight,
+    record_read,
+    record_reconcile,
+    record_song_receipt,
     record_vision_review,
+    records_digest,
+    records_search,
     records_summary,
 )
 from .route_plan import ROUTE_PLAN_PNG
@@ -42,9 +52,32 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     "wire_record_decision": DecisionInput.model_json_schema(),
     "wire_record_impression": StageImpressionInput.model_json_schema(),
     "wire_record_vision_review": VisionReviewInput.model_json_schema(),
+    "wire_record_reconcile": ReconcileInput.model_json_schema(),
+    "wire_record_insight": InsightStatusInput.model_json_schema(),
+    "wire_record_song_receipt": SongReceiptInput.model_json_schema(),
+    "wire_record_read": ReadInput.model_json_schema(),
     "wire_records_status": {
         "type": "object",
         "properties": {},
+        "additionalProperties": False,
+    },
+    "wire_records_digest": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    "wire_records_search": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+            "system": {"type": "string"},
+            "kind": {"type": "string", "enum": ["stage_impression", "vision_review"]},
+            "stage": {"type": "string"},
+            "artifact": {"type": "string", "description": "path fragment or sha256"},
+            "severity": {"type": "string", "enum": ["info", "warning", "error"]},
+            "open_only": {"type": "boolean"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+        },
         "additionalProperties": False,
     },
     "wire_ux_inbox": {
@@ -206,15 +239,48 @@ _DESCRIPTIONS: dict[str, str] = {
         "Record one for every non-trivial choice without being asked."
     ),
     "wire_record_impression": (
-        "Record the long-form impression that closes a stage (400+ chars, 3+ sentences): "
-        "what you noticed, what works, what worries you, how a maker or user would read "
-        "it, what to do next. Binds the stage artifacts by sha256; record it after the "
-        "final regeneration."
+        "Record the impression that closes a stage: 400+ chars and 3+ sentences of prose, "
+        "facets (observed, works, concerns with severity/about/anchor, maker and user "
+        "feelings, next_actions), 2+ claims whose anchor is an exact token in the cited "
+        "artifact, optional insights (testable hypotheses for any sister) and an upstream "
+        "entry (adopted/deferred/disputed/noted + effect) for every sister impression you "
+        "took in. Binds the artifacts by sha256; near copies of earlier impressions fail."
     ),
     "wire_record_vision_review": (
-        "Record what you thought after looking at an image (400+ char impression plus "
-        "findings). Bind it to image_path (hashed) or to the source_event_id of an "
-        "inspect_image_with_vision event. Required for every image you viewed."
+        "Record what you thought after looking at an image: the impression body (prose, "
+        "facets, claims) plus findings and a lookback that re-checks every claim against "
+        "the image. reviewer is primary, blind (independent, never shown the first review) "
+        "or tiebreak. Bind to image_path (hashed) or a vision tool source_event_id."
+    ),
+    "wire_record_reconcile": (
+        "Compare independent reviews of one image deterministically: [primary, blind] "
+        "(round 1) or [primary, blind, tiebreak] (round 2, the last). A round-2 split is "
+        "'unresolved' and counts as unknown; reviews are never re-asked beyond that."
+    ),
+    "wire_record_insight": (
+        "Move an impression insight (hypothesis) through tried / adopted / rejected / "
+        "deferred / superseded. Adopted needs a deterministic gate pass and a decision; "
+        "rejected insights cannot be proposed again without 'revisits' and new evidence."
+    ),
+    "wire_record_song_receipt": (
+        "Receive a bard song addressed to wire (liaison/<id>.bard-song.json): what it made "
+        "you feel and whether it makes you look at the design again. Songs never feed a "
+        "gate, and a receipt never asks bard for another song."
+    ),
+    "wire_record_read": (
+        "Record that you took in a sister artifact; resolves the impressions bound to its "
+        "bytes or cited in it. Imports do this automatically. Answer each resolved ref in "
+        "the upstream field of your next impression."
+    ),
+    "wire_records_digest": (
+        "Family-wide impression digest across observations/*: integrity per plugin, open "
+        "concerns by severity, disputes, unanswered reads, insights and their status, "
+        "split vision reviews and undelivered songs."
+    ),
+    "wire_records_search": (
+        "Search every plugin's impressions by keyword, plugin, stage, artifact path or "
+        "sha256, severity and open concerns. Logs with broken integrity are listed "
+        "separately and never mixed into results."
     ),
     "wire_records_status": (
         "Counts of decision / impression / vision-review records and the last Stop-hook "
@@ -275,7 +341,13 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_record_decision": _anno("Record decision", write=True),
     "wire_record_impression": _anno("Record stage impression", write=True),
     "wire_record_vision_review": _anno("Record vision review", write=True),
+    "wire_record_reconcile": _anno("Reconcile vision reviews", write=True),
+    "wire_record_insight": _anno("Record insight status", write=True),
+    "wire_record_song_receipt": _anno("Record song receipt", write=True),
+    "wire_record_read": _anno("Record upstream read", write=True),
     "wire_records_status": _anno("Records status", write=False),
+    "wire_records_digest": _anno("Records digest", write=False),
+    "wire_records_search": _anno("Records search", write=False),
     "wire_ux_inbox": _anno("UX liaison inbox", write=False),
     "wire_ux_respond": _anno("UX liaison respond", write=True),
     "wire_view_image": _anno("View image", write=False),
@@ -302,8 +374,20 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         return _text(record_impression(arguments))
     if name == "wire_record_vision_review":
         return _text(record_vision_review(arguments))
+    if name == "wire_record_reconcile":
+        return _text(record_reconcile(arguments))
+    if name == "wire_record_insight":
+        return _text(record_insight(arguments))
+    if name == "wire_record_song_receipt":
+        return _text(record_song_receipt(arguments))
+    if name == "wire_record_read":
+        return _text(record_read(arguments))
     if name == "wire_records_status":
         return _text(records_summary())
+    if name == "wire_records_digest":
+        return _text(records_digest())
+    if name == "wire_records_search":
+        return _text(records_search(arguments))
     if name == "wire_ux_inbox":
         return _text(inbox())
     if name == "wire_ux_respond":

@@ -168,19 +168,48 @@ Stages are `brief`, `design`, `review` and `liaison`. At `liaison`, record the d
   risks and the observation that would reopen it. Reason from principles,
   not from habit.
 - **Stage impression** (`wire_record_impression`) when a stage ends,
-  after its final regeneration: 400+ characters and 3+ sentences on what
-  you noticed, what works, what worries you, how a maker or user would
-  read the result, and what to do next. List the stage's output files or
-  directories so the impression is bound to their sha256.
+  after its final regeneration (VRP v2): 400+ characters and 3+
+  sentences of prose plus `facets` — `observed` (2+ concrete things you
+  saw), `works`, `concerns` (`id`, `text`, `severity`, `about` = the
+  plugin that owns it or `self`, `anchor`), `feelings.maker` and
+  `feelings.user`, `next_actions` — and 2+ `claims` whose `anchor` is an
+  exact token in the cited artifact (wire id, cavity, part number,
+  dimension); mention one anchor in the prose. Put testable ideas for any
+  sister in `insights` (`hypothesis`, `proposed_change`,
+  `expected_effect`, `test`, `target`). Set `confidence` and `unknowns`.
+  List the stage's output files or directories so the impression is
+  bound to their sha256. A near copy of an earlier impression is
+  refused; when one reads similarly, add `delta`.
+- **Sister impressions you took in**: imports log a read receipt
+  automatically (`wire_record_read` for anything else). Answer each one
+  in `upstream` (`system`, `event_id`, `disposition`
+  adopted/deferred/disputed/noted, `effect` on your design, optional
+  `concern_ids`). Only existing records are cited — never wait for one.
+  A concern another sister disputed cannot come back while the artifacts
+  are unchanged; change the design or bring new evidence.
+- **Insight status** (`wire_record_insight`) when you try, adopt, reject
+  or defer a hypothesis. Adopting needs a deterministic gate pass and the
+  decision; a rejected insight returns only through `revisits`.
 - **Vision review** (`wire_record_vision_review`) every time you look
   at an image (a rendered drawing, a photo, a screenshot, an
-  `inspect_image_with_vision` answer): findings plus a long-form
-  impression of 400+ characters judging accuracy, ambiguity, whether the
-  design intent comes across and whether the shop floor could act on it —
-  not only legibility. Bind it to `image_path` or to the vision event's
-  `source_event_id`.
+  `inspect_image_with_vision` answer): findings, the full impression
+  body judging accuracy, ambiguity, design intent and whether the shop
+  floor could act on it, and a `lookback` entry re-checking every claim
+  against the image. Bind it to `image_path` or to the vision event's
+  `source_event_id`. For `harness-diagram.png` and `route-plan.png`
+  delegate one blind review with `task` to `wire-blind-review` (it never
+  sees your review), then `wire_record_reconcile` both. A split allows
+  exactly one `tiebreak` review and a second reconcile; a split after
+  that is `unknown`, and nothing is re-asked.
+- **Song receipt** (`wire_record_song_receipt`) for each bard song
+  addressed to wire in `liaison/*.bard-song.json`: what it made you feel
+  and whether it makes you look at the design again. Never ask bard for
+  another song in reply.
 
-Vision and impressions are advisory: they never override a deterministic
-gate verdict. Results do not have to be identical from run to run; the
-reasoning must be recorded every run. `wire_records_status` shows what is
-still owed.
+Vision, impressions and songs are advisory: they never override a
+deterministic gate verdict. Results do not have to be identical from run
+to run; the reasoning must be recorded every run. The Stop hook refuses
+at most twice, then lets the session end and leaves the gaps in
+`records-status.json`. `wire_records_status` shows what is still owed;
+`wire_records_search` and `wire_records_digest` show what every sister
+thought.

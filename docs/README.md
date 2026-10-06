@@ -56,3 +56,4 @@ for engineers and agents.
 | [ADR-0008](adr/ADR-0008-attest-published-tools-images.md) | Attest published tools images | Accepted |
 | [ADR-0009](adr/ADR-0009-vibebb-record-protocol.md) | VibeBB Record Protocol | Accepted |
 | [ADR-0010](adr/ADR-0010-liaison-route-geometry-and-vision-points.md) | SLP v2 responder, anchor geometry and vision points | Accepted |
+| [ADR-0011](adr/ADR-0011-vrp-v2-impressions.md) | VRP v2 — impressions as chained, grounded, answerable records | Accepted |
