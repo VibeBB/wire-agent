@@ -507,8 +507,13 @@ class HarnessContract(BaseModel):
 
 
 def contract_sha256(contract: HarnessContract) -> str:
-    """Canonical JSON digest used by the intake sidecar and provenance."""
-    payload = contract.model_dump_json()
+    """Canonical JSON digest used by the intake sidecar and provenance.
+
+    An absent ``simulation`` section is left out so contracts written before
+    the section existed keep their digest.
+    """
+    exclude = {"simulation"} if contract.simulation is None else None
+    payload = contract.model_dump_json(exclude=exclude)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
