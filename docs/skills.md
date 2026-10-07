@@ -9,6 +9,7 @@ Skills live in `plugins/wire/skills/<name>/SKILL.md`.
 | `wire-contract-rules` | path rule on `*.contract.json` / `*.intake.json` | Short schema and provenance reminders injected whenever a contract or intake file is touched. |
 | `wire-gates` | used by `wire-design` | Every gate, what makes it fail or `unknown`, and how to repair the contract instead of the artifacts. |
 | `wire-connectivity` | imports | `wire_import` kinds (`circuit-json`, `csv`, `mech-envelope`), source shapes, `I*` provenance and re-import behavior. |
+| `wire-out-rules` | path rule on `**/out/**` | Reminds that generated artifacts under `out/` are read-only projections — change the contract and regenerate (the `protect-generated` hook enforces). |
 
 ## Key rules the skills enforce
 
