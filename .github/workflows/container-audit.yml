@@ -90,10 +90,13 @@ jobs:
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: v0.75.0
-      # One shared TRIVY_CACHE_DIR for every scan in this job; the weekly
-      # key means the ~120 MB vulnerability DB is downloaded once per ISO
-      # week instead of every run. This job owns the save for the shared
-      # family key — publish restores it read-only.
+      # The scan legs below run concurrently, so each gets its own Trivy
+      # cache directory: concurrent DB updates in one cache dir race on
+      # db/metadata.json and corrupt it. The weekly key means the ~120 MB
+      # vulnerability DB is downloaded once per ISO week instead of every
+      # run; this job owns the save for the shared family key — publish
+      # restores it read-only. It feeds the raw-trivy CIS leg, which is the
+      # sole user of this dir.
       - id: trivy-db-week
         # Shared weekly key: publish-wire-images.yml restores this entry
         # read-only so its scans skip the DB re-download too.
@@ -103,23 +106,22 @@ jobs:
           path: ${{ runner.temp }}/trivy-cache
           key: ${{ steps.trivy-db-week.outputs.key }}
           restore-keys: cache-trivy-
-      - name: Warm the Trivy DB before the parallel scans
+      - name: Warm the Trivy DB for the CIS scan leg
         env:
           TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
-        # Populate the shared cache dir serially so the scan legs below
-        # only ever read the DB (concurrent DB downloads in one cache dir
-        # are not safe).
+        # Populate the CIS leg's cache dir serially so it only ever reads
+        # the DB. The trivy-action legs restore their own DB into their
+        # per-leg cache-dir instead.
         run: trivy image --download-db-only
-      # The four scans read the same pinned image and the now-warm shared
-      # vulnerability DB, and each writes a disjoint report path, so they
-      # run as one parallel group (implicit wait at the end).
+      # The four scans read the same pinned image, each writes a disjoint
+      # report path, and each trivy process writes to its own cache dir,
+      # so they run as one parallel group (implicit wait at the end).
       - parallel:
           - name: Scan pinned image (Trivy SARIF)
             uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-            env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
             with:
               scan-type: image
+              cache-dir: ${{ runner.temp }}/trivy-cache-sarif
               # The digest is frozen; the vulnerability DB is not — this scan
               # surfaces newly disclosed CVEs against the shipped tools image.
               scan-ref: ${{ env.PINNED_IMAGE }}
@@ -134,10 +136,9 @@ jobs:
               skip-setup-trivy: true
           - name: Scan pinned image (Trivy JSON, full)
             uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-            env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
             with:
               scan-type: image
+              cache-dir: ${{ runner.temp }}/trivy-cache-json
               scan-ref: ${{ env.PINNED_IMAGE }}
               version: v0.75.0
               scanners: vuln,secret,misconfig,license
