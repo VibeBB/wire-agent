@@ -156,17 +156,19 @@ jobs:
           set -euo pipefail
           # The mutable :latest tag is the only drift surface left after
           # promote-by-tag: a failed promote leaves it pointing at a stale
-          # digest while every pinned check stays green. Retry briefly so
-          # GHCR propagation right after a promote cannot false-positive.
+          # digest while every pinned check stays green. Retry for up to
+          # ~5 minutes so GHCR propagation right after a promote cannot
+          # false-positive (3 attempts over 1 minute was not enough: the
+          # lock check raced the post-publish promote and failed on main).
           latest=""
-          for attempt in 1 2 3; do
+          for attempt in $(seq 1 10); do
             latest=$(docker buildx imagetools inspect "${IMAGE}:latest" \
               --format '{{json .Manifest.Digest}}' | tr -d '"') || latest=""
             if [ "$latest" = "$DIGEST" ]; then
               echo "- \`${IMAGE}:latest\` resolves to the locked digest \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
-            [ "$attempt" -lt 3 ] && sleep $((attempt * 20))
+            [ "$attempt" -lt 10 ] && sleep 30
           done
           echo "::error::${IMAGE}:latest resolves to ${latest:-<unreadable>}, not the locked digest ${DIGEST}."
           exit 1
