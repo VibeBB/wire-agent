@@ -10,6 +10,7 @@ integer domain and over a dense float grid that includes every breakpoint.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -356,3 +357,547 @@ def test_identical_housing_keying_decision_table(
         connector["keying"] = keying
     keyed = [s for s in _statuses(data, "connector_rating") if s != "pass"]
     assert keyed == ([] if status is None else [status])
+
+
+# --- decision mutants: conditions only reachable past model validation ---
+#
+# The contract model already rejects unknown net/route/splice/connector
+# references; the gates keep a fail-closed second layer for objects built
+# without validation (model_construct, deserialized copies). Tests below
+# mutate fields after model_validate to reach that layer.
+
+
+def _report(data: dict[str, Any]):
+    return run_gates(HarnessContract.model_validate(data))
+
+
+def _checks(report, check_id: str):
+    return [c for c in report.checks if c.id == check_id]
+
+
+def _pair_check(report):
+    return next(
+        c for c in _checks(report, "shielding_pairing") if c.subject == "twisted-pair routing"
+    )
+
+
+def test_report_dict_counts_each_status_bucket() -> None:
+    data = example_contract_data()
+    data["nets"].append({"id": "N4", "signal_class": "power", "voltage_v": 1.0, "current_a": 0.0})
+    _wire(data, "W1")["route"] = None
+    report = _report(data)
+    counts = report.to_dict(HarnessContract.model_validate(data))["summary"]
+    expected = {
+        status: sum(1 for c in report.checks if c.status == status)
+        for status in ("pass", "fail", "unknown")
+    }
+    assert expected["fail"] >= 1  # netlist_coverage on the unwired net
+    assert expected["unknown"] >= 1  # bend_radius route coverage
+    assert counts == expected
+
+
+def test_connectivity_flags_every_bad_reference() -> None:
+    data = example_contract_data()
+    contract = HarnessContract.model_validate(data)
+
+    contract.wires[0].from_endpoint.splice = "SP9"
+    assert "unknown splice SP9" in _checks(run_gates(contract), "connectivity")[0].detail
+    contract.wires[0].from_endpoint.splice = None
+
+    contract.wires[0].from_endpoint.connector = "C9"
+    assert "unknown connector C9" in _checks(run_gates(contract), "connectivity")[0].detail
+    contract.wires[0].from_endpoint.connector = "C1"
+
+    contract.wires[0].from_endpoint.cavity = "9"
+    assert "unknown cavity C1:9" in _checks(run_gates(contract), "connectivity")[0].detail
+    contract.wires[0].from_endpoint.cavity = "1"
+
+    contract.wires[0].route = "RT9"
+    assert "unknown route RT9" in _checks(run_gates(contract), "connectivity")[0].detail
+    contract.wires[0].route = "RT1"
+
+    contract.wires[0].to_endpoint = contract.wires[0].from_endpoint
+    assert "both endpoints identical" in _checks(run_gates(contract), "connectivity")[0].detail
+
+
+def test_connectivity_skips_endpoint_without_connector_or_splice() -> None:
+    data = example_contract_data()
+    contract = HarnessContract.model_validate(data)
+    contract.wires[0].from_endpoint.connector = None
+    contract.wires[0].from_endpoint.cavity = None
+    detail = _checks(run_gates(contract), "connectivity")[0].detail
+    assert "W1" not in detail
+
+
+def test_splice_legs_require_two_and_one_net() -> None:
+    data = example_contract_data()
+    data["splices"] = [{"id": "SP1"}, {"id": "SP2"}]
+    contract = HarnessContract.model_validate(data)
+    contract.wires[0].from_endpoint.splice = "SP1"
+    contract.wires[1].from_endpoint.splice = "SP1"
+    contract.wires[2].from_endpoint.splice = "SP2"
+    checks = {c.subject: c for c in _checks(run_gates(contract), "splice_integrity")}
+    # SP1 carries legs on nets N1 and N2 -> multi-net failure detail
+    assert checks["SP1"].status == "fail"
+    assert "span multiple nets" in checks["SP1"].detail
+    # SP2 carries a single leg -> leg-count failure detail
+    assert "1 leg(s)" in checks["SP2"].detail
+
+
+def test_netlist_coverage_flags_unwired_net() -> None:
+    data = example_contract_data()
+    data["nets"].append({"id": "N4", "signal_class": "power", "voltage_v": 1.0, "current_a": 0.0})
+    check = _checks(_report(data), "netlist_coverage")[0]
+    assert check.status == "fail"
+    assert "N4 has no wire" in check.detail
+
+
+def test_shielding_flags_required_shield_and_pair_routes() -> None:
+    data = example_contract_data()
+    _net(data, "N1")["shield_required"] = True
+    check = _checks(_report(data), "shielding_pairing")[0]
+    assert check.status == "fail"
+    assert "requires shield" in check.detail
+
+
+def test_twisted_pair_checks_route_sharing() -> None:
+    data = example_contract_data()
+    _net(data, "N1")["twisted_pair_with"] = "N2"
+    _net(data, "N2")["twisted_pair_with"] = "N1"
+    check = _pair_check(_report(data))
+    assert check.status == "pass"
+
+    _wire(data, "W1")["route"] = "RT2"
+    check = _pair_check(_report(data))
+    assert check.status == "fail"
+    assert "do not share one route" in check.detail
+
+    data = example_contract_data()
+    _net(data, "N1")["twisted_pair_with"] = "N2"
+    _wire(data, "W1")["route"] = None
+    check = _pair_check(_report(data))
+    assert check.status == "fail"
+
+    contract = HarnessContract.model_validate(example_contract_data())
+    contract.nets[0].twisted_pair_with = "N9"
+    check = _pair_check(run_gates(contract))
+    assert check.status == "fail"
+    assert "pair N9 unknown" in check.detail
+
+
+def test_ampacity_declared_curve_wins_over_spec_table() -> None:
+    data = example_contract_data()
+    # WT1 declares both spec="AVSS" and an explicit curve: the explicit
+    # curve must win (ambient 60C is below the 80C reference -> factor 1.0).
+    report = _report(data)
+    check = next(c for c in _checks(report, "ampacity") if c.subject == "W1")
+    assert check.status == "pass"
+    assert check.limit == round(12.7 * bundle_derating(2), 4)
+
+
+def test_ampacity_no_curve_above_reference_is_unknown() -> None:
+    data = example_contract_data()
+    data["ambient_temperature_c"] = 85.0  # above WT1's 80C reference
+    _wire_type(data, "WT1")["temp_derating"] = []
+    _wire_type(data, "WT1")["spec"] = None
+    check = next(c for c in _checks(_report(data), "ampacity") if c.subject == "W1")
+    assert check.status == "unknown"
+    assert "no derating curve" in check.detail
+
+
+def test_ampacity_zero_factor_boundary_reports_curve() -> None:
+    for ambient in (105.0, 110.0):
+        data = example_contract_data()
+        data["ambient_temperature_c"] = ambient
+        check = next(c for c in _checks(_report(data), "ampacity") if c.subject == "W1")
+        assert check.status == "fail"
+        assert "ambient above derating curve" in check.detail
+
+
+def test_ampacity_detail_marks_unrouted_wire() -> None:
+    data = example_contract_data()
+    _wire(data, "W1")["route"] = None
+    check = next(c for c in _checks(_report(data), "ampacity") if c.subject == "W1")
+    assert "route -" in check.detail
+
+
+def test_bend_radius_flex_required_and_exact_boundary() -> None:
+    data = example_contract_data()
+    data["routes"][0]["flex_required"] = True
+    fail_check = next(c for c in _checks(_report(data), "bend_radius") if c.subject == "RT1")
+    assert fail_check.status == "fail"
+    assert "requires flex" in fail_check.detail
+
+    data = example_contract_data()
+    data["routes"][0]["flex_required"] = True
+    _wire_type(data, "WT1")["flex_class"] = "dynamic"
+    assert not [
+        c
+        for c in _checks(_report(data), "bend_radius")
+        if c.subject == "RT1" and "requires flex" in c.detail
+    ]
+
+    data = example_contract_data()
+    data["routes"][0]["segments"][0]["min_bend_radius_mm"] = 8.0
+    check = next(c for c in _checks(_report(data), "bend_radius") if c.subject == "RT1:S1")
+    assert check.status == "pass"  # required is exactly 8.0 mm (4.0 x 2.0)
+
+
+def test_segregation_route_connector_and_unrouted_scopes() -> None:
+    data = example_contract_data()
+    _wire(data, "W3")["route"] = "RT1"  # power + analog share RT1
+    check = _checks(_report(data), "segregation")[0]
+    assert check.status == "fail"
+    assert "RT1: analog+power" in check.detail
+
+    data = example_contract_data()
+    _wire(data, "W3")["route"] = None
+    check = _checks(_report(data), "segregation")[0]
+    assert check.status == "unknown"
+    assert "wires without route cannot be segregated" in check.detail
+
+    data = example_contract_data()
+    data["segregations"] = [{"classes": ["power", "analog"], "rule": "no_shared_connector"}]
+    check = _checks(_report(data), "segregation")[0]
+    assert check.status == "fail"
+    assert "C1: analog+power" in check.detail
+
+
+def test_segregation_ignores_splice_only_endpoints() -> None:
+    data = example_contract_data()
+    data["segregations"] = [{"classes": ["power", "analog"], "rule": "no_shared_connector"}]
+    contract = HarnessContract.model_validate(data)
+    # W1 (power) leaves both connectors through splices; only analog and
+    # ground wires terminate at C1/C2, so no policy violation remains.
+    contract.wires[0].from_endpoint.splice = "SP1"
+    contract.wires[0].from_endpoint.connector = None
+    contract.wires[0].from_endpoint.cavity = None
+    contract.wires[0].to_endpoint.splice = "SP2"
+    contract.wires[0].to_endpoint.connector = None
+    contract.wires[0].to_endpoint.cavity = None
+    check = _checks(run_gates(contract), "segregation")[0]
+    assert check.status == "pass"
+
+
+def test_terminal_compatibility_decision_branches() -> None:
+    data = example_contract_data()
+    _wire_type(data, "WT1")["gauge_mm2"] = 0.6
+    check = next(
+        c for c in _checks(_report(data), "terminal_compatibility") if c.subject == "W1:C1:1"
+    )
+    assert check.status == "fail"
+    assert "gauge 0.6 outside" in check.detail
+
+    data = example_contract_data()
+    _wire(data, "W1")["terminal_a"] = "WRONG-TERM"
+    check = next(
+        c for c in _checks(_report(data), "terminal_compatibility") if c.subject == "W1:C1:1"
+    )
+    assert check.status == "fail"
+    assert "terminal WRONG-TERM != cavity" in check.detail
+
+    data = example_contract_data()
+    _wire(data, "W1")["terminal_a"] = None
+    check = next(
+        c for c in _checks(_report(data), "terminal_compatibility") if c.subject == "W1:C1:1"
+    )
+    assert check.status == "unknown"
+    assert "terminal not fully declared" in check.detail
+
+    data = example_contract_data()
+    contract = HarnessContract.model_validate(data)
+    contract.connectors[0].cavities[0].terminal = None
+    check = next(
+        c for c in _checks(run_gates(contract), "terminal_compatibility") if c.subject == "W1:C1:1"
+    )
+    assert check.status == "unknown"
+
+
+def test_terminal_compatibility_selects_the_declared_cavity() -> None:
+    data = example_contract_data()
+    # Second cavity with a tighter accepted range: the lookup must pick
+    # cavity 1 (0.08-0.5) for a 0.35 mm2 wire, not cavity 9 (0.08-0.2).
+    data["connectors"][0]["cavities"].append(
+        {"id": "9", "accepts_mm2": [0.08, 0.2], "terminal": "SXH-001T-P0.6"}
+    )
+    _wire(data, "W3")["wire_type"] = "WT2"
+    check = next(
+        c for c in _checks(_report(data), "terminal_compatibility") if c.subject == "W3:C1:3"
+    )
+    assert check.status == "pass"
+
+
+def test_connector_rating_counts_to_endpoint_and_count_boundary() -> None:
+    data = example_contract_data()
+    data["connectors"][1]["rated_current_a"] = 1.5
+    contract = HarnessContract.model_validate(data)
+    # W1 leaves C1 through a splice but still lands on C2 via to_endpoint.
+    contract.wires[0].from_endpoint.splice = "SP1"
+    contract.wires[0].from_endpoint.connector = None
+    contract.wires[0].from_endpoint.cavity = None
+    by_subject = {c.subject: c for c in _checks(run_gates(contract), "connector_rating")}
+    assert by_subject["C2"].status == "fail"
+    assert "current 2.0 A" in by_subject["C2"].detail
+
+    data = example_contract_data()
+    data["connectors"][0]["cavity_count"] = 4  # exactly len(cavities)
+    by_subject = {c.subject: c for c in _checks(_report(data), "connector_rating")}
+    assert by_subject["C1"].status == "pass"
+
+
+def test_anchor_resolution_mech_presence_and_missing() -> None:
+    data = example_contract_data()
+    data["routes"][0]["anchors"] = ["A1", "A2"]
+    data["imported_sources"] = [
+        {"id": "I1", "system": "circuit", "ref": "x.json", "anchors": ["A1", "A2"]}
+    ]
+    check = _checks(_report(data), "anchor_resolution")[0]
+    assert check.status == "unknown"
+    assert "no mech envelope" in check.detail
+
+    data["imported_sources"] = [
+        {
+            "id": "I1",
+            "system": "mech",
+            "ref": "x.json",
+            "anchors": ["A1"],
+            "anchor_points": [{"name": "A1", "position_mm": [0.0, 0.0, 0.0]}],
+        }
+    ]
+    check = _checks(_report(data), "anchor_resolution")[0]
+    assert check.status == "fail"
+    assert "missing: A2" in check.detail
+
+    data["imported_sources"] = [
+        {
+            "id": "I1",
+            "system": "mech",
+            "ref": "x.json",
+            "anchors": ["A1", "A2"],
+            "anchor_points": [
+                {"name": "A1", "position_mm": [0.0, 0.0, 0.0]},
+                {"name": "A2", "position_mm": [10.0, 0.0, 0.0]},
+            ],
+        }
+    ]
+    check = _checks(_report(data), "anchor_resolution")[0]
+    assert check.status == "pass"
+
+
+def test_route_geometry_boundaries_and_unplaced() -> None:
+    data = example_contract_data()
+    data["routes"][0]["anchors"] = ["A1", "A2"]
+    data["imported_sources"] = [
+        {
+            "id": "I1",
+            "system": "mech",
+            "ref": "x.json",
+            "anchors": ["A1", "A2"],
+            "anchor_points": [
+                {"name": "A1", "position_mm": [0.0, 0.0, 0.0]},
+                {"name": "A2", "position_mm": [500.0, 0.0, 0.0]},
+            ],
+        }
+    ]
+    # RT1 segments total 0.5 m = 500 mm: exactly at the polyline span.
+    check = _checks(_report(data), "route_geometry")[0]
+    assert check.status == "pass"
+
+    data["routes"][0]["segments"][1]["length_m"] = 0.1  # 400 mm < 500 mm
+    check = _checks(_report(data), "route_geometry")[0]
+    assert check.status == "fail"
+    assert "route shorter than its anchor polyline" in check.detail
+
+    data = example_contract_data()
+    data["routes"][0]["anchors"] = ["A1", "A2"]
+    data["imported_sources"] = [
+        {
+            "id": "I1",
+            "system": "mech",
+            "ref": "x.json",
+            "anchors": ["A1", "A2"],
+            "anchor_points": [
+                {"name": "A1", "position_mm": [0.0, 0.0, 0.0]},
+                {"name": "A2", "position_mm": None},
+            ],
+        }
+    ]
+    check = _checks(_report(data), "route_geometry")[0]
+    assert check.status == "unknown"
+    assert "anchors without position_mm: A2" in check.detail
+
+    data = example_contract_data()
+    data["routes"][0]["anchors"] = ["A1"]
+    check = _checks(_report(data), "route_geometry")[0]
+    assert check.status == "pass"
+    assert "no route spans two anchors" in check.detail
+
+
+def test_import_freshness_passes_fails_and_skips(tmp_path: Path) -> None:
+    blob = tmp_path / "import.json"
+    blob.write_bytes(b'{"ok": true}')
+    import hashlib
+
+    digest = hashlib.sha256(b'{"ok": true}').hexdigest()
+    data = example_contract_data()
+    data["imported_sources"] = [{"id": "I1", "system": "mech", "ref": str(blob), "sha256": digest}]
+    check = _checks(_report(data), "import_freshness")[0]
+    assert check.status == "pass"
+
+    blob.write_bytes(b'{"tampered": true}')
+    check = _checks(_report(data), "import_freshness")[0]
+    assert check.status == "fail"
+    assert "changed since import" in check.detail
+
+    data["imported_sources"] = [
+        {"id": "I1", "system": "mech", "ref": str(tmp_path / "missing.json"), "sha256": digest}
+    ]
+    check = _checks(_report(data), "import_freshness")[0]
+    assert check.status == "unknown"
+
+    data["imported_sources"] = [{"id": "I1", "system": "mech", "ref": str(blob)}]
+    check = _checks(_report(data), "import_freshness")[0]
+    assert check.status == "pass"
+    assert "no hashed imports" in check.detail
+
+
+def test_manifest_integrity_mismatches(tmp_path: Path) -> None:
+    data = example_contract_data()
+    contract = HarnessContract.model_validate(data)
+    (tmp_path / "artifact.txt").write_bytes(b"payload")
+    import hashlib
+    import json
+
+    from wire.contract import contract_sha256
+
+    good = {
+        "contract_sha256": contract_sha256(contract),
+        "files": [
+            {
+                "path": "artifact.txt",
+                "sha256": hashlib.sha256(b"payload").hexdigest(),
+            }
+        ],
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(good), encoding="utf-8")
+    report = run_gates(contract, out_dir=tmp_path)
+    check = _checks(report, "manifest_integrity")[0]
+    assert check.status == "pass"
+    # every check passing (no fail or unknown) is what lets the verdict pass
+    assert report.verdict == "pass"
+
+    bad = dict(good)
+    bad["contract_sha256"] = "0" * 64
+    (tmp_path / "manifest.json").write_text(json.dumps(bad), encoding="utf-8")
+    check = _checks(run_gates(contract, out_dir=tmp_path), "manifest_integrity")[0]
+    assert check.status == "fail"
+    assert "contract_sha256 mismatch" in check.detail
+
+    bad = json.loads(json.dumps(good))
+    bad["files"][0]["sha256"] = "0" * 64
+    (tmp_path / "manifest.json").write_text(json.dumps(bad), encoding="utf-8")
+    check = _checks(run_gates(contract, out_dir=tmp_path), "manifest_integrity")[0]
+    assert check.status == "fail"
+    assert "artifact.txt: sha256 mismatch" in check.detail
+
+
+def test_verdict_fails_when_any_check_is_not_pass(tmp_path: Path) -> None:
+    # a single failing check flips the verdict even with everything else green
+    data = example_contract_data()
+    data["nets"].append({"id": "N4", "signal_class": "power", "voltage_v": 1.0, "current_a": 0.0})
+    assert _report(data).verdict == "fail"
+
+
+def test_splice_integrity_survives_undeclared_splice_endpoint() -> None:
+    data = example_contract_data()
+    contract = HarnessContract.model_validate(data)
+    # an endpoint citing a splice the contract never declared must not
+    # crash the leg counter (the connectivity gate reports it instead)
+    contract.wires[0].from_endpoint.splice = "SP9"
+    contract.wires[0].from_endpoint.connector = None
+    contract.wires[0].from_endpoint.cavity = None
+    checks = _checks(run_gates(contract), "splice_integrity")
+    assert not [c for c in checks if "check error" in c.detail]
+
+
+def test_ampacity_explicit_curve_not_spec_table() -> None:
+    data = example_contract_data()
+    # spec "AVSS" would derate to 1.0 at 60C; the declared curve says 0.4.
+    wt = dict(data["wire_types"][0])
+    wt["spec"] = "AVSS"
+    wt["temp_derating"] = [
+        {"temperature_c": 40.0, "factor": 0.5},
+        {"temperature_c": 80.0, "factor": 0.3},
+    ]
+    data["wire_types"][0] = wt
+    check = next(c for c in _checks(_report(data), "ampacity") if c.subject == "W1")
+    assert check.limit == round(12.7 * 0.4 * bundle_derating(2), 4)
+
+
+def test_terminal_compat_skips_endpoint_with_splice() -> None:
+    contract = HarnessContract.model_validate(example_contract_data())
+    # malformed endpoint carrying both a splice and a connector: the splice
+    # wins and no per-endpoint terminal check is emitted
+    contract.wires[0].from_endpoint.splice = "SP1"
+    checks = _checks(run_gates(contract), "terminal_compatibility")
+    assert not [c for c in checks if c.subject == "W1:C1:1"]
+
+
+def test_terminal_gauge_at_upper_bound_still_passes() -> None:
+    data = example_contract_data()
+    # WT1 gauge 0.5 mm2 is exactly the cavity's upper accepts bound
+    check = next(
+        c for c in _checks(_report(data), "terminal_compatibility") if c.subject == "W1:C1:1"
+    )
+    assert check.status == "pass"
+
+
+def test_route_geometry_equal_length_has_no_detail() -> None:
+    data = example_contract_data()
+    data["routes"][0]["anchors"] = ["A1", "A2"]
+    data["imported_sources"] = [
+        {
+            "id": "I1",
+            "system": "mech",
+            "ref": "x.json",
+            "anchors": ["A1", "A2"],
+            "anchor_points": [
+                {"name": "A1", "position_mm": [0.0, 0.0, 0.0]},
+                {"name": "A2", "position_mm": [500.0, 0.0, 0.0]},
+            ],
+        }
+    ]
+    check = _checks(_report(data), "route_geometry")[0]
+    assert check.status == "pass"
+    assert check.detail == ""
+
+
+def test_sim_pdn_default_base_dir_does_not_error() -> None:
+    data = example_contract_data()
+    data["simulation"] = {
+        "rails": [
+            {
+                "net": "N1",
+                "source": {"connector": "C1", "cavity": "1"},
+                "load": {"connector": "C2", "cavity": "1"},
+                "return_net": "N2",
+                "return_source": {"connector": "C1", "cavity": "2"},
+                "return_load": {"connector": "C2", "cavity": "2"},
+            }
+        ],
+        "response_path": "out/sim.sim-response.json",
+    }
+    # run_gates without base_dir resolves against the workspace root; the
+    # unanswered response is unknown, never a crash inside the check
+    checks = _checks(_report(data), "sim_pdn")
+    assert checks
+    assert not [c for c in checks if "check error" in c.detail]
+
+
+def test_terminal_gauge_at_lower_bound_still_passes() -> None:
+    data = example_contract_data()
+    _wire_type(data, "WT1")["gauge_mm2"] = 0.08  # exactly accepts_mm2[0]
+    check = next(
+        c for c in _checks(_report(data), "terminal_compatibility") if c.subject == "W1:C1:1"
+    )
+    assert check.status == "pass"
