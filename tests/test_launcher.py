@@ -181,6 +181,53 @@ def test_homes_includes_real_pw_dir() -> None:
     assert Path(_pwd.getpwuid(os.getuid()).pw_dir) in homes
 
 
+def test_container_user_rootless(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rootless daemons get 0:0 — the host uid maps to an unusable subuid."""
+    module = _load_launcher()
+    monkeypatch.setattr(
+        module,
+        "_docker_info_security_options",
+        lambda: '["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]',
+    )
+    assert module._container_user() == "0:0"
+    argv = module._docker_argv(image="img", source=None, inner_argv=["doctor"])
+    assert argv[argv.index("--user") + 1] == "0:0"
+
+
+def test_container_user_rootful(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rootful daemons keep the invoking uid:gid so artifacts stay user-owned."""
+    module = _load_launcher()
+    monkeypatch.setattr(
+        module,
+        "_docker_info_security_options",
+        lambda: '["name=seccomp,profile=builtin"]',
+    )
+    assert module._container_user() == f"{os.getuid()}:{os.getgid()}"
+
+
+def test_container_user_docker_info_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """docker absent/failing -> keep the current uid:gid behavior."""
+    module = _load_launcher()
+    monkeypatch.setattr(module, "_docker_info_security_options", lambda: None)
+    assert module._container_user() == f"{os.getuid()}:{os.getgid()}"
+
+
+def test_run_in_locked_image_container_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """scripts/run_in_locked_image.py shares the same rootless rule."""
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.setattr(sys, "path", [str(repo_root / "scripts"), *sys.path])
+    spec = importlib.util.spec_from_file_location(
+        "run_in_locked_image_test", repo_root / "scripts" / "run_in_locked_image.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "_docker_info_security_options", lambda: '["name=rootless"]')
+    assert module._container_user() == "0:0"
+    monkeypatch.setattr(module, "_docker_info_security_options", lambda: None)
+    assert module._container_user() == f"{os.getuid()}:{os.getgid()}"
+
+
 def test_main_mcp_server_argv_is_module_string(monkeypatch: pytest.MonkeyPatch) -> None:
     """`mcp_server` must exec `python -m wire.mcp_server`; every argv entry is a str."""
     module = _load_launcher()
