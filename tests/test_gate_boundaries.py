@@ -377,9 +377,7 @@ def _checks(report: GateReport, check_id: str) -> list[GateCheck]:
 
 def _pair_check(report: GateReport) -> GateCheck:
     return next(
-        c
-        for c in _checks(report, "shielding_pairing")
-        if c.subject == "twisted-pair routing"
+        c for c in _checks(report, "shielding_pairing") if c.subject == "twisted-pair routing"
     )
 
 
