@@ -15,7 +15,9 @@ Environment notes:
   invoked command needs dev dependencies (e.g. pytest) — the image itself
   ships runtime deps only.
 - ``--user <uid>:<gid>`` keeps files created in the mounted checkout owned
-  by the invoking user.
+  by the invoking user (``0:0`` under rootless Docker, where the host uid
+  maps to an unusable subuid and container root maps back to the daemon's
+  owner — the invoking user).
 
 Usage::
 
@@ -41,6 +43,37 @@ except ImportError:
     from print_locked_image import locked_image
 
 ROOT = Path(__file__).resolve().parent.parent
+
+_DOCKER_INFO_TIMEOUT_S = 10
+
+
+def _docker_info_security_options() -> str | None:
+    """Return `docker info` security options, or None when unavailable."""
+    try:
+        result = subprocess.run(
+            ["docker", "info", "-f", "{{json .SecurityOptions}}"],
+            capture_output=True,
+            text=True,
+            timeout=_DOCKER_INFO_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _container_user() -> str:
+    """uid:gid to run the tools container as.
+
+    On rootless Docker the host uid maps to an unmapped subuid inside the
+    container user namespace, so bind-mounted workspace writes fail. There
+    container root (0:0) maps back to the daemon's owner — the invoking
+    user — so 0:0 keeps writes working. On rootful Docker keep the host
+    uid so artifacts stay user-owned.
+    """
+    if "name=rootless" in (_docker_info_security_options() or ""):
+        return "0:0"
+    return f"{os.getuid()}:{os.getgid()}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -91,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         "run",
         "--rm",
         "--user",
-        f"{os.getuid()}:{os.getgid()}",
+        _container_user(),
         "-e",
         "HOME=/tmp",
         "-e",
