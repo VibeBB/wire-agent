@@ -18,7 +18,7 @@ from pydantic import ValidationError
 
 from helpers import example_contract_data
 from wire.contract import CavitySpec, HarnessConnector, HarnessContract
-from wire.gates import run_gates
+from wire.gates import GateCheck, GateReport, run_gates
 from wire.standards import SPEC_DERATING, bundle_derating, temperature_factor
 
 UP = math.inf
@@ -367,17 +367,19 @@ def test_identical_housing_keying_decision_table(
 # mutate fields after model_validate to reach that layer.
 
 
-def _report(data: dict[str, Any]):
+def _report(data: dict[str, Any]) -> GateReport:
     return run_gates(HarnessContract.model_validate(data))
 
 
-def _checks(report, check_id: str):
+def _checks(report: GateReport, check_id: str) -> list[GateCheck]:
     return [c for c in report.checks if c.id == check_id]
 
 
-def _pair_check(report):
+def _pair_check(report: GateReport) -> GateCheck:
     return next(
-        c for c in _checks(report, "shielding_pairing") if c.subject == "twisted-pair routing"
+        c
+        for c in _checks(report, "shielding_pairing")
+        if c.subject == "twisted-pair routing"
     )
 
 
