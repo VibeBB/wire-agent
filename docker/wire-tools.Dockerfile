@@ -29,21 +29,30 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 ARG DRAWIO_DESKTOP_VERSION=31.7.0
 ARG DRAWIO_DESKTOP_SHA256=eb9695e208fcc5ccfbfc496aa8ab2f52a273297d83715de2177b231c172c13de
 
-RUN apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
-        ca-certificates \
-        curl \
-        fonts-ipafont \
-        git \
-        libasound2t64 \
-        xvfb \
-        xauth \
-    && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o /tmp/drawio.deb \
-        "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
-    && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \
-    && apt-get install --no-install-recommends -y /tmp/drawio.deb \
-    && rm /tmp/drawio.deb \
-    && rm -rf /var/lib/apt/lists/*
+# apt resilience: Acquire::Retries covers single fetches, not a mirror that
+# is down for minutes (archive.ubuntu.com outage killed several builds).
+# Retry the whole update+install round with bounded backoff.
+RUN for attempt in 1 2 3 4 5; do \
+        apt-get -o Acquire::Retries=5 update \
+        && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
+            ca-certificates \
+            curl \
+            fonts-ipafont \
+            git \
+            libasound2t64 \
+            xvfb \
+            xauth \
+        && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o /tmp/drawio.deb \
+            "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
+        && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \
+        && apt-get install --no-install-recommends -y /tmp/drawio.deb \
+        && rm /tmp/drawio.deb \
+        && rm -rf /var/lib/apt/lists/* \
+        && break; \
+        [ "$attempt" = 5 ] && exit 1; \
+        echo "::warning::apt update+install attempt ${attempt} failed; retrying"; \
+        sleep $((attempt * 30)); \
+    done
 
 # The uv-managed CPython bundles pip with vendored copies of urllib3,
 # msgpack, and setuptools that nothing in the image invokes — dependencies
@@ -78,11 +87,17 @@ RUN uv export --frozen --no-dev --no-emit-project --format requirements-txt \
 # The pinned debian:13-slim digest keeps shipping the deb Trivy flags at
 # publish (CVE-2026-103111 libpcre2-8-0). Upgrade just that package inside
 # the build so the publish gate stays green.
-RUN apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-        --only-upgrade \
-        libpcre2-8-0 \
-    && rm -rf /var/lib/apt/lists/*
+RUN for attempt in 1 2 3 4 5; do \
+        apt-get -o Acquire::Retries=5 update \
+        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            --only-upgrade \
+            libpcre2-8-0 \
+        && rm -rf /var/lib/apt/lists/* \
+        && break; \
+        [ "$attempt" = 5 ] && exit 1; \
+        echo "::warning::apt update+install attempt ${attempt} failed; retrying"; \
+        sleep $((attempt * 30)); \
+    done
 
 # Tighten the login.defs umask to 027 (Lynis AUTH-9328): the image has no
 # interactive users, so files created at runtime stay group-readable only.
