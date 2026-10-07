@@ -31,6 +31,8 @@ jobs:
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    # No actions/cache usage: forbid restore and save entirely.
+    cache-mode: none
     outputs:
       code: ${{ steps.scope.outputs.code }}
     steps:
@@ -122,16 +124,19 @@ jobs:
           cache-suffix: e2e
       - name: Sync dependencies
         run: uv sync --locked
-      - name: Author example harness end to end (inside locked image)
-        run: |
-          uv run python scripts/run_in_locked_image.py -- \
-            python scripts/e2e_authoring.py \
-            --contract examples/sensor-harness/sensor-harness.contract.json \
-            --out out/ci/sensor-harness
-      - name: drawio export check (inside locked image)
-        run: |
-          uv run python scripts/run_in_locked_image.py -- \
-            python scripts/check_drawio_export.py
+      # Two independent in-image checks; each writes a disjoint output
+      # path, so they run as a parallel group (implicit wait at the end).
+      - parallel:
+          - name: Author example harness end to end (inside locked image)
+            run: |
+              uv run python scripts/run_in_locked_image.py -- \
+                python scripts/e2e_authoring.py \
+                --contract examples/sensor-harness/sensor-harness.contract.json \
+                --out out/ci/sensor-harness
+          - name: drawio export check (inside locked image)
+            run: |
+              uv run python scripts/run_in_locked_image.py -- \
+                python scripts/check_drawio_export.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wire-sensor-harness
@@ -145,6 +150,8 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    # No actions/cache usage: forbid restore and save entirely.
+    cache-mode: none
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -154,7 +161,11 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      # Hadolint is read-only on docker/**: overlap it with the BuildKit
+      # setup + --check and join it before the job ends.
       - name: Lint Dockerfiles with hadolint
+        id: hadolint
+        background: true
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: docker/wire-tools.Dockerfile
@@ -162,6 +173,8 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Run BuildKit checks
         run: docker build --check -f docker/wire-tools.Dockerfile .
+      - name: Wait for hadolint
+        wait: hadolint
 
   plugin-load:
     runs-on: ubuntu-26.04

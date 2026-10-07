@@ -37,6 +37,21 @@ def _load(name: str) -> dict[Any, Any]:
     return data
 
 
+def _flatten_steps(steps: list[Any]) -> list[dict[Any, Any]]:
+    # A `parallel:` entry's members all complete before the steps that
+    # follow the group, so splicing them into the sequence keeps ordering
+    # assertions (gate-before-promote) and per-step checks (if:, uses:)
+    # meaningful for nested steps.
+    flat: list[dict[Any, Any]] = []
+    for step in steps:
+        members = cast(dict[Any, Any], step).get("parallel")
+        if members:
+            flat.extend(cast(list[dict[Any, Any]], members))
+        else:
+            flat.append(cast(dict[Any, Any], step))
+    return flat
+
+
 def _on(data: dict[Any, Any]) -> dict[Any, Any]:
     on: dict[Any, Any] = data.get("on") or data.get(True) or {}
     return on
@@ -121,7 +136,7 @@ def test_container_audit_resolves_the_lock_by_explicit_key() -> None:
 
 def test_publish_never_pushes_latest_before_the_trivy_gate() -> None:
     data = _load("publish-wire-images.yml")
-    steps: list[dict[Any, Any]] = data["jobs"]["publish"]["steps"]
+    steps = _flatten_steps(data["jobs"]["publish"]["steps"])
     for step in steps:
         if "docker/build-push-action" in (step.get("uses") or ""):
             with_block: dict[Any, Any] = step.get("with") or {}
@@ -150,8 +165,8 @@ def _job_steps(data: dict[Any, Any]) -> list[tuple[str, dict[Any, Any]]]:
     jobs = cast(dict[Any, Any], data.get("jobs") or {})
     for job_name, job in jobs.items():
         job_steps = cast(list[Any], cast(dict[Any, Any], job).get("steps") or [])
-        for step in job_steps:
-            steps.append((str(job_name), cast(dict[Any, Any], step)))
+        for step in _flatten_steps(job_steps):
+            steps.append((str(job_name), step))
     return steps
 
 
