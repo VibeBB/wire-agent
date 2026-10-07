@@ -43,6 +43,8 @@ for engineers and agents.
   SDK, tools, and uv update decisions
 - [SDK v1.52.0 feature evaluation](research/sdk-v1.52.0-feature-evaluation.md) —
   SDK and tools adoption decisions
+- [SDK v1.53.0 feature evaluation](research/sdk-v1.53.0-feature-evaluation.md) —
+  SDK and tools adoption decisions
 
 ## ADR index
 
