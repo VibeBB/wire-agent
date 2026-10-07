@@ -1,11 +1,11 @@
 {
-  "attestation": "https://github.com/VibeBB/wire-agent/attestations/53592738",
-  "digest": "sha256:e682ded4fd59b06d57d844aad7ec723cd0299b563ecdbdace6869e53dd4fda57",
+  "attestation": "https://github.com/VibeBB/wire-agent/attestations/53626217",
+  "digest": "sha256:5267d0e6522e1b88273974cf05902f1edbd6c96f47e67bda075d020be266516c",
   "dockerfile": "docker/wire-tools.Dockerfile",
   "image": "ghcr.io/vibebb/wire-tools",
-  "published_at": "2026-10-07T14:19:45Z",
-  "sbom_attestation": "https://github.com/VibeBB/wire-agent/attestations/53593113",
-  "tag": "d5f9a05dc154824821b85399db0a10ef06dd8189-tools",
+  "published_at": "2026-10-07T16:08:37Z",
+  "sbom_attestation": "https://github.com/VibeBB/wire-agent/attestations/53626775",
+  "tag": "26837ba85bbf5795d3e664468cb0c319b9a5afa7-tools",
   "tools": {
     "git": "2.47.3",
     "pydantic": "2.13.5",
@@ -13,5 +13,5 @@
     "uv": "0.12.23 (x86_64-unknown-linux-musl)",
     "wire": "0.1.0"
   },
-  "workflow_run": "https://github.com/VibeBB/wire-agent/actions/runs/37635139860"
+  "workflow_run": "https://github.com/VibeBB/wire-agent/actions/runs/37649042132"
 }
