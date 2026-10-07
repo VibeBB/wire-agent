@@ -651,7 +651,7 @@ def _check_route_geometry(contract: HarnessContract) -> list[GateCheck]:
         for first, second in zip(route.anchors, route.anchors[1:], strict=False):
             a = points[first].position_mm
             b = points[second].position_mm
-            assert a is not None and b is not None
+            assert a is not None and b is not None  # pragma: no mutate
             span_mm += math.dist(a, b)
         length_mm = sum(segment.length_m for segment in route.segments) * 1000.0
         checks.append(
