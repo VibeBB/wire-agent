@@ -33,8 +33,8 @@ ARG DRAWIO_DESKTOP_SHA256=eb9695e208fcc5ccfbfc496aa8ab2f52a273297d83715de2177b23
 # is down for minutes (archive.ubuntu.com outage killed several builds).
 # Retry the whole update+install round with bounded backoff.
 RUN for attempt in 1 2 3 4 5; do \
-        apt-get -o Acquire::Retries=5 update \
-        && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
+        apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --no-install-recommends -y \
             ca-certificates \
             curl \
             fonts-ipafont \
@@ -88,8 +88,8 @@ RUN uv export --frozen --no-dev --no-emit-project --format requirements-txt \
 # publish (CVE-2026-103111 libpcre2-8-0). Upgrade just that package inside
 # the build so the publish gate stays green.
 RUN for attempt in 1 2 3 4 5; do \
-        apt-get -o Acquire::Retries=5 update \
-        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
             --only-upgrade \
             libpcre2-8-0 \
         && rm -rf /var/lib/apt/lists/* \
