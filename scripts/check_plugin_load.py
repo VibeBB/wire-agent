@@ -21,6 +21,7 @@ EXPECTED_SKILLS = {
     "wire-contract",
     "wire-contract-rules",
     "wire-gates",
+    "wire-out-rules",
     "wire-workflow",
 }
 EXPECTED_COMMANDS = {"design", "doctor", "export", "gates"}
@@ -28,6 +29,7 @@ EXPECTED_SESSION_START_HOOKS = {
     "wire-doctor",
     "intake-attachments",
     "ensure-llm-profiles",
+    "ensure-agent-profiles",
     "require-records",
 }
 EXPECTED_USER_PROMPT_SUBMIT_HOOKS = {"intake-attachments"}

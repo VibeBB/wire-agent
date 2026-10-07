@@ -46,6 +46,7 @@ def test_skill_frontmatter() -> None:
         "wire-gates",
         "wire-connectivity",
         "wire-contract-rules",
+        "wire-out-rules",
     }
     for skill in skills:
         head = skill.read_text(encoding="utf-8")[:600]
@@ -282,7 +283,7 @@ def test_ensure_llm_profiles_tolerates_missing_settings(tmp_path: Path) -> None:
         check=False,
     )
     assert proc.returncode == 0
-    assert json.loads(proc.stdout)["missing"] == ["vibebb-author", "vibebb-review"]
+    assert json.loads(proc.stdout)["missing"] == ["vibebb-author", "vibebb-review", "oracle"]
 
 
 def test_launcher_resolves() -> None:
