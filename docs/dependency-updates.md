@@ -50,7 +50,7 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 | --- | --- |
 | actions/checkout | v7.0.1 |
 | astral-sh/setup-uv | v10.2.0 |
-| actions/upload-artifact | v7.0.1 |
+| actions/upload-artifact | v7.0.2 |
 | github/codeql-action/upload-sarif | v4.38.2 |
 | anchore/sbom-action | v0.24.3 |
 

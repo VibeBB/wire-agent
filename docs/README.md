@@ -45,6 +45,8 @@ for engineers and agents.
   SDK and tools adoption decisions
 - [SDK v1.53.0 feature evaluation](research/sdk-v1.53.0-feature-evaluation.md) —
   SDK and tools adoption decisions
+- [GitHub Actions 2026-10-08 feature evaluation](research/gh-actions-2026-10-08-feature-evaluation.md) —
+  harden-runner, upload-artifact, and download-artifact update decisions
 
 ## ADR index
 
