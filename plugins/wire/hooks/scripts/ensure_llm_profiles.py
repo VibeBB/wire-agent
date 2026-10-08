@@ -127,8 +127,11 @@ def _template(
         return candidate, "profiles/default.json"
     agent_settings = settings.get("agent_settings")
     if isinstance(agent_settings, dict):
-        llm = agent_settings.get("llm")
-        if isinstance(llm, dict) and llm.get("model"):
+        llm = cast(
+            "dict[str, object] | None",
+            cast("dict[str, object]", agent_settings).get("llm"),
+        )
+        if llm is not None and llm.get("model"):
             return dict(llm), "agent_settings.llm"
     return None, None
 

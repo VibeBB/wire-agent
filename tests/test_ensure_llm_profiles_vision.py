@@ -215,9 +215,7 @@ def _seeding_home(tmp_path: Path, settings: dict[str, object]) -> Path:
     home = tmp_path / "home"
     profiles = home / ".openhands" / "profiles"
     profiles.mkdir(parents=True)
-    (home / ".openhands" / "settings.json").write_text(
-        json.dumps(settings), encoding="utf-8"
-    )
+    (home / ".openhands" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
     return home
 
 
@@ -226,9 +224,7 @@ def test_null_active_profile_falls_back_to_default_json(
 ) -> None:
     home = _seeding_home(tmp_path, {"active_profile": None})
     profiles = home / ".openhands" / "profiles"
-    (profiles / "default.json").write_text(
-        json.dumps({"model": "gui-lane"}), encoding="utf-8"
-    )
+    (profiles / "default.json").write_text(json.dumps({"model": "gui-lane"}), encoding="utf-8")
     hook = _load_hook()
 
     payload, _ = _run(hook, home, monkeypatch, capsys)
@@ -266,15 +262,11 @@ def test_active_profile_still_wins_over_default_json(
 ) -> None:
     home = _seeding_home(tmp_path, {"active_profile": "active"})
     profiles = home / ".openhands" / "profiles"
-    (profiles / "active.json").write_text(
-        json.dumps({"model": "explicit"}), encoding="utf-8"
-    )
-    (profiles / "default.json").write_text(
-        json.dumps({"model": "gui-lane"}), encoding="utf-8"
-    )
+    (profiles / "active.json").write_text(json.dumps({"model": "explicit"}), encoding="utf-8")
+    (profiles / "default.json").write_text(json.dumps({"model": "gui-lane"}), encoding="utf-8")
     hook = _load_hook()
 
-    payload, _ = _run(hook, home, monkeypatch, capsys)
+    _run(hook, home, monkeypatch, capsys)
 
     seeded = json.loads((profiles / "vibebb-author.json").read_text(encoding="utf-8"))
     assert seeded["model"] == "explicit"
@@ -288,5 +280,5 @@ def test_no_llm_source_reports_finding(
 
     payload, _ = _run(hook, home, monkeypatch, capsys)
 
-    assert set(payload["missing"]) == {"vibebb-author", "vibebb-review", "oracle"}
+    assert payload["missing"] == ["vibebb-author", "vibebb-review", "oracle"]
     assert "no LLM profile source found to clone" in _findings(payload)
