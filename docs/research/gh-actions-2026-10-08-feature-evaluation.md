@@ -5,13 +5,14 @@ action bumps applied in this change. New tags were resolved with
 `git ls-remote`; all three are lightweight tags and the `uses:` pins now
 carry the tag commit SHAs.
 
-## step-security/harden-runner v2.21.1 -> v2.22.0
+## step-security/harden-runner v2.21.1 -> v2.22.1
 
 | Change | Decision | Wire assessment |
 | --- | --- | --- |
 | Linux ARM64 support for community tier | n/a | All workflows run `ubuntu-26.04` x64 GitHub-hosted runners; nothing to adopt. |
 | GHES support for self-hosted VMs (enterprise tier) | n/a | This repo runs on github.com, not GHES; enterprise tier is not in use. |
 | macOS/Windows runner deny list for block policy (enterprise tier) | n/a | No macOS/Windows jobs and no enterprise tier; the block policy is unchanged. |
+| v2.22.1: security-rule init and GHES connectivity fixes in block mode | inherent | Patch fixes scoped to GHES self-hosted runners; included because the family pins one version across repos and the report's v2.22.0 target was already superseded. |
 
 ## actions/upload-artifact v7.0.1 -> v7.0.2
 
