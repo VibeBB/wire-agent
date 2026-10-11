@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Interchange envelope v3 (`src/wire/_envelope.py`): `wire crimp`,
+  `wire formboard` and `wire continuity` write a
+  `<artifact>.provenance.json` sidecar (artifact sha256, contract path and
+  sha256, and the wire decisions citing that contract); the new
+  `import_provenance` gate checks the sidecar beside every hashed mech
+  import against the pinned bytes, its sources and mech's intact decision
+  log.
 - `wire continuity` / `wire_continuity_export`: writes
   `<contract_id>.wire-continuity.json`, connector-cavity test points grouped
   by conductor (splices merged), for production-engineering's continuity

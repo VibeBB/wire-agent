@@ -825,6 +825,22 @@ def _check_import_freshness(contract: HarnessContract) -> list[GateCheck]:
     return checks
 
 
+def _check_import_provenance(contract: HarnessContract) -> list[GateCheck]:
+    """Every hashed mech import carries an envelope v3 sidecar that still holds."""
+    from ._envelope import check_envelope
+    from .imports import resolve_source_ref
+    from .workspace import workspace_root
+
+    checks: list[GateCheck] = []
+    for source in contract.imported_sources:
+        if source.system != "mech" or source.sha256 is None:
+            continue
+        path = resolve_source_ref(source.ref)
+        status, detail = check_envelope(path, "mech", workspace_root(), source.sha256)
+        checks.append(GateCheck("import_provenance", source.id, status, detail=detail))
+    return checks or [GateCheck("import_provenance", "imports", "pass", detail="no mech imports")]
+
+
 def _check_manifest(contract: HarnessContract, out_dir: Path | None) -> list[GateCheck]:
     if out_dir is None:
         return [
@@ -910,6 +926,7 @@ def run_gates(
     checks.extend(_wrap("route_keepout", _check_route_keepout, contract))
     checks.extend(_wrap("route_fit", _check_route_fit, contract))
     checks.extend(_wrap("import_freshness", _check_import_freshness, contract))
+    checks.extend(_wrap("import_provenance", _check_import_provenance, contract))
     checks.extend(_wrap("manifest_integrity", _check_manifest, contract, out_dir))
     checks.extend(_wrap("sim_pdn", _check_sim_pdn, contract, base_dir))
     verdict: Literal["pass", "fail"] = "pass" if all(c.status == "pass" for c in checks) else "fail"

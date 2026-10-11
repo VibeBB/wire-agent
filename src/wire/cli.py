@@ -213,6 +213,21 @@ def cmd_sim_check(args: argparse.Namespace) -> dict[str, Any]:
     return pdn_check(contract, response, workspace_root())
 
 
+def _with_envelope(result: dict[str, Any], contract_path: str) -> dict[str, Any]:
+    """Write the envelope v3 provenance sidecar beside an exported sister artifact."""
+    from ._envelope import write_envelope
+    from .workspace import workspace_root
+
+    path = result.get("path")
+    if not isinstance(path, str):
+        return result
+    try:
+        body = write_envelope(Path(path), "wire", [Path(contract_path)], workspace_root())
+    except (OSError, ValueError) as exc:
+        return {**result, "verdict": "fail", "detail": f"provenance refused: {exc}"}
+    return {**result, "decision_refs": body["decision_refs"]}
+
+
 def cmd_formboard(args: argparse.Namespace) -> dict[str, Any]:
     """Write ``<contract_id>.wire-formboard.json`` for production-engineering."""
     from .formboard import write_formboard
@@ -222,7 +237,7 @@ def cmd_formboard(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     out_dir = Path(args.out) if args.out else Path(args.contract).parent
-    return write_formboard(contract, out_dir)
+    return _with_envelope(write_formboard(contract, out_dir), args.contract)
 
 
 def cmd_crimp(args: argparse.Namespace) -> dict[str, Any]:
@@ -234,7 +249,7 @@ def cmd_crimp(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     out_dir = Path(args.out) if args.out else Path(args.contract).parent
-    return write_crimp_table(contract, out_dir)
+    return _with_envelope(write_crimp_table(contract, out_dir), args.contract)
 
 
 def cmd_continuity(args: argparse.Namespace) -> dict[str, Any]:
@@ -246,7 +261,7 @@ def cmd_continuity(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     out_dir = Path(args.out) if args.out else Path(args.contract).parent
-    return write_continuity_table(contract, out_dir)
+    return _with_envelope(write_continuity_table(contract, out_dir), args.contract)
 
 
 def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:

@@ -16,7 +16,13 @@ package.
 Each import is recorded as an `I*` imported source with the file's
 sha256. Re-importing the same `(system, ref)` replaces the entry (new
 hash, anchors and positions) and appends only connectors/nets with new
-refs. The `import_freshness` gate fails when a recorded source changed
+refs. The `import_provenance` gate checks the interchange envelope v3 sidecar
+(`<artifact>.provenance.json`) beside every hashed mech import against the
+pinned bytes, its listed sources and mech's intact decision log. `wire
+crimp`, `wire formboard` and `wire continuity` write the same sidecar beside
+their own exports: the contract's path and sha256 plus every wire decision
+whose evidence cites the contract at those bytes (a broken decision chain
+refuses the export). The `import_freshness` gate fails when a recorded source changed
 on disk after its import; `anchor_resolution` fails when a route names an
 anchor no import declares; `route_geometry` fails when a route is shorter
 than the straight-line path through its placed anchors; `route_keepout`

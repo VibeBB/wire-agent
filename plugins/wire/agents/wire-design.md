@@ -64,7 +64,9 @@ You are the wire harness authoring sub-agent. Input: a valid
    path through its anchors; `route_keepout` fails when that path enters a
    mech keep-out box (add an anchor to route around it); `import_freshness` fails when an imported
    source file changed since `wire_import` — re-import it rather than
-   editing the hash.
+   editing the hash. `import_provenance` is `unknown` when a mech import has
+   no `<artifact>.provenance.json` sidecar (ask mech to re-export) and
+   `fail` when the sidecar no longer matches the import or mech's log.
 
 Iterate until `verdict` is `pass` or you can name the exact blocking check
 and why it cannot pass with the current requirements — then hand that back

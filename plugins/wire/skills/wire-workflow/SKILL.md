@@ -148,6 +148,11 @@ user-provided harness photos, not workspace renders like
   anchors and anchor geometry) and appends only connectors/nets whose
   refs are new. The `import_freshness` gate fails when a recorded source
   file changed after the import, so re-import instead of editing hashes.
+- `import_provenance` checks the `<artifact>.provenance.json` sidecar beside
+  each hashed mech import. A missing sidecar is `unknown`: ask mech to
+  re-export the envelope instead of writing one. Wire's own exports
+  (crimp, formboard, continuity) get a sidecar automatically; record the
+  decision that cites the contract first so its id lands in `decision_refs`.
 
 ## Terminal tool notes
 
