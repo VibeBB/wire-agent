@@ -153,6 +153,15 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["contract_path"],
         "additionalProperties": False,
     },
+    "wire_formboard_export": {
+        "type": "object",
+        "properties": {
+            "contract_path": {"type": "string"},
+            "out_dir": {"type": "string"},
+        },
+        "required": ["contract_path"],
+        "additionalProperties": False,
+    },
     "wire_crimp_export": {
         "type": "object",
         "properties": {
@@ -339,6 +348,11 @@ _DESCRIPTIONS: dict[str, str] = {
         "Write the PDN sim brief and sim-request for the contract's simulation rails "
         "(default: next to the contract) for simulation-agent."
     ),
+    "wire_formboard_export": (
+        "Write <contract_id>.wire-formboard.json (route segment stations, anchors and the "
+        "wires laid on each route with cut length and slack); fails when a wire is shorter "
+        "than its route or no route is declared."
+    ),
     "wire_crimp_export": (
         "Write <contract_id>.wire-crimp.json (crimp conditions with the wire ends they "
         "crimp) for production-engineering; fails when a termination lacks a condition."
@@ -395,6 +409,7 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_gates": _anno("Re-run gates", write=False),
     "wire_sim_pdn_request": _anno("Simulation PDN request", write=True),
     "wire_sim_pdn_check": _anno("Simulation PDN check", write=False),
+    "wire_formboard_export": _anno("Formboard export", write=True),
     "wire_crimp_export": _anno("Crimp condition export", write=True),
     "wire_import": _anno("Import connectivity source", write=True),
     "wire_drawio": _anno("Drawio export", write=True),
@@ -407,6 +422,7 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         cmd_author,
         cmd_crimp,
         cmd_drawio,
+        cmd_formboard,
         cmd_gates,
         cmd_import,
         cmd_intake,
@@ -496,6 +512,10 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         contract_file = workspace_path(arguments["contract_path"])
         out_dir = _path_arg(arguments.get("out_dir")) or str(Path(contract_file).parent)
         return _text(cmd_sim_request(_ns(contract=str(contract_file), out=out_dir)))
+    if name == "wire_formboard_export":
+        contract_file = workspace_path(arguments["contract_path"])
+        out_dir = _path_arg(arguments.get("out_dir")) or str(Path(contract_file).parent)
+        return _text(cmd_formboard(_ns(contract=str(contract_file), out=out_dir)))
     if name == "wire_crimp_export":
         contract_file = workspace_path(arguments["contract_path"])
         out_dir = _path_arg(arguments.get("out_dir")) or str(Path(contract_file).parent)

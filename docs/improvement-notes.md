@@ -61,8 +61,9 @@ repository), **open** (stays inside this repository but not done yet) or
 - **open** — Route geometry is a lower bound only (straight-line
   polyline). A real 3D routing check needs the mech envelope keep-out
   volumes, which the envelope schema does not carry yet.
-- **open** — Formboard (1:1 nail-board) layout and KBL/VEC export remain
-  later stages (ADR-0004).
+- **open** — KBL/VEC export remains a later stage (ADR-0004). The
+  formboard is exported as a 1:1 station table (`wire formboard`); a drawn
+  nail-board sheet with branch angles is still open.
 - **open** — Rendered bytes depend on drawio/font versions; baselines are
   sha256 only, without a perceptual diff.
 

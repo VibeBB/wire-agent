@@ -18,6 +18,7 @@ rejected.
 | `wire_intake` | **`contract_path`**, **`intake_path`** | intake report, `ready`/`blocked` | read |
 | `wire_author` | **`contract_path`**, **`out_dir`**, `png` (default true), `drawio` (format list), `baseline_path` | design report + inline `harness-diagram.png` and `route-plan.png` | write `out_dir` |
 | `wire_gates` | **`contract_path`**, `out_dir` | gate report | read |
+| `wire_formboard_export` | **`contract_path`**, `out_dir` | `{verdict, path, short[], unknown[]}` | write `<contract_id>.wire-formboard.json` (default next to the contract) |
 | `wire_crimp_export` | **`contract_path`**, `out_dir` | `{verdict, path, unknown[]}` | write `<contract_id>.wire-crimp.json` (default next to the contract) |
 | `wire_sim_pdn_request` | **`contract_path`**, `out_dir` | request id, sim brief path and sha256 | write sim brief + request (default next to the contract) |
 | `wire_sim_pdn_check` | **`contract_path`** | `{verdict, checks[]}` over the hash-bound response | read |

@@ -632,6 +632,30 @@ def _check_anchor_resolution(contract: HarnessContract) -> list[GateCheck]:
     ]
 
 
+def _check_route_fit(contract: HarnessContract) -> list[GateCheck]:
+    """A routed wire must be at least as long as the route it is laid on."""
+    from .formboard import route_length_mm
+
+    routes = {route.id: route for route in contract.routes}
+    checks: list[GateCheck] = []
+    for wire in contract.wires:
+        if wire.route is None or wire.route not in routes:
+            continue
+        need = route_length_mm(routes[wire.route])
+        have = wire.length_m * 1000.0
+        checks.append(
+            GateCheck(
+                "route_fit",
+                wire.id,
+                "pass" if have >= need else "fail",
+                measured=round(have, 3),
+                limit=round(need, 3),
+                detail="" if have >= need else f"shorter than route {wire.route}",
+            )
+        )
+    return checks
+
+
 def _check_route_geometry(contract: HarnessContract) -> list[GateCheck]:
     """A route must be at least as long as the straight polyline through its anchors.
 
@@ -798,6 +822,7 @@ def run_gates(
     checks.extend(_wrap("housing_compatibility", _check_housing_compatibility, contract))
     checks.extend(_wrap("anchor_resolution", _check_anchor_resolution, contract))
     checks.extend(_wrap("route_geometry", _check_route_geometry, contract))
+    checks.extend(_wrap("route_fit", _check_route_fit, contract))
     checks.extend(_wrap("import_freshness", _check_import_freshness, contract))
     checks.extend(_wrap("manifest_integrity", _check_manifest, contract, out_dir))
     checks.extend(_wrap("sim_pdn", _check_sim_pdn, contract, base_dir))

@@ -62,7 +62,7 @@ revision and sha256; `summary` counts pass/fail/unknown; each check has
 `netlist_coverage`, `shielding_pairing`, `ampacity`, `voltage_drop`,
 `insulation_rating`, `bend_radius`, `segregation`,
 `terminal_compatibility`, `crimp_conditions` (only with a crimp table: every connector termination needs the condition of its terminal and wire gauge — missing is `fail`, an undeclared terminal `unknown`), `connector_rating`, `housing_compatibility`,
-`anchor_resolution`, `route_geometry`, `import_freshness`,
+`anchor_resolution`, `route_geometry`, `route_fit` (a routed wire is at least as long as the sum of its route's segments), `import_freshness`,
 `manifest_integrity`, `sim_pdn` (only with a `simulation` section). Any `fail` or `unknown` makes the verdict `fail`.
 
 `design-report.json` is the gate report plus `elements` (counts, signal
