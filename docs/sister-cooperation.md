@@ -61,6 +61,19 @@ change the request id. Editing a wire length, wire type, net voltage,
 current or limit, or the ambient changes the brief and makes the old
 response stale.
 
+## production-engineering formboard handoff
+
+`wire formboard` / `wire_formboard_export` writes
+`<contract_id>.wire-formboard.json` (`artifact_kind: wire_formboard`,
+`schema_version` 1, `contract_id`, `contract_sha256`): every route
+flattened 1:1 with its total `length_mm`, `protection`, ordered `anchors`,
+`segments[]` (`id`, `start_mm`, `end_mm`, `min_bend_radius_mm`) and the
+`wires[]` laid on it (`id`, `net`, `cut_length_mm`, `slack_mm` = cut
+length minus route length), plus `unrouted[]`, `short[]`, `unknown[]` and
+`verdict`. The verdict is `fail` when a wire is shorter than its route
+(the `route_fit` gate fails on the same data) or the contract declares no
+route.
+
 ## Sister Liaison Protocol (SLP) v2
 
 UX-creator directs the family. It writes one request per job; each

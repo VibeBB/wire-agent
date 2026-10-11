@@ -11,6 +11,7 @@ Subcommands:
   import    merge a connectivity or envelope source into a contract
   sim-request  hand the contract's supply loops to simulation-agent (PDN)
   sim-check    check simulation-agent's hash-bound PDN response
+  formboard   export the 1:1 formboard layout for production-engineering
   review-record  write a validated visual-review advisory JSON for an image
   record    append a VibeBB Record Protocol record (decision, impression,
             vision-review) or print the records status
@@ -208,6 +209,18 @@ def cmd_sim_check(args: argparse.Namespace) -> dict[str, Any]:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     response = resolve_response(contract, Path(args.contract).parent)
     return pdn_check(contract, response, workspace_root())
+
+
+def cmd_formboard(args: argparse.Namespace) -> dict[str, Any]:
+    """Write ``<contract_id>.wire-formboard.json`` for production-engineering."""
+    from .formboard import write_formboard
+
+    try:
+        contract = _load(args.contract)
+    except Exception as exc:
+        return {"verdict": "fail", "stage": "load", "detail": str(exc)}
+    out_dir = Path(args.out) if args.out else Path(args.contract).parent
+    return write_formboard(contract, out_dir)
 
 
 def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:
@@ -470,6 +483,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("sim-check", help="check simulation-agent's hash-bound PDN response")
     p.add_argument("--contract", required=True)
 
+    p = sub.add_parser("formboard", help="export the 1:1 formboard layout")
+    p.add_argument("--contract", required=True)
+    p.add_argument("--out", default=None, help="output directory (default: contract directory)")
+
     p = sub.add_parser("import")
     p.add_argument("--contract", required=True)
     p.add_argument("--source", required=True)
@@ -550,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
         "gates": cmd_gates,
         "sim-request": cmd_sim_request,
         "sim-check": cmd_sim_check,
+        "formboard": cmd_formboard,
         "import": cmd_import,
         "review-record": cmd_review_record,
         "record": cmd_record,

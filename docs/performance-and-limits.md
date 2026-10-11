@@ -42,8 +42,9 @@ command fails closed.
 - Voltage drop uses DC resistance at the declared value
   (default limit 3 % of the net voltage when `max_voltage_drop_v` is
   absent).
-- No formboard (nail board) layout and no KBL/VEC export yet; `kbl` and
-  `vec` are accepted only as provenance systems.
+- The formboard export is a 1:1 station table per route, not a drawn
+  nail-board sheet; branch angles are not modelled. No KBL/VEC export
+  yet; `kbl` and `vec` are accepted only as provenance systems.
 - Vision is advisory. If no vision-capable model or profile is
   available, vision is skipped and recorded as such; gate authority does
   not change.
