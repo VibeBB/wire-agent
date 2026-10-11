@@ -48,7 +48,7 @@ and validate with `python3 "$WIRE_PLUGIN/scripts/wire_launcher.py" intake` or `w
   Identical housings on one harness need distinct `keying`.
 - **wire_types**: prefer a `spec` key from `wire_standards` (AVSS, FLRY-B,
   TXL) to inherit its derating curve, else declare `temp_derating` points
-  sorted by temperature. `min_bend_factor` is × outer diameter.
+  sorted by temperature with unique temperatures. `min_bend_factor` is × outer diameter.
 - **nets**: `ref` carries the display name (`+24V`, `I2C_SDA`) onto wire
   lists and diagrams while `id` stays `N*`; `signal_class` drives
   segregation and reporting; `voltage_v`,

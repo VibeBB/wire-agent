@@ -124,6 +124,8 @@ class WireType(BaseModel):
         temps = [point.temperature_c for point in self.temp_derating]
         if temps != sorted(temps):
             raise ValueError("temp_derating must be sorted by temperature_c")
+        if len(set(temps)) != len(temps):
+            raise ValueError("temp_derating temperature_c values must be unique")
         return self
 
 
