@@ -156,6 +156,10 @@ def test_respond_done_binds_hashes_and_refs(workspace: Path) -> None:
     )
     response = json.loads((workspace / result["path"]).read_text(encoding="utf-8"))
     assert liaison.UXResponse.model_validate(response).status == "done"
+    log = workspace / "observations" / "wire" / "decisions.jsonl"
+    head = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])["event_id"]
+    assert response["records_heads"]["decision"] == head
+    assert response["records_heads"]["song_receipt"] == "0" * 64
     assert response["input_hashes"] == {"inputs/ux.json": _sha(workspace / "inputs" / "ux.json")}
     assert response["artifacts"][0] == {
         "path": "out",
@@ -224,6 +228,42 @@ def test_respond_refusals(workspace: Path) -> None:
     _request(workspace, "for-mech", target_agent="mech")
     with pytest.raises(ValueError, match="not 'wire'"):
         liaison.respond({**done, "request": "for-mech"}, workspace)
+
+
+def test_respond_done_refused_on_broken_chain(workspace: Path) -> None:
+    _request(workspace, "lid-fit")
+    impression = _impression_ref(workspace)
+    reads = workspace / "observations" / "wire" / "reads.jsonl"
+    reads.write_text('{"schema_version": 2, "event_id": "' + "1" * 64 + '"}\n', encoding="utf-8")
+    done: dict[str, Any] = {
+        "request": "lid-fit",
+        "status": "done",
+        "reason": "delivered the shortened route with passing gates",
+        "artifacts": ["out"],
+        "design_reports": [_design_report(workspace, "pass")],
+        "impression_refs": [impression],
+    }
+    with pytest.raises(ValueError, match=r"fail integrity \(upstream_read\)"):
+        liaison.respond(done, workspace)
+    result = liaison.respond(
+        {"request": "lid-fit", "status": "needs_info", "reason": "the reads log chain is broken"},
+        workspace,
+    )
+    response = json.loads((workspace / result["path"]).read_text(encoding="utf-8"))
+    assert "upstream_read" not in response["records_heads"]
+
+
+def test_response_rejects_unknown_records_head_kind() -> None:
+    with pytest.raises(ValidationError, match="records_heads"):
+        liaison.UXResponse.model_validate(
+            {
+                "request": "lid-fit",
+                "responder": "wire",
+                "status": "accepted",
+                "records_heads": {"bogus": "0" * 64},
+                "responded_at": "2026-01-01T00:00:00+00:00",
+            }
+        )
 
 
 def test_cli_ux(workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
