@@ -136,8 +136,11 @@ Input (`RespondInput`): `request`, `status` (`accepted`, `in_progress`,
 `gate_verdicts`, `decision_refs`, `impression_refs`,
 `questions_for_user`.
 
-The writer adds `input_hashes`, hashed `artifacts`, `responder: wire`
-and `responded_at`. Rules:
+The writer adds `input_hashes`, hashed `artifacts`, `responder: wire`,
+`records_heads` (the chain head of every intact `observations/wire/` VRP
+log, so UX can detect a later rewrite of the answered history) and
+`responded_at`. `done` is refused while any VRP log fails integrity; other
+statuses omit the broken kinds from `records_heads`. Rules:
 
 - every status except `accepted`/`in_progress` needs a reason of 20+
   characters; `needs_info` needs at least one question;
