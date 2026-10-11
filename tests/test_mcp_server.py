@@ -29,6 +29,7 @@ EXPECTED = {
     "wire_sim_pdn_check": False,
     "wire_formboard_export": True,
     "wire_crimp_export": True,
+    "wire_continuity_export": True,
     "wire_import": True,
     "wire_drawio": True,
     "wire_drawio_lint": False,

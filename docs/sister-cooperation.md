@@ -77,6 +77,18 @@ length minus route length), plus `unrouted[]`, `short[]`, `unknown[]` and
 (the `route_fit` gate fails on the same data) or the contract declares no
 route.
 
+## production-engineering continuity handoff
+
+`wire continuity` / `wire_continuity_export` writes
+`<contract_id>.wire-continuity.json`: every connector cavity a wire ends in
+is a test point, and points joined by wires (directly or through splices)
+form one group with its `nets` and `wires`. A tester reads continuity inside
+each group and isolation between groups. The verdict is `pass` only when
+every group carries one net and has at least two test points, and the
+contract has wires. production-engineering imports it as `wire-continuity`
+and its `wire.continuity` gate requires a 100% continuity inspection on a
+harness or test operation.
+
 ## production-engineering crimp handoff
 
 `wire crimp` / `wire_crimp_export` writes `<contract_id>.wire-crimp.json`

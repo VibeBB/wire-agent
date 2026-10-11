@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `wire continuity` / `wire_continuity_export`: writes
+  `<contract_id>.wire-continuity.json`, connector-cavity test points grouped
+  by conductor (splices merged), for production-engineering's continuity
+  and isolation test. Fails when a group mixes nets or has fewer than two
+  test points.
 - `route_keepout` gate: the straight polyline through a route's placed
   anchors must stay out of the keep-out boxes a mech envelope exports
   (`keepouts`, copied by `wire import --kind mech-envelope`); a mech import

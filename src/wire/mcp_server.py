@@ -171,6 +171,15 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["contract_path"],
         "additionalProperties": False,
     },
+    "wire_continuity_export": {
+        "type": "object",
+        "properties": {
+            "contract_path": {"type": "string"},
+            "out_dir": {"type": "string"},
+        },
+        "required": ["contract_path"],
+        "additionalProperties": False,
+    },
     "wire_sim_pdn_check": {
         "type": "object",
         "properties": {"contract_path": {"type": "string"}},
@@ -357,6 +366,11 @@ _DESCRIPTIONS: dict[str, str] = {
         "Write <contract_id>.wire-crimp.json (crimp conditions with the wire ends they "
         "crimp) for production-engineering; fails when a termination lacks a condition."
     ),
+    "wire_continuity_export": (
+        "Write <contract_id>.wire-continuity.json (connector-cavity test points grouped "
+        "by conductor, for the production continuity/isolation test); fails when a "
+        "group mixes nets or has fewer than two test points."
+    ),
     "wire_sim_pdn_check": (
         "Check simulation-agent's hash-bound PDN response for the contract; "
         "stale or tampered answers fail, missing ones are unknown."
@@ -411,6 +425,7 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
     "wire_sim_pdn_check": _anno("Simulation PDN check", write=False),
     "wire_formboard_export": _anno("Formboard export", write=True),
     "wire_crimp_export": _anno("Crimp condition export", write=True),
+    "wire_continuity_export": _anno("Continuity table export", write=True),
     "wire_import": _anno("Import connectivity source", write=True),
     "wire_drawio": _anno("Drawio export", write=True),
     "wire_drawio_lint": _anno("Drawio lint", write=False),
@@ -420,6 +435,7 @@ _ANNOTATIONS: dict[str, types.ToolAnnotations] = {
 async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
     from .cli import (
         cmd_author,
+        cmd_continuity,
         cmd_crimp,
         cmd_drawio,
         cmd_formboard,
@@ -520,6 +536,10 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         contract_file = workspace_path(arguments["contract_path"])
         out_dir = _path_arg(arguments.get("out_dir")) or str(Path(contract_file).parent)
         return _text(cmd_crimp(_ns(contract=str(contract_file), out=out_dir)))
+    if name == "wire_continuity_export":
+        contract_file = workspace_path(arguments["contract_path"])
+        out_dir = _path_arg(arguments.get("out_dir")) or str(Path(contract_file).parent)
+        return _text(cmd_continuity(_ns(contract=str(contract_file), out=out_dir)))
     if name == "wire_sim_pdn_check":
         return _text(cmd_sim_check(_ns(contract=str(workspace_path(arguments["contract_path"])))))
     if name == "wire_import":
