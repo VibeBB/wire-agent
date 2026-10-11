@@ -61,6 +61,18 @@ change the request id. Editing a wire length, wire type, net voltage,
 current or limit, or the ambient changes the brief and makes the old
 response stale.
 
+## production-engineering crimp handoff
+
+`wire crimp` / `wire_crimp_export` writes `<contract_id>.wire-crimp.json`
+(`artifact_kind: wire_crimp`, `schema_version` 1, `contract_id`,
+`contract_sha256`, `conditions[]` — every `CrimpCondition` field plus the
+sorted `ends[]` (`<wire>:a|b`) it crimps — `unknown[]` and `verdict`).
+The verdict is `pass` only when the contract has a crimp table and every
+connector termination resolves to a condition. production-engineering
+imports it as `wire-crimp` and its `wire.crimp` gate requires a crimp
+height and a pull force characteristic per condition, inspected on a
+harness operation, with limits no looser than the table.
+
 ## Sister Liaison Protocol (SLP) v2
 
 UX-creator directs the family. It writes one request per job; each

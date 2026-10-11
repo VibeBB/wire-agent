@@ -158,6 +158,31 @@ class HarnessSplice(BaseModel):
     source: ElementSource | None = None
 
 
+class CrimpCondition(BaseModel):
+    """Applicator setting and acceptance limits for one terminal on one wire gauge.
+
+    Values come from the terminal maker's application specification
+    (``source``); none is defaulted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^CC[0-9]+$")
+    terminal: str = Field(min_length=1)
+    gauge_mm2: float = Field(gt=0)
+    crimp_height_mm: float = Field(gt=0)
+    crimp_height_tol_mm: float = Field(gt=0)
+    pull_force_min_n: float = Field(gt=0)
+    applicator: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_height(self) -> CrimpCondition:
+        if self.crimp_height_tol_mm >= self.crimp_height_mm:
+            raise ValueError(f"crimp condition {self.id}: tolerance must be below the height")
+        return self
+
+
 class HarnessWire(BaseModel):
     """A wire connecting two endpoints on a declared net over a route."""
 
@@ -383,6 +408,7 @@ class HarnessContract(BaseModel):
     wires: list[HarnessWire] = Field(default_factory=list[HarnessWire])
     routes: list[HarnessRoute] = Field(default_factory=list[HarnessRoute])
     splices: list[HarnessSplice] = Field(default_factory=list[HarnessSplice])
+    crimp_conditions: list[CrimpCondition] = Field(default_factory=list[CrimpCondition])
     segregations: list[SegregationPolicy] = Field(default_factory=list[SegregationPolicy])
     service: ServiceExpectation | None = None
     simulation: SimulationLink | None = None
@@ -398,6 +424,7 @@ class HarnessContract(BaseModel):
             (self.wires, "wire"),
             (self.routes, "route"),
             (self.splices, "splice"),
+            (self.crimp_conditions, "crimp condition"),
             (self.imported_sources, "imported source"),
         ):
             ids = [element.id for element in collection]
@@ -434,6 +461,9 @@ class HarnessContract(BaseModel):
                         f"wire {wire.id} references unknown cavity "
                         f"{endpoint.connector}:{endpoint.cavity}"
                     )
+        crimp_keys = [(c.terminal, c.gauge_mm2) for c in self.crimp_conditions]
+        if len(set(crimp_keys)) != len(crimp_keys):
+            raise ValueError("crimp conditions repeat a terminal and gauge")
         if self.simulation is not None:
             self._validate_simulation(self.simulation)
         return self
@@ -511,11 +541,15 @@ class HarnessContract(BaseModel):
 def contract_sha256(contract: HarnessContract) -> str:
     """Canonical JSON digest used by the intake sidecar and provenance.
 
-    An absent ``simulation`` section is left out so contracts written before
-    the section existed keep their digest.
+    An absent ``simulation`` section and an empty ``crimp_conditions`` list
+    are left out so contracts written before they existed keep their digest.
     """
-    exclude = {"simulation"} if contract.simulation is None else None
-    payload = contract.model_dump_json(exclude=exclude)
+    exclude: set[str] = set()
+    if contract.simulation is None:
+        exclude.add("simulation")
+    if not contract.crimp_conditions:
+        exclude.add("crimp_conditions")
+    payload = contract.model_dump_json(exclude=exclude or None)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

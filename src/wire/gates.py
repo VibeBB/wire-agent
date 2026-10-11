@@ -494,6 +494,18 @@ def _check_terminal_compatibility(contract: HarnessContract) -> list[GateCheck]:
     return checks
 
 
+def _check_crimp_conditions(contract: HarnessContract) -> list[GateCheck]:
+    """Every crimped connector termination has a cited crimp condition (opt-in table)."""
+    if not contract.crimp_conditions:
+        return []
+    from .crimp import crimp_findings
+
+    return [
+        GateCheck("crimp_conditions", subject, status, detail=detail)
+        for subject, status, _, detail in crimp_findings(contract)
+    ]
+
+
 def _check_housing_compatibility(contract: HarnessContract) -> list[GateCheck]:
     """Harness-side housing must exist and differ from the part it mates to."""
     checks: list[GateCheck] = []
@@ -781,6 +793,7 @@ def run_gates(
     checks.extend(_wrap("bend_radius", _check_bend_radius, contract))
     checks.extend(_wrap("segregation", _check_segregation, contract))
     checks.extend(_wrap("terminal_compatibility", _check_terminal_compatibility, contract))
+    checks.extend(_wrap("crimp_conditions", _check_crimp_conditions, contract))
     checks.extend(_wrap("connector_rating", _check_connector_rating, contract))
     checks.extend(_wrap("housing_compatibility", _check_housing_compatibility, contract))
     checks.extend(_wrap("anchor_resolution", _check_anchor_resolution, contract))
