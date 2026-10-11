@@ -33,8 +33,10 @@ command fails closed.
 
 - Routes are declared (segments with lengths and bend radii), not
   computed in 3D. `route_geometry` only checks that a route is at least
-  as long as the straight-line polyline through its placed anchors; it
-  does not check clearance, sag or slack.
+  as long as the straight-line polyline through its placed anchors, and
+  `route_keepout` that this polyline stays out of the mech keep-out boxes.
+  The bundle is treated as a centreline (no diameter or clearance), boxes
+  are axis-aligned, and sag or slack is not modelled.
 - The route plan is a top view (x/y) of anchor positions; z is ignored
   in the drawing.
 - Ampacity uses the declared reference ampacity with temperature

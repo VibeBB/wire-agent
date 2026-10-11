@@ -278,8 +278,31 @@ class AnchorPoint(BaseModel):
     position_mm: tuple[float, float, float] | None = None
 
 
+class KeepoutBox(BaseModel):
+    """An axis-aligned volume a route must not pass through, from a mech envelope.
+
+    Coordinates share the anchor frame (assembly bounding-box minimum corner).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    min_mm: tuple[float, float, float]
+    max_mm: tuple[float, float, float]
+
+    @model_validator(mode="after")
+    def _positive_extent(self) -> KeepoutBox:
+        if any(lo >= hi for lo, hi in zip(self.min_mm, self.max_mm, strict=True)):
+            raise ValueError(f"keep-out {self.name}: min_mm must be below max_mm on every axis")
+        return self
+
+
 class ImportedSource(BaseModel):
-    """An external file whose contents were copied into the contract."""
+    """An external file whose contents were copied into the contract.
+
+    ``keepouts`` is ``None`` when the mech envelope predates keep-out export;
+    it is left out of the serialised contract so older digests stay stable.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -290,6 +313,7 @@ class ImportedSource(BaseModel):
     description: str = ""
     anchors: list[str] = Field(default_factory=list[str])
     anchor_points: list[AnchorPoint] = Field(default_factory=list[AnchorPoint])
+    keepouts: list[KeepoutBox] | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def _points_are_declared(self) -> ImportedSource:
@@ -301,6 +325,12 @@ class ImportedSource(BaseModel):
             raise ValueError(
                 f"imported source {self.id}: anchor_points not in anchors: {undeclared}"
             )
+        if self.keepouts is not None:
+            if self.system != "mech":
+                raise ValueError(f"imported source {self.id}: only mech sources carry keepouts")
+            keepout_names = [box.name for box in self.keepouts]
+            if len(set(keepout_names)) != len(keepout_names):
+                raise ValueError(f"imported source {self.id}: duplicate keepout names")
         return self
 
 

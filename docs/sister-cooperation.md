@@ -19,7 +19,10 @@ hash, anchors and positions) and appends only connectors/nets with new
 refs. The `import_freshness` gate fails when a recorded source changed
 on disk after its import; `anchor_resolution` fails when a route names an
 anchor no import declares; `route_geometry` fails when a route is shorter
-than the straight-line path through its placed anchors.
+than the straight-line path through its placed anchors; `route_keepout`
+fails when that path enters a keep-out box from the envelope `keepouts`
+(mech exports the board volume and brief-declared `harness_keepouts`, in
+the anchor frame) and is `unknown` when the import carries no `keepouts`.
 
 ## Outputs to sisters
 

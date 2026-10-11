@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from .contract import HarnessContract, HarnessWire, contract_sha256
+from .contract import HarnessContract, HarnessWire, KeepoutBox, contract_sha256
 from .standards import (
     DEFAULT_VOLTAGE_DROP_FRACTION,
     SPEC_DERATING,
@@ -705,6 +705,91 @@ def _check_route_geometry(contract: HarnessContract) -> list[GateCheck]:
     return checks
 
 
+_KEEPOUT_EPS = 1e-9
+
+
+def _segment_enters_box(
+    a: tuple[float, float, float],
+    b: tuple[float, float, float],
+    box: KeepoutBox,
+) -> bool:
+    """True when segment a-b runs through the open interior of the box (faces may touch)."""
+    t0, t1 = 0.0, 1.0
+    for axis in range(3):
+        lo, hi = box.min_mm[axis], box.max_mm[axis]
+        delta = b[axis] - a[axis]
+        if abs(delta) < _KEEPOUT_EPS:
+            if not lo < a[axis] < hi:
+                return False
+            continue
+        enter, leave = sorted(((lo - a[axis]) / delta, (hi - a[axis]) / delta))
+        t0, t1 = max(t0, enter), min(t1, leave)
+        if t1 - t0 <= _KEEPOUT_EPS:
+            return False
+    return True
+
+
+def _check_route_keepout(contract: HarnessContract) -> list[GateCheck]:
+    """The straight polyline through a route's anchors must stay out of mech keep-outs.
+
+    A route is modelled as straight runs between consecutive anchors; add an
+    anchor to bend it around a volume. A mech envelope without exported
+    keep-outs, or an anchor without ``position_mm``, leaves the route
+    ``unknown`` (fail-closed). Keep-outs from every mech import are unioned.
+    """
+    routes = [route for route in contract.routes if len(route.anchors) >= 2]
+    if not routes:
+        return [GateCheck("route_keepout", "routes", "pass", detail="no route spans two anchors")]
+    mech = [source for source in contract.imported_sources if source.system == "mech"]
+    legacy = [source.id for source in mech if source.keepouts is None]
+    boxes = [box for source in mech for box in source.keepouts or []]
+    points = contract.anchor_map()
+    checks: list[GateCheck] = []
+    for route in routes:
+        if not mech or legacy:
+            detail = (
+                "no mech envelope imported"
+                if not mech
+                else f"mech envelope exports no keepouts (re-export and re-import): {legacy}"
+            )
+            checks.append(GateCheck("route_keepout", route.id, "unknown", detail=detail))
+            continue
+        unplaced = [
+            name for name in route.anchors if name not in points or points[name].position_mm is None
+        ]
+        if unplaced:
+            checks.append(
+                GateCheck(
+                    "route_keepout",
+                    route.id,
+                    "unknown",
+                    detail=f"anchors without position_mm: {', '.join(unplaced)}",
+                )
+            )
+            continue
+        hits: list[str] = []
+        for first, second in zip(route.anchors, route.anchors[1:], strict=False):
+            a = points[first].position_mm
+            b = points[second].position_mm
+            assert a is not None and b is not None  # pragma: no mutate
+            hits.extend(
+                f"{first}->{second} enters {box.name}"
+                for box in boxes
+                if _segment_enters_box(a, b, box)
+            )
+        checks.append(
+            GateCheck(
+                "route_keepout",
+                route.id,
+                "fail" if hits else "pass",
+                measured=float(len(hits)),
+                limit=0.0,
+                detail="; ".join(hits) if hits else f"clear of {len(boxes)} keep-outs",
+            )
+        )
+    return checks
+
+
 def _check_import_freshness(contract: HarnessContract) -> list[GateCheck]:
     """Every hashed imported source must still match the bytes that were copied."""
     from .imports import resolve_source_ref
@@ -822,6 +907,7 @@ def run_gates(
     checks.extend(_wrap("housing_compatibility", _check_housing_compatibility, contract))
     checks.extend(_wrap("anchor_resolution", _check_anchor_resolution, contract))
     checks.extend(_wrap("route_geometry", _check_route_geometry, contract))
+    checks.extend(_wrap("route_keepout", _check_route_keepout, contract))
     checks.extend(_wrap("route_fit", _check_route_fit, contract))
     checks.extend(_wrap("import_freshness", _check_import_freshness, contract))
     checks.extend(_wrap("manifest_integrity", _check_manifest, contract, out_dir))

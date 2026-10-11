@@ -50,7 +50,11 @@ errors, and the verdict `ready` or `blocked`.
 - CSV: rows with `connector`/`ref`, `cavity`, `family_hint`, `housing`,
   `net`, `signal_class`, `voltage_v`, `current_a`.
 - Mech envelope (`EnvelopeSource`): `schema_version` 1, `system`
-  `mech`, `anchors[]` (`name`, `kind`, `position_mm`).
+  `mech`, `anchors[]` (`name`, `kind`, `position_mm`), optional
+  `keepouts[]` (`name`, `min_mm`, `max_mm`: axis-aligned boxes in the anchor
+  frame, min below max on every axis, unique names) copied into the
+  imported source; `keepouts` absent (`null`) is left out of the contract
+  digest.
 
 ## Gate report and design report
 
@@ -62,7 +66,7 @@ revision and sha256; `summary` counts pass/fail/unknown; each check has
 `netlist_coverage`, `shielding_pairing`, `ampacity`, `voltage_drop`,
 `insulation_rating`, `bend_radius`, `segregation`,
 `terminal_compatibility`, `crimp_conditions` (only with a crimp table: every connector termination needs the condition of its terminal and wire gauge — missing is `fail`, an undeclared terminal `unknown`), `connector_rating`, `housing_compatibility`,
-`anchor_resolution`, `route_geometry`, `route_fit` (a routed wire is at least as long as the sum of its route's segments), `import_freshness`,
+`anchor_resolution`, `route_geometry`, `route_keepout` (the straight polyline through a route's placed anchors must not enter the open interior of any mech keep-out box; faces may touch; `unknown` when no mech envelope is imported, a mech import carries no `keepouts`, or an anchor lacks `position_mm`), `route_fit` (a routed wire is at least as long as the sum of its route's segments), `import_freshness`,
 `manifest_integrity`, `sim_pdn` (only with a `simulation` section). Any `fail` or `unknown` makes the verdict `fail`.
 
 `design-report.json` is the gate report plus `elements` (counts, signal

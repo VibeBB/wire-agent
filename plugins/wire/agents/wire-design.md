@@ -61,7 +61,8 @@ You are the wire harness authoring sub-agent. Input: a valid
    imported mech anchors carry `position_mm`) and returns them inline;
    look at each one and record a `wire_record_vision_review` for it.
    `route_geometry` fails when a route is shorter than the straight-line
-   path through its anchors; `import_freshness` fails when an imported
+   path through its anchors; `route_keepout` fails when that path enters a
+   mech keep-out box (add an anchor to route around it); `import_freshness` fails when an imported
    source file changed since `wire_import` — re-import it rather than
    editing the hash.
 

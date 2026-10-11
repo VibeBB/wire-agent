@@ -58,9 +58,9 @@ repository), **open** (stays inside this repository but not done yet) or
 
 ## Open inside this repository
 
-- **open** — Route geometry is a lower bound only (straight-line
-  polyline). A real 3D routing check needs the mech envelope keep-out
-  volumes, which the envelope schema does not carry yet.
+- **done** — The anchor polyline is checked against the mech envelope
+  keep-out boxes (`route_keepout`). Still open: bundle diameter/clearance
+  and non-box volumes.
 - **open** — KBL/VEC export remains a later stage (ADR-0004). The
   formboard is exported as a 1:1 station table (`wire formboard`); a drawn
   nail-board sheet with branch angles is still open.
@@ -69,8 +69,8 @@ repository), **open** (stays inside this repository but not done yet) or
 
 ## Family items
 
-- **family** — The mech envelope schema could carry keep-out volumes and
-  bend-radius constraints per anchor; wire would consume them directly.
+- **family** — The mech envelope carries keep-out volumes (`keepouts`);
+  bend-radius constraints per anchor are still open.
 - **family** — UX-creator `build_request` v2 must produce `liaison/`
   files with `inputs[].sha256`; wire's inbox reports `stale` otherwise.
 - **family** — See the shared-hook notes in

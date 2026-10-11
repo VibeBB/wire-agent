@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `route_keepout` gate: the straight polyline through a route's placed
+  anchors must stay out of the keep-out boxes a mech envelope exports
+  (`keepouts`, copied by `wire import --kind mech-envelope`); a mech import
+  without `keepouts` leaves anchored routes `unknown`.
 - SLP v2 responder: `wire_ux_inbox` / `wire_ux_respond` MCP tools and
   `wire ux inbox|respond` read UX-creator `liaison/*.ux-request.json`
   (states `new`/`answered`/`stale`/`blocked`, malformed files listed) and

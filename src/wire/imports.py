@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .contract import (
     HarnessContract,
+    KeepoutBox,
 )
 from .workspace import workspace_root
 
@@ -66,13 +67,14 @@ class EnvelopeAnchor(BaseModel):
 
 
 class EnvelopeSource(BaseModel):
-    """Fixturing points exported by the mechanical envelope."""
+    """Fixturing points and keep-out volumes exported by the mechanical envelope."""
 
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1] = 1
     system: Literal["mech"] = "mech"
     anchors: list[EnvelopeAnchor] = Field(min_length=1)
+    keepouts: list[KeepoutBox] | None = None
 
 
 def _sha256_file(path: Path) -> str:
@@ -238,6 +240,11 @@ def import_envelope(
             "description": f"{len(source.anchors)} anchors",
             "anchors": names,
             "anchor_points": [anchor.model_dump() for anchor in source.anchors],
+            **(
+                {}
+                if source.keepouts is None
+                else {"keepouts": [box.model_dump() for box in source.keepouts]}
+            ),
         },
     )
     return HarnessContract.model_validate(data)
