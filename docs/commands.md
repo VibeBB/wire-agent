@@ -21,6 +21,7 @@ passing verdict (`pass`/`ready`).
 | `author` | `--contract F --out D [--png] [--drawio FMTS] [--baseline JSON]` | Export + gates + `design-report.json/.md`. |
 | `export` | `--contract F --out D [--png] [--drawio FMTS] [--baseline JSON]` | Projections + manifest only. |
 | `gates` | `--contract F [--out D]` | Gate report. |
+| `crimp` | `--contract F [--out D]` | Writes `<contract_id>.wire-crimp.json` (crimp conditions with the wire ends they crimp) for production-engineering; exit 1 when a termination lacks a condition or the table is empty. |
 | `sim-request` | `--contract F [--out D]` | Writes `<contract_id>.pdn.sim.json` and `.pdn.sim-request.json` for simulation-agent (default: next to the contract). |
 | `sim-check` | `--contract F` | Checks the hash-bound PDN `sim-response`; exit 0 only on `pass`. |
 | `import` | `--contract F --from circuit-json\|csv\|mech-envelope --source F [--out F]` | Merged contract (in place unless `--out`). |
