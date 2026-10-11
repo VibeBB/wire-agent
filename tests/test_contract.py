@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import pytest
 from pydantic import ValidationError
 
 from helpers import example_contract_data
 from wire.contract import HarnessContract
+from wire.standards import SPEC_DERATING
 
 
 def test_example_contract_validates() -> None:
@@ -63,6 +66,20 @@ def test_derating_must_be_sorted() -> None:
     points[0], points[1] = points[1], points[0]
     with pytest.raises(Exception, match="sorted"):
         HarnessContract.model_validate(data)
+
+
+def test_derating_rejects_duplicate_temperature() -> None:
+    data = example_contract_data()
+    points = data["wire_types"][0]["temp_derating"]
+    points.insert(1, {**points[0], "factor": points[0]["factor"] / 2})
+    with pytest.raises(Exception, match="unique"):
+        HarnessContract.model_validate(data)
+
+
+def test_spec_derating_tables_are_strictly_increasing() -> None:
+    for spec, curve in SPEC_DERATING.items():
+        temps = [temperature for temperature, _ in curve]
+        assert all(a < b for a, b in pairwise(temps)), spec
 
 
 def test_extra_fields_rejected() -> None:
