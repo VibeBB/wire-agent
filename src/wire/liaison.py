@@ -148,6 +148,7 @@ class UXResponse(_Strict):
     decision_refs: list[str] = Field(default_factory=list[str])
     impression_refs: list[str] = Field(default_factory=list[str])
     questions_for_user: list[str] = Field(default_factory=list[str])
+    records_heads: dict[str, str] = Field(default_factory=dict[str, str])
     responded_at: str
 
     _check_time = field_validator("responded_at")(_aware)
@@ -164,6 +165,10 @@ class UXResponse(_Strict):
         refs = self.decision_refs + self.impression_refs
         if any(not re.match(_SHA256, ref) for ref in refs):
             raise ValueError("decision_refs / impression_refs must be VRP event_ids (sha256)")
+        if any(kind not in LOG_FILES for kind in self.records_heads):
+            raise ValueError("records_heads keys must be VRP log kinds")
+        if any(not re.match(_SHA256, head) for head in self.records_heads.values()):
+            raise ValueError("records_heads values must be VRP event_ids (sha256)")
         if self.status == "done":
             bad = [g.gate for g in self.gate_verdicts if g.verdict != "pass"]
             if bad:
@@ -386,6 +391,19 @@ def _event_ids(root: Path, kinds: tuple[str, ...]) -> set[str]:
     return found
 
 
+def _records_heads(root: Path) -> tuple[dict[str, str], list[str]]:
+    """Chain head per intact VRP log, plus the kinds whose chain is broken."""
+    heads: dict[str, str] = {}
+    broken: list[str] = []
+    for kind, filename in LOG_FILES.items():
+        records, problems = _vrp.verify_log(records_dir(root) / filename, kind)
+        if problems:
+            broken.append(kind)
+        else:
+            heads[kind] = _vrp.chain_head(records)
+    return heads, broken
+
+
 def _report_verdicts(path: Path, label: str) -> list[GateVerdict]:
     value: Any = _read_json(path)
     if not isinstance(value, dict):
@@ -452,6 +470,9 @@ def respond(payload: Mapping[str, Any], root: Path | None = None) -> dict[str, A
         raise ValueError(
             "references not found in observations/wire VRP logs: " + ", ".join(missing)
         )
+    heads, broken_logs = _records_heads(base)
+    if answer.status == "done" and broken_logs:
+        raise ValueError(f"refusing 'done': VRP logs fail integrity ({', '.join(broken_logs)})")
     artifacts: list[dict[str, str]] = []
     for value in answer.artifacts:
         path = workspace_path(value, base)
@@ -469,6 +490,7 @@ def respond(payload: Mapping[str, Any], root: Path | None = None) -> dict[str, A
         decision_refs=list(answer.decision_refs),
         impression_refs=list(answer.impression_refs),
         questions_for_user=list(answer.questions_for_user),
+        records_heads=heads,
         responded_at=datetime.now(UTC).isoformat(),
     )
     out = directory / f"{request.id}{RESPONSE_SUFFIX}"

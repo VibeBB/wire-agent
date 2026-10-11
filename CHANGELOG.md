@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- SLP v2 responses carry `records_heads`, the chain head of every intact
+  VRP log at answer time; UX-creator checks it on receipt. `done` is
+  refused while any VRP log fails integrity.
+
 - `route_keepout` gate: the straight polyline through a route's placed
   anchors must stay out of the keep-out boxes a mech envelope exports
   (`keepouts`, copied by `wire import --kind mech-envelope`); a mech import
