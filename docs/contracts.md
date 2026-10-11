@@ -19,6 +19,7 @@ unknown fields unless noted.
 | `wires[]` | `HarnessWire` | `id` `W<n>`, `wire_type`, `net`, `color`, `from_endpoint`/`to_endpoint` (connector + cavity, or splice), `length_m`, `strip_a_mm`/`strip_b_mm` (4.0), `terminal_a`/`terminal_b`, `route` |
 | `routes[]` | `HarnessRoute` | `id` `RT<n>`, `segments[]` (`id` `S<n>`, `length_m`, `min_bend_radius_mm`), `protection` (`none`, `tape`, `tube`, `conduit`, `sleeve`), `flex_required`, `anchors[]` (ordered anchor names) |
 | `splices[]` | `HarnessSplice` | `id` `SP<n>`, `kind` (`crimp`, `solder`, `ultrasonic`, `ferrule`) |
+| `crimp_conditions[]` | `CrimpCondition` | opt-in crimp table: `id` `CC<n>`, `terminal`, `gauge_mm2`, `crimp_height_mm` ± `crimp_height_tol_mm` (tolerance below the height), `pull_force_min_n`, `applicator`, mandatory `source` (terminal application specification); one condition per terminal and gauge; an empty list is left out of the contract sha256 |
 | `segregations[]` | `SegregationPolicy` | `classes` (pair of signal classes), `rule` (`no_shared_route`, `no_shared_connector`) |
 | `service` | `ServiceExpectation` | `mating_cycles`, `flex_cycles` |
 | `simulation` | `SimulationLink` | opt-in PDN handoff to simulation-agent: `rails[]` (`net`, `source`/`load` endpoints on that net, optional `return_net` + `return_source`/`return_load` on the return net, all three together) and `response_path` (relative to the contract directory). Rail nets need a voltage above 0 V; endpoints must terminate wires of their net. See [sister-cooperation.md](sister-cooperation.md#simulation-agent-pdn-handoff) |
@@ -60,7 +61,7 @@ revision and sha256; `summary` counts pass/fail/unknown; each check has
 `measured`, `limit`, `detail`. Gates: `connectivity`, `cavity_occupancy`, `splice_integrity`,
 `netlist_coverage`, `shielding_pairing`, `ampacity`, `voltage_drop`,
 `insulation_rating`, `bend_radius`, `segregation`,
-`terminal_compatibility`, `connector_rating`, `housing_compatibility`,
+`terminal_compatibility`, `crimp_conditions` (only with a crimp table: every connector termination needs the condition of its terminal and wire gauge — missing is `fail`, an undeclared terminal `unknown`), `connector_rating`, `housing_compatibility`,
 `anchor_resolution`, `route_geometry`, `route_fit` (a routed wire is at least as long as the sum of its route's segments), `import_freshness`,
 `manifest_integrity`, `sim_pdn` (only with a `simulation` section). Any `fail` or `unknown` makes the verdict `fail`.
 

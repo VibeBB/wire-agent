@@ -12,6 +12,7 @@ Subcommands:
   sim-request  hand the contract's supply loops to simulation-agent (PDN)
   sim-check    check simulation-agent's hash-bound PDN response
   formboard   export the 1:1 formboard layout for production-engineering
+  crimp     export the crimp-condition table for production-engineering
   review-record  write a validated visual-review advisory JSON for an image
   record    append a VibeBB Record Protocol record (decision, impression,
             vision-review) or print the records status
@@ -221,6 +222,18 @@ def cmd_formboard(args: argparse.Namespace) -> dict[str, Any]:
         return {"verdict": "fail", "stage": "load", "detail": str(exc)}
     out_dir = Path(args.out) if args.out else Path(args.contract).parent
     return write_formboard(contract, out_dir)
+
+
+def cmd_crimp(args: argparse.Namespace) -> dict[str, Any]:
+    """Write ``<contract_id>.wire-crimp.json`` for production-engineering."""
+    from .crimp import write_crimp_table
+
+    try:
+        contract = _load(args.contract)
+    except Exception as exc:
+        return {"verdict": "fail", "stage": "load", "detail": str(exc)}
+    out_dir = Path(args.out) if args.out else Path(args.contract).parent
+    return write_crimp_table(contract, out_dir)
 
 
 def cmd_review_record(args: argparse.Namespace) -> dict[str, Any]:
@@ -487,6 +500,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--contract", required=True)
     p.add_argument("--out", default=None, help="output directory (default: contract directory)")
 
+    p = sub.add_parser("crimp", help="export the crimp-condition table for production-engineering")
+    p.add_argument("--contract", required=True)
+    p.add_argument("--out", default=None, help="output directory (default: contract directory)")
+
     p = sub.add_parser("import")
     p.add_argument("--contract", required=True)
     p.add_argument("--source", required=True)
@@ -568,6 +585,7 @@ def main(argv: list[str] | None = None) -> int:
         "sim-request": cmd_sim_request,
         "sim-check": cmd_sim_check,
         "formboard": cmd_formboard,
+        "crimp": cmd_crimp,
         "import": cmd_import,
         "review-record": cmd_review_record,
         "record": cmd_record,
