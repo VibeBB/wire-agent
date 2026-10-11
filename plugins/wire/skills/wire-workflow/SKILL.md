@@ -107,7 +107,9 @@ user-provided harness photos, not workspace renders like
 - 経路 (routing): declared route segments with min bend radius, protection,
   flex requirements, anchors — declared, not 3D-computed. Anchor positions
   imported from a mech envelope feed the `route_geometry` gate (route
-  length must cover the anchor polyline) and the route plan render.
+  length must cover the anchor polyline), the `route_keepout` gate (the
+  polyline must not enter an envelope keep-out box; add an anchor to bend
+  around one) and the route plan render.
 - 分離 (segregation): signal-class separation policies over routes and
   connectors.
 - 製造 (manufacturing): wire list, cut table, BOM, harness diagram
