@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from helpers import example_contract_data
 from wire import cli
+from wire._envelope import sidecar_path, write_envelope
 from wire.contract import HarnessContract
 from wire.gates import run_gates
 from wire.sim_pdn import expected_request, pdn_brief, pdn_check, pdn_findings, write_sim_request
@@ -74,6 +75,7 @@ def _answer(
         response["sha256"] = _sha(report)
     path = root / RESPONSE
     path.write_text(json.dumps(response), encoding="utf-8")
+    write_envelope(path, "sim", [], root)
     return path
 
 
@@ -218,3 +220,14 @@ def test_cli_round_trip(
     assert json.loads(capsys.readouterr().out)["verdict"] == "unknown"
     _answer(tmp_path, contract, PASSING)
     assert cli.main(["sim-check", "--contract", str(path)]) == 0
+
+
+def test_response_provenance_missing_or_foreign_is_not_a_pass(tmp_path: Path) -> None:
+    contract = _contract()
+    response = _answer(tmp_path, contract, PASSING)
+    sidecar = sidecar_path(response)
+    body = json.loads(sidecar.read_text(encoding="utf-8"))
+    sidecar.write_text(json.dumps(body | {"producer": "mech"}), encoding="utf-8")
+    assert _statuses(contract, tmp_path, response)[-1] == "fail"
+    sidecar.unlink()
+    assert _statuses(contract, tmp_path, response)[-1] == "unknown"

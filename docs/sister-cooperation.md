@@ -55,6 +55,7 @@ hands those loops to simulation-agent:
    with wire's derated `ampacity` gate and is not sent.
 2. simulation-agent answers with `sim respond`, writing
    `<contract_id>.pdn.sim-response.json` beside the request.
+   The response also needs simulation-agent's envelope v3 sidecar (`*.sim-response.provenance.json`): a tampered or foreign sidecar or a broken sim decision log adds a failing `provenance` finding, and a missing sidecar adds an `unknown` one.
 3. The `sim_pdn` gate (and `wire sim-check` / `wire_sim_pdn_check`) reads
    `simulation.response_path`. A missing or malformed response,
    `needs_info` or `deferred` is `unknown`. A changed request file, a
