@@ -15,8 +15,8 @@ the adoption decision for each. Update it in the same change that touches
 
 | Package | Pin | Source | Decision |
 | --- | --- | --- | --- |
-| openhands-sdk | `==1.53.0` | PyPI | Exact pin — plugin API contract; same pin as the sibling plugins so a merged conversation sees one SDK. |
-| openhands-tools | `==1.53.0` | PyPI | Exact pin — matches SDK. |
+| openhands-sdk | `==1.54.0` | PyPI | Exact pin — plugin API contract; same pin as the sibling plugins so a merged conversation sees one SDK. |
+| openhands-tools | `==1.54.0` | PyPI | Exact pin — matches SDK. |
 
 The `sdk-check` group is installed by default (`tool.uv default-groups`) so
 pyright strict can type `check_plugin_load.py`; the Docker image excludes it
@@ -36,7 +36,7 @@ via `uv export --no-dev`.
 
 | Tool | Pin | Where |
 | --- | --- | --- |
-| uv | `==0.12.23` | `[tool.uv] required-version` |
+| uv | `==0.13.0` | `[tool.uv] required-version` |
 | Python | `>=3.12`, CI matrix 3.12/3.13/3.14 (+3.15 canary leg) | pyproject `requires-python` |
 | zizmor | `1.30.1` (sha256-verified wheel) | `workflow-lint.yml` |
 | actionlint | `v1.7.12` (sha256-verified tarball) | `workflow-lint.yml` |
@@ -59,7 +59,7 @@ All `uses:` entries are pinned to a 40-char SHA with a `# vX.Y.Z` comment:
 | Item | Pin | Where |
 | --- | --- | --- |
 | debian base image | `13-slim` | `docker/wire-tools.Dockerfile` `FROM` |
-| uv | `0.12.23` | `docker/wire-tools.Dockerfile` `ARG UV_VERSION` (must equal `[tool.uv] required-version`) |
+| uv | `0.13.0` | `docker/wire-tools.Dockerfile` `ARG UV_VERSION` (must equal `[tool.uv] required-version`) |
 | Python in image | `3.14` | `uv python install` inside the Dockerfile |
 
 ## Workflow git clone pins
