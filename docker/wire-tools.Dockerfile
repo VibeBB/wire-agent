@@ -42,7 +42,7 @@ RUN for attempt in 1 2 3 4 5; do \
             libasound2t64 \
             xvfb \
             xauth \
-        && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o /tmp/drawio.deb \
+        && curl -fsSL --retry 8 --retry-delay 20 --retry-max-time 600 --retry-all-errors -o /tmp/drawio.deb \
             "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_DESKTOP_VERSION}/drawio-amd64-${DRAWIO_DESKTOP_VERSION}.deb" \
         && echo "${DRAWIO_DESKTOP_SHA256}  /tmp/drawio.deb" | sha256sum -c - \
         && apt-get install --no-install-recommends -y /tmp/drawio.deb \
