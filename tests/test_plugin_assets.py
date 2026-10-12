@@ -273,8 +273,9 @@ def test_ensure_llm_profiles_provisions(tmp_path: Path) -> None:
     )
     if sdk_probe.returncode == 0:
         expected_findings = [
-            "vibebb-review is not vision-capable (unsupported); rendered-image review is text-only — "
-            "point ~/.openhands/profiles/vibebb-review.json at a vision-capable model"
+            "vibebb-review is not vision-capable (unsupported); rendered-image "
+            "review is text-only — point ~/.openhands/profiles/vibebb-review.json "
+            "at a vision-capable model"
         ]
     else:
         expected_findings = [
