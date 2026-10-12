@@ -15,7 +15,7 @@ the image pins the toolchain, not the outputs.
 | Content | Pin |
 | --- | --- |
 | Debian | `13` slim (`debian:13-slim`) |
-| uv | `0.12.23` (`ghcr.io/astral-sh/uv:0.12.23`, also `ARG UV_VERSION`) |
+| uv | `0.13.0` (`ghcr.io/astral-sh/uv:0.13.0`, also `ARG UV_VERSION`) |
 | Python | `3.14` via `uv python install` (the latest stable CPython minor; `requires-python` stays `>=3.12` as the floor) |
 | wire + runtime deps | `uv export --frozen --no-dev` from `uv.lock` |
 

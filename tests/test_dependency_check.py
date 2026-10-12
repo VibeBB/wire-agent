@@ -44,11 +44,11 @@ def test_lock_versions_cover_direct_deps():
     deps = dependency_names(project_data(ROOT))
     missing = [name for name in deps if name not in versions]
     assert missing == []
-    assert versions["openhands-sdk"] == "1.53.0"
+    assert versions["openhands-sdk"] == "1.54.0"
 
 
 def test_uv_pin_parsed():
-    assert uv_version_pin(ROOT) == "==0.12.23"
+    assert uv_version_pin(ROOT) == "==0.13.0"
 
 
 def test_workflow_files_have_expected_suffixes():
@@ -58,7 +58,7 @@ def test_workflow_files_have_expected_suffixes():
 
 def test_docker_arg_pins_parsed():
     args = docker_arg_pins(ROOT)
-    assert args["UV_VERSION"] == "0.12.23"
+    assert args["UV_VERSION"] == "0.13.0"
 
 
 def test_docker_arg_matches_uv_pin():
@@ -320,15 +320,17 @@ def test_docker_args_report_fetch_failed_on_timeout():
 
 
 def test_docker_args_release_source_uses_release_not_tag():
+    pinned = docker_arg_pins(ROOT)["DRAWIO_DESKTOP_VERSION"]
+
     def tags(url: str) -> list[str]:
         return ["v99.0.0"]
 
     def releases(url: str) -> str:
-        return "https://github.com/jgraph/drawio-desktop/releases/tag/v31.7.0"
+        return f"https://github.com/jgraph/drawio-desktop/releases/tag/v{pinned}"
 
     statuses = check_docker_args(ROOT, list_remote_tags=tags, final_url=releases)
     drawio = next(status for status in statuses if status.name == "DRAWIO_DESKTOP_VERSION")
-    assert drawio.latest == "v31.7.0"
+    assert drawio.latest == f"v{pinned}"
     assert drawio.outdated is False
 
 
@@ -337,7 +339,7 @@ def test_docker_args_release_source_fetch_failed():
         raise OSError(url)
 
     def tags(url: str) -> list[str]:
-        return ["0.12.23"]
+        return ["0.13.0"]
 
     statuses = check_docker_args(ROOT, list_remote_tags=tags, final_url=failed_url)
     drawio = next(status for status in statuses if status.name == "DRAWIO_DESKTOP_VERSION")

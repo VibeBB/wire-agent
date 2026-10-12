@@ -3,16 +3,16 @@
     {
       "surface": "python-version",
       "name": "*",
-      "latest": "3.14",
+      "latest": "3.15",
       "review_by": "2027-04-01",
-      "reason": "Repo targets Python 3.12/3.13 (requires-python >=3.12, CI matrix 3.12/3.13). 3.14 is pending upstream verification: openhands-sdk support for 3.14 is unconfirmed. Re-evaluate when the SDK's supported range covers 3.14."
+      "reason": "Latest stable is 3.15, but the sdk-check group's openhands-sdk->litellm->fastuuid chain pins fastuuid 0.14.0 (sdist only, no cp315 wheel) and its bundled PyO3 fails to build on 3.15. pydantic-core has shipped cp315 wheels as of 2.50.1, so fastuuid is the sole blocker — re-check when fastuuid publishes a 3.15-capable release, then promote per the canary policy in docs/operations.md."
     },
     {
       "surface": "pypi",
       "name": "mcp",
       "latest": "2.3.0",
       "review_by": "2027-04-01",
-      "reason": "openhands-sdk 1.53.0 requires fastmcp>=3.2.0,<4, which requires mcp<2.0. Defer MCP 2.x until a supported SDK/fastmcp release removes that constraint."
+      "reason": "openhands-sdk 1.54.0 requires fastmcp>=3.2.0,<4, which requires mcp<2.0. Defer MCP 2.x until a supported SDK/fastmcp release removes that constraint."
     }
   ]
 }
