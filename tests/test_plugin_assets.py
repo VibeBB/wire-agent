@@ -265,10 +265,23 @@ def test_ensure_llm_profiles_provisions(tmp_path: Path) -> None:
         env=env,
         check=False,
     )
-    assert json.loads(proc2.stdout)["findings"] == [
-        "vibebb-review is not vision-capable (unsupported); rendered-image review is text-only — "
-        "point ~/.openhands/profiles/vibebb-review.json at a vision-capable model"
-    ]
+    sdk_probe = subprocess.run(
+        [sys.executable, "-c", "from openhands.sdk.llm import LLM"],
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    if sdk_probe.returncode == 0:
+        expected_findings = [
+            "vibebb-review is not vision-capable (unsupported); rendered-image review is text-only — "
+            "point ~/.openhands/profiles/vibebb-review.json at a vision-capable model"
+        ]
+    else:
+        expected_findings = [
+            "vibebb-review vision capability unverified "
+            "(SDK not importable in the hook environment)"
+        ]
+    assert json.loads(proc2.stdout)["findings"] == expected_findings
 
 
 def test_ensure_llm_profiles_tolerates_missing_settings(tmp_path: Path) -> None:
