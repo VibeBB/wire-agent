@@ -173,6 +173,46 @@ jobs:
             fi
             [ "$attempt" -lt 10 ] && sleep 30
           done
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # A push that itself fires publish-*-images.yml legitimately leaves
+            # :latest ahead of the lock until the digest-lock PR merges - the
+            # promote precedes the lock update by ~15 minutes, past the retry
+            # window above. Detect that case from the push range and warn only;
+            # every other event keeps the strict drift check.
+            git fetch --depth=200 origin "${{ github.event.before }}" >/dev/null 2>&1 || true
+            changed="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" 2>/dev/null || true)"
+            publishes=""
+            if [ -n "$changed" ]; then
+              publishes="$(python3 - "$changed" <<'PYEOF'
+          import fnmatch, glob, sys
+          paths = []
+          for name in glob.glob(".github/workflows/publish-*.yml"):
+              in_push = in_paths = False
+              for line in open(name, encoding="utf-8"):
+                  s = line.strip()
+                  if s == "push:":
+                      in_push, in_paths = True, False
+                  elif in_push and s == "paths:":
+                      in_paths = True
+                  elif in_paths and s.startswith("- "):
+                      paths.append(s[2:].strip('"').strip("'"))
+                  elif in_paths:
+                      in_push = in_paths = False
+          pos = [p for p in paths if not p.startswith("!")]
+          neg = [p[1:] for p in paths if p.startswith("!")]
+          hits = [f for f in sys.argv[1].splitlines()
+                  if any(fnmatch.fnmatch(f, p) for p in pos)
+                  and not any(fnmatch.fnmatch(f, n) for n in neg)]
+          print("\n".join(hits))
+          PYEOF
+          )"
+            fi
+            if [ -n "$publishes" ]; then
+              echo "::warning::${IMAGE}:latest resolves to ${latest:-<unreadable>}, not the locked digest ${DIGEST}; this push touches the publish path filters, so a digest-lock PR is likely in flight. Treating as advisory."
+              echo "- \`${IMAGE}:latest\` is ahead of the locked digest while a publish triggered by this push is in flight." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
           echo "::error::${IMAGE}:latest resolves to ${latest:-<unreadable>}, not the locked digest ${DIGEST}."
           exit 1
       - name: Prepare smoke output
