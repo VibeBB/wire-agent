@@ -44,7 +44,7 @@ def test_lock_versions_cover_direct_deps():
     deps = dependency_names(project_data(ROOT))
     missing = [name for name in deps if name not in versions]
     assert missing == []
-    assert versions["openhands-sdk"] == "1.54.0"
+    assert versions["openhands-sdk"] == "1.55.1"
 
 
 def test_uv_pin_parsed():
@@ -58,7 +58,7 @@ def test_workflow_files_have_expected_suffixes():
 
 def test_docker_arg_pins_parsed():
     args = docker_arg_pins(ROOT)
-    assert args["UV_VERSION"] == "0.13.0"
+    assert args["UV_VERSION"] == "0.13.1"
 
 
 def test_docker_arg_matches_uv_pin():
@@ -246,9 +246,9 @@ def test_workflow_download_pins_and_checksums(tmp_path: Path):
     by_name = {status.name: status for status in statuses}
     assert by_name["rhysd/actionlint"].current == "v1.7.12"
     assert by_name["rhysd/actionlint"].outdated is True
-    assert by_name["zizmor"].current == "1.30.1"
+    assert by_name["zizmor"].current == "1.31.1"
     assert by_name["zizmor"].latest == "99.0.0"
-    assert by_name["aquasecurity/trivy"].current == "v0.75.0"
+    assert by_name["aquasecurity/trivy"].current == "v0.76.0"
     assert by_name["aquasecurity/trivy"].outdated is True
     assert by_name["actionlint download checksum"].outdated is False
     assert by_name["zizmor download checksum"].outdated is False
