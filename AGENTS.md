@@ -69,6 +69,9 @@ docs/adr/  docs/research/
 - Never import-bind GPL/AGPL/LGPL code. Copyleft tools may only ever run as
   unmodified subprocesses behind an adapter.
 - Never write API keys, tokens, or secrets to logs, inputs, or commits.
+- Version expectations and pins in source code must derive from files
+  the dependency-update checker covers (pyproject pins, lockfiles,
+  Dockerfiles, workflow pins); do not hardcode a second copy.
 - Provide negative tests that deliberately corrupt the judged input and
   confirm the corrupted input fails (see `tests/test_gates.py`).
 - wire-agent interoperates with mechanical-agent, electrical-circuit-agent,

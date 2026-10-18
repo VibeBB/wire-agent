@@ -84,14 +84,12 @@ RUN uv export --frozen --no-dev --no-emit-project --format requirements-txt \
     && python -m wire doctor \
     && rm -f /tmp/wire-requirements.txt
 
-# The pinned debian:13-slim digest keeps shipping the deb Trivy flags at
-# publish (CVE-2026-103111 libpcre2-8-0). Upgrade just that package inside
-# the build so the publish gate stays green.
+# Apply every Debian security fix published after the pinned base digest
+# inside the build so the publish Trivy gate cannot trip on fixable
+# findings (apt always pulls the latest published fix).
 RUN for attempt in 1 2 3 4 5; do \
         apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
-        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
-            --only-upgrade \
-            libpcre2-8-0 \
+        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 upgrade -y --no-install-recommends \
         && rm -rf /var/lib/apt/lists/* \
         && break; \
         [ "$attempt" = 5 ] && exit 1; \
