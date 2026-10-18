@@ -15,8 +15,8 @@ the adoption decision for each. Update it in the same change that touches
 
 | Package | Pin | Source | Decision |
 | --- | --- | --- | --- |
-| openhands-sdk | `==1.54.0` | PyPI | Exact pin — plugin API contract; same pin as the sibling plugins so a merged conversation sees one SDK. |
-| openhands-tools | `==1.54.0` | PyPI | Exact pin — matches SDK. |
+| openhands-sdk | `==1.55.1` | PyPI | Exact pin — plugin API contract; same pin as the sibling plugins so a merged conversation sees one SDK. |
+| openhands-tools | `==1.55.1` | PyPI | Exact pin — matches SDK. |
 
 The `sdk-check` group is installed by default (`tool.uv default-groups`) so
 pyright strict can type `check_plugin_load.py`; the Docker image excludes it
@@ -36,11 +36,11 @@ via `uv export --no-dev`.
 
 | Tool | Pin | Where |
 | --- | --- | --- |
-| uv | `==0.13.0` | `[tool.uv] required-version` |
+| uv | `==0.13.1` | `[tool.uv] required-version` |
 | Python | `>=3.12`, CI matrix 3.12/3.13/3.14 (+3.15 canary leg) | pyproject `requires-python` |
-| zizmor | `1.30.1` (sha256-verified wheel) | `workflow-lint.yml` |
+| zizmor | `1.31.1` (sha256-verified wheel) | `workflow-lint.yml` |
 | actionlint | `v1.7.12` (sha256-verified tarball) | `workflow-lint.yml` |
-| trivy | `v0.75.0` (`version:` input) | `container-audit.yml`, `publish-wire-images.yml` |
+| trivy | `v0.76.0` (`version:` input) | `container-audit.yml`, `publish-wire-images.yml` |
 
 ## GitHub Actions pins
 
@@ -96,6 +96,15 @@ highest semver tag, so a new Lynis release surfaces in the weekly report.
 The weekly workflow posts the report to the "Dependency update check
 report" issue. Deferred candidates are recorded in
 `scripts/dependency_update_deferrals.json` with a re-check deadline.
+
+## 2026-10-18 update (sdk 1.55.1, uv 0.13.1)
+
+sdk `==1.54.0` -> `==1.55.1` (sdk + tools), uv `==0.13.0` -> `==0.13.1`,
+zizmor `1.30.1` -> `1.31.1`, trivy `v0.75.0` -> `v0.76.0`, codeql-action
+v4.38.3 -> v4.39.0. Full changelog review:
+[SDK v1.55.1 feature evaluation](research/sdk-v1.55.1-feature-evaluation.md).
+Deferrals unchanged (mcp 2.x, Python 3.15 default, Tauri 3.0.0-alpha where
+applicable); reasons refreshed to cite SDK 1.55.1.
 
 ## Procedure
 
