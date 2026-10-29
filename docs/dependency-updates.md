@@ -97,6 +97,20 @@ The weekly workflow posts the report to the "Dependency update check
 report" issue. Deferred candidates are recorded in
 `scripts/dependency_update_deferrals.json` with a re-check deadline.
 
+## 2026-10-29 update (sdk 1.59.0, uv 0.13.6, drawio-desktop 32.6.1)
+
+sdk `==1.55.1` -> `==1.59.0` (sdk + tools), uv `==0.13.1` -> `==0.13.6`,
+pytest `9.1.1` -> `9.2.0`, ruff `0.17.x` -> `0.17.3` (lock), trivy
+`v0.76.0` -> `v0.76.1`, codeql-action v4.39.0 -> v4.39.1, harden-runner
+v2.22.1 -> v2.22.3, setup-uv v10.3.0 -> v10.3.3, docker/login-action
+v4.6.0 -> v4.7.0. Full changelog review:
+[SDK v1.59.0 feature evaluation](research/sdk-v1.59.0-feature-evaluation.md).
+Deferrals unchanged (mcp 2.x, Python 3.15 default, Tauri 3.0.0-alpha where
+applicable); the mcp deferral reason now cites SDK 1.59.0.
+
+drawio-desktop `32.4.1` -> `32.6.1` (deb downloaded and sha256-verified).
+Base image `debian:13-slim` digest re-pinned to the current tag digest.
+
 ## 2026-10-18 update (sdk 1.55.1, uv 0.13.1)
 
 sdk `==1.54.0` -> `==1.55.1` (sdk + tools), uv `==0.13.0` -> `==0.13.1`,

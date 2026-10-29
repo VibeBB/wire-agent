@@ -1,6 +1,6 @@
 # Agent Working Agreement
 
-> Target: OpenHands Software Agent SDK v1.55.1, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.59.0, Python 3.12+
 
 This document is the working agreement for implementation, verification, and
 documentation in this repository. The README is the product overview,
