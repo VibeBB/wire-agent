@@ -154,10 +154,10 @@ def test_publish_never_pushes_latest_before_the_trivy_gate() -> None:
     assert gate < after, ":latest must be promoted only after the Trivy gate"
 
 
-def test_publish_dispatch_is_limited_to_main() -> None:
+def test_publish_dispatch_is_limited_to_main_or_pr() -> None:
     data = _load("publish-wire-images.yml")
     job: dict[Any, Any] = data["jobs"]["publish"]
-    assert job.get("if") == "github.ref == 'refs/heads/main'"
+    assert job.get("if") == ("github.ref == 'refs/heads/main' || github.event_name == 'pull_request'")
 
 
 def _job_steps(data: dict[Any, Any]) -> list[tuple[str, dict[Any, Any]]]:
