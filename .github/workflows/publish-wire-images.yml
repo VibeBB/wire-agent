@@ -68,8 +68,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 120
     # Manual dispatch inherits the full write permission set below, so it
-    # must never build/sign/push images from a non-main ref.
-    if: github.ref == 'refs/heads/main'
+    # must never build/sign/push images from a non-main ref; pull_request
+    # runs are the dry-run rehearsal — every irreversible step is gated off.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     permissions:
       # Approves action_required pull_request runs on the lock branch.
       actions: write
