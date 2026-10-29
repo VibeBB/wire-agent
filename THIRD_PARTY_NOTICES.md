@@ -9,8 +9,8 @@ components the project depends on and how they are used.
 | --- | --- | --- |
 | [pydantic](https://github.com/pydantic/pydantic) | MIT | Schema validation for contract/intake/report contracts |
 | [mcp](https://github.com/modelcontextprotocol/python-sdk) | MIT | stdio MCP server boundary |
-| [openhands-sdk](https://github.com/OpenHands/software-agent-sdk) 1.53.0 | MIT | Plugin framework (skills, agents, commands, hooks, task sub-agents) |
-| openhands-tools 1.53.0 | MIT | SDK builtin tools used by sub-agents |
+| [openhands-sdk](https://github.com/OpenHands/software-agent-sdk) 1.59.0 | MIT | Plugin framework (skills, agents, commands, hooks, task sub-agents) |
+| openhands-tools 1.59.0 | MIT | SDK builtin tools used by sub-agents |
 
 Indirect dependencies pinned in `uv.lock` follow each distribution's own
 metadata on PyPI.
@@ -21,7 +21,7 @@ The `wire-tools` image bundles the following third-party components:
 
 | Component | License | Use |
 | --- | --- | --- |
-| [drawio-desktop](https://github.com/jgraph/drawio-desktop) 31.7.0 | GPL-3.0-only (bundles Electron/Chromium under their own licenses) | `drawio -x` renders the harness diagram and `--drawio` review outputs; runs unmodified under `xvfb-run` |
+| [drawio-desktop](https://github.com/jgraph/drawio-desktop) 32.6.1 | GPL-3.0-only (bundles Electron/Chromium under their own licenses) | `drawio -x` renders the harness diagram and `--drawio` review outputs; runs unmodified under `xvfb-run` |
 | fonts-ipafont | IPA Font License Agreement v1.0 | CJK glyph coverage for diagram text |
 | Xvfb (xserver-xorg) | MIT/X11 | Headless display for drawio-desktop |
 | uv (binary, copied from `ghcr.io/astral-sh/uv`) | Apache-2.0 OR MIT | Python environment and interpreter provisioning |

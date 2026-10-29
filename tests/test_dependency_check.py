@@ -44,11 +44,11 @@ def test_lock_versions_cover_direct_deps():
     deps = dependency_names(project_data(ROOT))
     missing = [name for name in deps if name not in versions]
     assert missing == []
-    assert versions["openhands-sdk"] == "1.55.1"
+    assert versions["openhands-sdk"] == "1.59.0"
 
 
 def test_uv_pin_parsed():
-    assert uv_version_pin(ROOT) == "==0.13.1"
+    assert uv_version_pin(ROOT) == "==0.13.6"
 
 
 def test_workflow_files_have_expected_suffixes():
@@ -58,7 +58,7 @@ def test_workflow_files_have_expected_suffixes():
 
 def test_docker_arg_pins_parsed():
     args = docker_arg_pins(ROOT)
-    assert args["UV_VERSION"] == "0.13.1"
+    assert args["UV_VERSION"] == "0.13.6"
 
 
 def test_docker_arg_matches_uv_pin():
@@ -290,7 +290,7 @@ def test_workflow_downloads_cover_actionlint_and_trivy():
     assert actionlint.latest == "v1.7.12"
     assert actionlint.outdated is False
     trivy = by_name["aquasecurity/trivy"]
-    assert trivy.current == "v0.76.0"
+    assert trivy.current == "v0.76.1"
     assert trivy.outdated is False
 
     outdated = check_dependency_updates_module.check_workflow_downloads(
