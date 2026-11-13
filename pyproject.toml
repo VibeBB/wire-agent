@@ -6,6 +6,7 @@ license = "BSD-3-Clause"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2",
+    "jsonschema>=4",
     "mcp>=2",
 ]
 

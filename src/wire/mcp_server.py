@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
 from mcp import types
 from mcp.server import Server, ServerRequestContext
 from mcp.server.lowlevel import NotificationOptions
@@ -592,6 +593,22 @@ async def call_tool(
     ctx: ServerRequestContext | None, params: types.CallToolRequestParams
 ) -> types.CallToolResult:
     name, arguments = params.name, params.arguments or {}
+    spec = next((tool for tool in tool_specs() if tool.name == name), None)
+    if spec is not None:
+        errors = sorted(
+            Draft202012Validator(spec.input_schema).iter_errors(  # pyright: ignore[reportUnknownMemberType]
+                arguments
+            ),
+            key=lambda error: list(error.absolute_path),
+        )
+        if errors:
+            first = errors[0]
+            key = ".".join(str(part) for part in first.absolute_path)
+            message = first.message if not key else f"'{key}': {first.message}"
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=f"Input validation error: {message}")],
+                is_error=True,
+            )
     try:
         content = await dispatch_tool(name, arguments)
     except Exception as exc:
