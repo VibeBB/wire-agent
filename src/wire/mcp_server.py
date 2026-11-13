@@ -13,8 +13,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
 from mcp import types
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.server.lowlevel import NotificationOptions
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
@@ -45,8 +46,6 @@ from .records import (
 from .route_plan import ROUTE_PLAN_PNG
 from .standards import CONNECTOR_FAMILIES, WIRE_SPECS
 from .workspace import workspace_path
-
-server: Server = Server(f"wire-mcp/{__version__}")
 
 _SCHEMAS: dict[str, dict[str, Any]] = {
     "wire_record_decision": DecisionInput.model_json_schema(),
@@ -252,7 +251,7 @@ def image_content(path: Path) -> types.ImageContent | None:
     return types.ImageContent(
         type="image",
         data=base64.b64encode(path.read_bytes()).decode("ascii"),
-        mimeType=mime,
+        mime_type=mime,
     )
 
 
@@ -261,16 +260,17 @@ def tool_specs() -> list[types.Tool]:
         types.Tool(
             name=name,
             description=_DESCRIPTIONS[name],
-            inputSchema=schema,
+            input_schema=schema,
             annotations=_ANNOTATIONS[name],
         )
         for name, schema in _SCHEMAS.items()
     ]
 
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
-    return tool_specs()
+async def list_tools(
+    ctx: ServerRequestContext | None, params: types.PaginatedRequestParams | None
+) -> types.ListToolsResult:
+    return types.ListToolsResult(tools=tool_specs())
 
 
 _DESCRIPTIONS: dict[str, str] = {
@@ -394,10 +394,10 @@ _DESCRIPTIONS: dict[str, str] = {
 def _anno(title: str, *, write: bool) -> types.ToolAnnotations:
     return types.ToolAnnotations(
         title=title,
-        readOnlyHint=not write,
-        destructiveHint=write,
-        idempotentHint=True,
-        openWorldHint=False,
+        read_only_hint=not write,
+        destructive_hint=write,
+        idempotent_hint=True,
+        open_world_hint=False,
     )
 
 
@@ -589,16 +589,37 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
     raise ValueError(f"unknown tool {name}")
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
+async def call_tool(
+    ctx: ServerRequestContext | None, params: types.CallToolRequestParams
+) -> types.CallToolResult:
+    name, arguments = params.name, params.arguments or {}
+    spec = next((tool for tool in tool_specs() if tool.name == name), None)
+    if spec is not None:
+        errors = sorted(
+            Draft202012Validator(spec.input_schema).iter_errors(  # pyright: ignore[reportUnknownMemberType]
+                arguments
+            ),
+            key=lambda error: list(error.absolute_path),
+        )
+        if errors:
+            first = errors[0]
+            key = ".".join(str(part) for part in first.absolute_path)
+            message = first.message if not key else f"'{key}': {first.message}"
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=f"Input validation error: {message}")],
+                is_error=True,
+            )
     try:
         content = await dispatch_tool(name, arguments)
     except Exception as exc:
         return types.CallToolResult(
             content=_text({"verdict": "fail", "detail": f"{name} error: {exc}"}),
-            isError=True,
+            is_error=True,
         )
-    return types.CallToolResult(content=content, isError=False)
+    return types.CallToolResult(content=content, is_error=False)
+
+
+server: Server = Server(f"wire-mcp/{__version__}", on_list_tools=list_tools, on_call_tool=call_tool)
 
 
 def _ns(**kwargs: Any) -> Any:

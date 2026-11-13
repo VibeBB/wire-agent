@@ -56,10 +56,10 @@ def test_tool_annotations() -> None:
         annotations = tool.annotations
         assert annotations is not None
         assert annotations.title
-        assert annotations.readOnlyHint is (not EXPECTED[tool.name])
-        assert annotations.destructiveHint is EXPECTED[tool.name]
-        assert annotations.idempotentHint is True
-        assert annotations.openWorldHint is False
+        assert annotations.read_only_hint is (not EXPECTED[tool.name])
+        assert annotations.destructive_hint is EXPECTED[tool.name]
+        assert annotations.idempotent_hint is True
+        assert annotations.open_world_hint is False
 
 
 def _call(name: str, args: dict[str, Any]) -> list[mcp.types.ContentBlock]:
@@ -68,7 +68,7 @@ def _call(name: str, args: dict[str, Any]) -> list[mcp.types.ContentBlock]:
 
 def _call_result(name: str, args: dict[str, Any]) -> mcp.types.CallToolResult:
     async def invoke() -> mcp.types.CallToolResult:
-        result = await call_tool(name, args)
+        result = await call_tool(None, mcp.types.CallToolRequestParams(name=name, arguments=args))
         assert isinstance(result, mcp.types.CallToolResult)
         return result
 
@@ -93,7 +93,7 @@ def test_image_content_attaches_png(tmp_path: Path) -> None:
     png.write_bytes(data)
     block = image_content(png)
     assert isinstance(block, mcp.types.ImageContent)
-    assert block.mimeType == "image/png"
+    assert block.mime_type == "image/png"
     assert base64.b64decode(block.data) == data
 
 
@@ -137,7 +137,7 @@ def test_wire_author_baseline_records_and_matches(
 
 def test_unknown_tool_returns_error_result() -> None:
     result = _call_result("wire_missing", {})
-    assert result.isError is True
+    assert result.is_error is True
     assert _payload(result) == {
         "verdict": "fail",
         "detail": "wire_missing error: unknown tool wire_missing",
@@ -154,7 +154,7 @@ def test_raised_handler_returns_error_result(
 
     monkeypatch.setattr(mcp_server, "dispatch_tool", broken_dispatch)
     result = _call_result("wire_broken", {})
-    assert result.isError is True
+    assert result.is_error is True
     assert _payload(result) == {
         "verdict": "fail",
         "detail": "wire_broken error: handler failed",
@@ -163,7 +163,7 @@ def test_raised_handler_returns_error_result(
 
 def test_validation_failure_is_not_a_transport_error() -> None:
     result = _call_result("wire_validate_contract", {"contract": {}})
-    assert result.isError is False
+    assert result.is_error is False
     assert _payload(result)["verdict"] == "fail"
 
 
@@ -175,7 +175,7 @@ def test_mcp_rejects_path_outside_workspace(
         "wire_intake",
         {"contract_path": "../outside.contract.json", "intake_path": "intake.json"},
     )
-    assert result.isError is True
+    assert result.is_error is True
     assert "path is outside the workspace" in _payload(result)["detail"]
 
 
@@ -193,7 +193,7 @@ def test_mcp_accepts_relative_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         "wire_intake",
         {"contract_path": "fixtures/contract.json", "intake_path": "intake.json"},
     )
-    assert result.isError is False
+    assert result.is_error is False
     assert captured == {
         "contract": str(tmp_path / "fixtures" / "contract.json"),
         "intake": str(tmp_path / "intake.json"),
@@ -207,9 +207,9 @@ def test_wire_view_image_returns_inline_image(
     (tmp_path / "photo.jpg").write_bytes(b"\xff\xd8fake")
     blocks = _call("wire_view_image", {"image_path": "photo.jpg"})
     assert isinstance(blocks[1], mcp.types.ImageContent)
-    assert blocks[1].mimeType == "image/jpeg"
+    assert blocks[1].mime_type == "image/jpeg"
     result = _call_result("wire_view_image", {"image_path": "notes.txt"})
-    assert result.isError
+    assert result.is_error
 
 
 def test_wire_ux_inbox_over_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -227,7 +227,7 @@ def test_vrp_v2_read_tools_over_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     search = _payload(_call_result("wire_records_search", {"query": "W1"}))
     assert search["results"] == []
     bad = _call_result("wire_record_insight", {"insight": {}})
-    assert bad.isError
+    assert bad.is_error
 
 
 def test_vrp_v2_tools_are_listed() -> None:

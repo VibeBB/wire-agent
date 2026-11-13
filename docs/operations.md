@@ -445,3 +445,11 @@ When sweeping dependencies to latest releases:
 - 2026-10-29: Added `scripts/lint_workflows_local.sh`, which runs
   the same pinned actionlint + zizmor checks as workflow-lint.yml locally
   before pushing workflow edits.
+
+- 2026-11-14: Added `jsonschema>=4` as a runtime dependency.
+  `src/wire/mcp_server.py` uses `Draft202012Validator` to restore the
+  mcp 1.x request-layer inputSchema validation that mcp 2.x dropped —
+  `call_tool` validates `arguments` against the tool's `input_schema`
+  and returns an `Input validation error` `CallToolResult` on failure.
+  The checker covers it as a direct PyPI dependency; no checker change
+  needed.
