@@ -36,6 +36,7 @@ def test_project_dependencies_parsed():
     assert "pydantic" in deps
     assert "openhands-sdk" in deps
     assert "mcp" in deps
+    assert "jsonschema" in deps
     assert "pytest" in deps
 
 
