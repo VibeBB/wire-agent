@@ -44,6 +44,7 @@ src = ["src", "scripts", "tests"]
 [tool.ruff.format]
 # Family-canonical files are byte-identical across repos (formatted at 88).
 exclude = [
+  "plugins/*/hooks/scripts/require_records.py",
   "scripts/mutation_probe.py",
   "scripts/structural_coverage.py",
   "tests/test_mutation_probe.py",
