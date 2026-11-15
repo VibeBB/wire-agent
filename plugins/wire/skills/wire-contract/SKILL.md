@@ -1,7 +1,7 @@
 ---
 name: wire-contract
 description: Author a HarnessContract contract.json and its intake sidecar.
-version: 0.1.0
+version: 1.0.0
 license: BSD-3-Clause
 triggers:
   - harness contract
