@@ -1,7 +1,7 @@
 ---
 name: wire-gates
 description: Drive the deterministic harness gates to pass by repairing the contract.
-version: 0.1.0
+version: 1.0.0
 license: BSD-3-Clause
 triggers:
   - wire gates

@@ -1,7 +1,7 @@
 ---
 name: wire-connectivity
 description: Import connectivity and envelope contracts from sibling agents into a harness contract.
-version: 0.1.0
+version: 1.0.0
 license: BSD-3-Clause
 triggers:
   - import connectivity
