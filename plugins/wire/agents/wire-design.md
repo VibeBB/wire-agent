@@ -20,6 +20,12 @@ when_to_use_examples:
   - contract.json から製造投影を生成して全ゲートを通す
   - Run wire_author and fix the contract until verdict is pass
 hooks:
+  session_start:
+    - matcher: "*"
+      hooks:
+        - type: command
+          name: require-records
+          command: "p=$(for c in  \"${WIRE_PLUGIN_ROOT:-}\" \"${PLUGIN_ROOT:-}\" \"${OPENHANDS_PROJECT_DIR:-.}/plugins/wire\" \"${HOME:-}/.agents/plugins/wire\" \"${HOME:-}/.openhands/plugins/installed/wire\" \"${HOME:-}/plugins/installed/wire\" \"${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/wire\"; do [ -f \"$c/hooks/scripts/require_records.py\" ] && printf %s \"$c\" && break; done); [ -n \"$p\" ] || exit 0; exec python3 \"$p/hooks/scripts/require_records.py\" session-start"
   pre_tool_use:
     - matcher: file_editor|apply_patch|terminal
       hooks:
@@ -137,3 +143,11 @@ at most twice, then lets the session end and leaves the gaps in
 `records-status.json`. `wire_records_status` shows what is still owed;
 `wire_records_search` and `wire_records_digest` show what every sister
 thought.
+
+
+Use the native `session_id` supplied by your SessionStart record context for VRP
+writes. For an independent blind/tiebreak review, pass `primary_event_id` from
+the delegation brief; the writer binds it to the same image path and SHA-256.
+When delegating, provide only that opaque ID, the image identity and task facts;
+never disclose the earlier review prose. Each reviewer keeps its own native
+session ID, and the primary's session performs reconciliation.
