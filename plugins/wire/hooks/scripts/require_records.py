@@ -27,6 +27,9 @@ starts with them in context. Nothing here waits on another agent: only
 records that already exist are checked, so two plugins reading each
 other cannot deadlock.
 
+Delegated agents use ``record-context`` instead: native identity is exposed
+without recalling earlier review prose that could bias an independent review.
+
 The refusal is bounded by ``max_stop_denials`` per session so a model
 that cannot comply still terminates; the last verdict is written to
 ``<records_dir>/records-status.json`` either way. Hook errors never
@@ -59,6 +62,7 @@ from _records import (
     parse_time,
     recall,
     received,
+    review_primary,
     sha256_file,
     song_deliveries,
     tree_sha256,
@@ -117,24 +121,41 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
     )
 
 
-def session_start(payload: dict[str, Any], policy: dict[str, Any], root: Path) -> int:
+def _create_marker(
+    path: Path, payload: dict[str, Any], scope_origin: str
+) -> dict[str, Any]:
+    marker = {
+        "session_id": payload.get("session_id"),
+        "started_at": time.time(),
+        "denials": 0,
+        "scope_origin": scope_origin,
+    }
+    _write_json(path, marker)
+    return marker
+
+
+def session_start(
+    payload: dict[str, Any],
+    policy: dict[str, Any],
+    root: Path,
+    *,
+    include_recall: bool = True,
+) -> int:
     records_dir = root / str(policy["records_dir"])
     marker = _marker_path(records_dir, payload)
     if _read_marker(marker) is None:
-        _write_json(
-            marker,
-            {
-                "session_id": payload.get("session_id"),
-                "started_at": time.time(),
-                "denials": 0,
-                "scope_origin": "session_start",
-            },
+        _create_marker(marker, payload, "session_start")
+    briefing = recall(root, str(policy["plugin"])) if include_recall else ""
+    if payload.get("session_id"):
+        identity = json.dumps(payload["session_id"], ensure_ascii=False)
+        briefing = (
+            f"VRP record context: pass session_id={identity} to this plugin's record tools. "
+            "Use the delegated agent's own session context for its records.\n"
+            + briefing
         )
-    briefing = recall(root, str(policy["plugin"]))
     if briefing:
         print(json.dumps({"additionalContext": briefing}, ensure_ascii=False))
     return 0
-
 
 def _dual_review_problems(
     policy: dict[str, Any], logs: dict[str, list[dict[str, Any]]]
@@ -159,6 +180,10 @@ def _dual_review_problems(
             r
             for r in reviews
             if r.get("reviewer") == "blind"
+            and (
+                not primary.get("session_id")
+                or r.get("primary_event_id") == primary.get("event_id")
+            )
             and r.get("image_sha256") == digest
             and r.get("image_path") == image
         ]
@@ -222,6 +247,21 @@ def problems_for(
         kind: [r for r in items if _in_session(r, session_id, since)]
         for kind, items in logs.items()
     }
+    for review in logs["vision_review"]:
+        if review.get("reviewer") not in {"blind", "tiebreak"}:
+            continue
+        primary = review_primary(review, logs["vision_review"], root)
+        if (review.get("session_id") or review.get("primary_event_id")) and primary is None:
+            if review in session["vision_review"]:
+                session["vision_review"].remove(review)
+                problems.append("scoped independent review has no valid primary_event_id")
+            continue
+        if (
+            primary is not None
+            and _in_session(primary, session_id, since)
+            and review not in session["vision_review"]
+        ):
+            session["vision_review"].append(review)
 
     reviews = session["vision_review"]
     reviewed_events = {
@@ -332,10 +372,7 @@ def stop(payload: dict[str, Any], policy: dict[str, Any], root: Path) -> int:
     marker = _read_marker(marker_path)
     missing_marker = marker is None
     if marker is None:
-        session_start(payload, policy, root)
-        marker = _read_marker(marker_path) or {}
-        marker["scope_origin"] = "stop"
-        _write_json(marker_path, marker)
+        marker = _create_marker(marker_path, payload, "stop")
     since = float(marker.get("started_at") or 0.0)
     problems, warnings = problems_for(payload, policy, root, since)
     if missing_marker or marker.get("scope_origin") == "stop":
@@ -407,6 +444,8 @@ def main(argv: list[str]) -> int:
         root = _project_dir(payload)
         if mode in ("session-start", "SessionStart"):
             return session_start(payload, policy, root)
+        if mode == "record-context":
+            return session_start(payload, policy, root, include_recall=False)
         if mode in ("stop", "Stop"):
             return stop(payload, policy, root)
     except (OSError, ValueError, KeyError, TypeError) as exc:
