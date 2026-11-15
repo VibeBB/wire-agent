@@ -37,6 +37,13 @@ hooks:
         - type: command
           name: safety-rail
           command: 'p=$(for c in  "${WIRE_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/wire" "${HOME:-}/.agents/plugins/wire" "${HOME:-}/.openhands/plugins/installed/wire"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
+  stop:
+    - matcher: "*"
+      hooks:
+        - type: command
+          name: require-records
+          command: "p=$(for c in  \"${WIRE_PLUGIN_ROOT:-}\" \"${PLUGIN_ROOT:-}\" \"${OPENHANDS_PROJECT_DIR:-.}/plugins/wire\" \"${HOME:-}/.agents/plugins/wire\" \"${HOME:-}/.openhands/plugins/installed/wire\" \"${HOME:-}/plugins/installed/wire\" \"${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/wire\"; do [ -f \"$c/hooks/scripts/require_records.py\" ] && printf %s \"$c\" && break; done); [ -n \"$p\" ] || exit 0; exec python3 \"$p/hooks/scripts/require_records.py\" stop"
+
 permission_mode: never_confirm
 ---
 Inside OpenHands, wire commands run inside the pinned tools image via the

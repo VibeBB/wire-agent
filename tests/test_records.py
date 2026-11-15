@@ -1198,3 +1198,82 @@ def test_blind_round_cannot_consume_another_session_primary(
     status = json.loads(status_path.read_text(encoding="utf-8"))
     assert status["record_compliance"] == "pass"
     assert status["run_completion"] == status["acceptance"] == "unknown"
+
+
+def test_reconcile_rejects_same_session_secondary_from_another_primary(workspace: Path) -> None:
+    first = records.record_vision_review(_vision(session_id="first"))["record"]
+    other = records.record_vision_review(
+        _vision(session_id="second", impression=IMPRESSION_B + " W1.")
+    )["record"]
+    other_blind = records.record_vision_review(
+        _vision(
+            "blind",
+            session_id="first",
+            primary_event_id=other["event_id"],
+            impression=IMPRESSION_C + " W1.",
+        )
+    )["record"]
+    with pytest.raises(ValueError, match="session"):
+        records.record_reconcile(
+            {"reviews": [first["event_id"], other_blind["event_id"]], "session_id": "first"}
+        )
+    blind = records.record_vision_review(
+        _vision(
+            "blind",
+            session_id="third",
+            primary_event_id=first["event_id"],
+            impression=IMPRESSION_JA,
+        )
+    )["record"]
+    result = records.record_reconcile(
+        {"reviews": [first["event_id"], blind["event_id"]], "session_id": "first"}
+    )["record"]
+    assert result["round"] == 1
+    assert result["outcome"] == "agree"
+
+
+def test_delegated_primary_requires_coordinator_and_returns_round_to_caller(
+    workspace: Path,
+) -> None:
+    context_dir = workspace / "observations" / records.PLUGIN / ".sessions"
+    context_dir.mkdir(parents=True, exist_ok=True)
+    (context_dir / "primary.json").write_text(
+        json.dumps({"scope_origin": "record-context", "session_id": "primary"}), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="coordinator_session_id"):
+        records.record_vision_review(_vision(session_id="primary"))
+    primary = records.record_vision_review(
+        _vision(session_id="primary", coordinator_session_id="caller")
+    )["record"]
+    blind = records.record_vision_review(
+        _vision(
+            "blind",
+            session_id="blind",
+            primary_event_id=primary["event_id"],
+            impression=IMPRESSION_B + " W1.",
+        )
+    )["record"]
+    for caller in ("unrelated", None):
+        with pytest.raises(ValueError, match="session"):
+            records.record_reconcile(
+                {"reviews": [primary["event_id"], blind["event_id"]], "session_id": caller}
+            )
+    reconciliation = records.record_reconcile(
+        {"reviews": [primary["event_id"], blind["event_id"]], "session_id": "caller"}
+    )["record"]
+    assert reconciliation["session_id"] == "caller"
+    assert reconciliation["round"] == 1
+    assert reconciliation["outcome"] == "agree"
+
+
+@pytest.mark.parametrize("coordinator", ["", " caller", "primary", 42])
+def test_coordinator_needs_distinct_native_identity(workspace: Path, coordinator: Any) -> None:
+    with pytest.raises(ValueError):
+        records.record_vision_review(
+            _vision(session_id="primary", coordinator_session_id=coordinator)
+        )
+
+
+def test_legacy_primary_cannot_claim_coordinator(workspace: Path) -> None:
+    with pytest.raises(ValueError):
+        records.record_vision_review(_vision(coordinator_session_id="caller"))
