@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator
 from mcp import types
@@ -20,7 +21,7 @@ from mcp.server.lowlevel import NotificationOptions
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
-from . import __version__
+from . import __version__, _vrp
 from .contract import HarnessContract
 from .doctor import run_doctor
 from .liaison import RespondInput, inbox, respond
@@ -45,7 +46,7 @@ from .records import (
 )
 from .route_plan import ROUTE_PLAN_PNG
 from .standards import CONNECTOR_FAMILIES, WIRE_SPECS
-from .workspace import workspace_path
+from .workspace import workspace_path, workspace_root
 
 _SCHEMAS: dict[str, dict[str, Any]] = {
     "wire_record_decision": DecisionInput.model_json_schema(),
@@ -243,15 +244,21 @@ def _path_arg(value: str | None) -> str | None:
 _IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
 
-def image_content(path: Path) -> types.ImageContent | None:
-    """Attach a rendered image so vision models see it inline."""
+def image_content(path: Path, *, renderer: bool = False) -> types.ImageContent | None:
+    """Bind new renders to wire; a viewer preserves verified producer ancestry."""
     mime = _IMAGE_MIME.get(path.suffix.lower())
     if mime is None or not path.is_file():
         return None
+    blob = path.read_bytes()
     return types.ImageContent(
         type="image",
-        data=base64.b64encode(path.read_bytes()).decode("ascii"),
+        data=base64.b64encode(blob).decode("ascii"),
         mime_type=mime,
+        _meta=(
+            _vrp.rendered_image_metadata(path, blob, "wire")
+            if renderer
+            else _vrp.producer_image_metadata(path, blob, workspace_root())
+        ),
     )
 
 
@@ -509,7 +516,7 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         images: list[types.ContentBlock] = []
         shown: list[str] = []
         for raster in ("harness-diagram.png", ROUTE_PLAN_PNG):
-            image = image_content(Path(out_dir) / raster)
+            image = image_content(Path(out_dir) / raster, renderer=True)
             if image is not None:
                 images.append(image)
                 shown.append(str(Path(out_dir) / raster))
@@ -574,7 +581,7 @@ async def dispatch_tool(name: str, arguments: dict[str, Any]) -> list[types.Cont
         drawio_content: list[types.ContentBlock] = list(_text(result))
         emitted = result.get("path")
         if isinstance(emitted, str):
-            image = image_content(Path(emitted))
+            image = image_content(Path(emitted), renderer=True)
             if image is not None:
                 drawio_content.append(image)
         return drawio_content
@@ -606,17 +613,21 @@ async def call_tool(
             key = ".".join(str(part) for part in first.absolute_path)
             message = first.message if not key else f"'{key}': {first.message}"
             return types.CallToolResult(
-                content=[types.TextContent(type="text", text=f"Input validation error: {message}")],
+                content=_with_image_metadata(
+                    [types.TextContent(type="text", text=f"Input validation error: {message}")]
+                ),
                 is_error=True,
             )
     try:
         content = await dispatch_tool(name, arguments)
     except Exception as exc:
         return types.CallToolResult(
-            content=_text({"verdict": "fail", "detail": f"{name} error: {exc}"}),
+            content=_with_image_metadata(
+                _text({"verdict": "fail", "detail": f"{name} error: {exc}"})
+            ),
             is_error=True,
         )
-    return types.CallToolResult(content=content, is_error=False)
+    return types.CallToolResult(content=_with_image_metadata(content), is_error=False)
 
 
 server: Server = Server(f"wire-mcp/{__version__}", on_list_tools=list_tools, on_call_tool=call_tool)
@@ -646,6 +657,33 @@ async def _run() -> None:
 
 def main() -> None:
     asyncio.run(_run())
+
+
+def _with_image_metadata(content: Sequence[types.ContentBlock]) -> list[types.ContentBlock]:
+    """Keep producer identity in text because SDK image conversion can omit metadata."""
+    inline_images: list[dict[str, object]] = []
+    for block in content:
+        if not isinstance(block, types.ImageContent):
+            continue
+        identity: object = (block.meta or {}).get("vibebb_image_identity")
+        if not isinstance(identity, dict):
+            continue
+        claim = cast(dict[str, object], identity)
+        inline_images.append(
+            {
+                "path": claim.get("path"),
+                "sha256": claim.get("sha256"),
+                "attached": True,
+                "identity_status": "bound",
+                "image_identity": claim,
+            }
+        )
+    if not inline_images:
+        return list(content)
+    return [
+        *content,
+        types.TextContent(type="text", text=json.dumps({"inline_images": inline_images})),
+    ]
 
 
 if __name__ == "__main__":
