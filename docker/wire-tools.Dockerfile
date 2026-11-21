@@ -1,11 +1,11 @@
-ARG UV_VERSION=0.13.8
-ARG UV_DIGEST=sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85
+ARG UV_VERSION=0.13.9
+ARG UV_DIGEST=sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d
 FROM ghcr.io/astral-sh/uv:${UV_VERSION}@${UV_DIGEST} AS uv
 
 FROM debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG UV_VERSION=0.13.8
+ARG UV_VERSION=0.13.9
 ARG IMAGE_REVISION=unknown
 
 # Fail the build when the left side of a verification pipe (curl|sha256sum)
@@ -26,8 +26,8 @@ LABEL org.opencontainers.image.source="https://github.com/VibeBB/wire-agent" \
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-ARG DRAWIO_DESKTOP_VERSION=32.6.10
-ARG DRAWIO_DESKTOP_SHA256=fc96faafe68cb4e06c0b7116779891592b20fce2cde7907adec504f23c5af83c
+ARG DRAWIO_DESKTOP_VERSION=32.7.4
+ARG DRAWIO_DESKTOP_SHA256=ffd8c110f1df8cde26a7fbd801212bd8381d257879f424a2191ec4cc491aa50b
 
 # apt resilience: Acquire::Retries covers single fetches, not a mirror that
 # is down for minutes (archive.ubuntu.com outage killed several builds).
