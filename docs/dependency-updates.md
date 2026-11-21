@@ -4,6 +4,17 @@ This document records the pinned versions in use, where they come from, and
 the adoption decision for each. Update it in the same change that touches
 `pyproject.toml`, a workflow pin, or a new external source.
 
+## 2026-11-21 update (sdk 1.63.1, uv 0.13.9, actions v5.0.1/v2.6.0/v4.39.4/v2.23.0/v10.4.0)
+
+| Component | From -> to | Changelog review decision |
+| --- | --- | --- |
+| openhands-sdk / openhands-tools | 1.62.0 -> 1.63.1 | All PRs in `v1.62.0..v1.63.1` reviewed ([evaluation](research/sdk-v1.63.1-feature-evaluation.md)). Plugin-hook dedupe on double load, disabled-plugin cleanup on resume, parent secret sources into task sub-agents, image-loss rejection, MCP auto-negotiation, and the litellm 1.108.3 import fix adopted implicitly. Experimental-features/reactions/factories flags not adopted (no agent-server wiring). |
+| uv | 0.13.8 -> 0.13.9 | Adopted across `required-version`, Dockerfile ARG+digest, setup-uv `version:` input, THIRD_PARTY_NOTICES. |
+| GitHub Actions | harden-runner v2.23.0, setup-uv v10.4.0, codeql-action v4.39.4, dependency-review-action v5.0.1, scorecard-action v2.6.0 | Adopted as pin bumps; `EXPECTED` in `check_shared_workflows.py` refreshed from the canonical files. setup-uv `require-checksums` and scorecard `fail_on_publish_error` evaluated, not adopted. |
+| filelock override | `filelock>=4.2.1` -> dropped | litellm 1.108.3 (SDK constraint-dependencies pin) allows filelock<5; lock resolves 4.2.12. |
+| pydantic / ruff / transitive drift | -> 2.14.4 / 0.17.5-0.17.6 | Lock drift via `uv lock --upgrade`. |
+| drawio desktop | 32.6.10 -> 32.7.4 | Adopted; deb sha256 verified locally. |
+
 ## Runtime dependencies (pyproject.toml + uv.lock)
 
 | Package | Pin | Source | Decision |
