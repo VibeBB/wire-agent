@@ -168,6 +168,8 @@ the version changes. Merge it before pushing an unsigned version tag.
 `release.yml` verifies the public GHCR SHA candidate for the tagged commit
 or an ancestor with identical image inputs. The release ZIP contains the
 verified digest, and promotion still requires `production` approval.
+Only the release workflow may stage the verified lock in its temporary
+build checkout; it never commits that lock to the repository.
 
 `publish-wire-images.yml` builds and gates public SHA-tagged candidates
 without opening a lock PR. Its `dry_run` dispatch rehearses the build and
