@@ -9,7 +9,6 @@ on:
       - "GHCR tag retention"
       - "CodeQL"
       - "Container hardening audit"
-      - "Digest lock PR sweep"
       - "Dependency update check"
       - "Locked image check"
       - "PR branch cleanup"
@@ -19,9 +18,7 @@ on:
       - "Mutation probe"
     types: [completed]
     branches: [main]
-  # Runs dispatched with GITHUB_TOKEN (post-merge digest-lock verification)
-  # never emit a workflow_run event, so a scheduled reconcile closes failure
-  # issues whose workflow is already green on main.
+  # Reconcile issues whose workflow is already green on main.
   schedule:
     - cron: "53 */6 * * *"
   workflow_dispatch:

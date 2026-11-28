@@ -9,7 +9,9 @@ on:
       - ".github/workflows/release*.yml"
       - ".github/workflows/publish-wire-images.yml"
       - ".github/workflows/locked-image-check.yml"
+      - "scripts/bump_version.py"
       - "scripts/*release*.py"
+      - "tests/test_bump_version.py"
       - "tests/test_release*.py"
 
 permissions:
@@ -38,17 +40,21 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      attestations: read
     outputs:
       sha: ${{ steps.release.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
-      candidate: ${{ steps.release.outputs.candidate }}
+      source: ${{ steps.release.outputs.source }}
       image: ${{ steps.release.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify unsigned tag, version, and image lock
+      - name: Verify tag, version, and candidate image origin
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -107,6 +113,13 @@ jobs:
           cache-suffix: release
       - name: Sync dependencies
         run: uv sync --locked
+      - name: Stage the verified candidate lock
+        env:
+          CANDIDATE_SOURCE: ${{ needs.validate.outputs.source }}
+          IMAGE: ${{ needs.validate.outputs.image }}
+        run: python3 -m scripts.validate_release_candidate --write-locks .
+      - name: Smoke-test draw.io export on the verified candidate
+        run: python3 scripts/run_in_locked_image.py -- python3 scripts/check_drawio_export.py
       - name: Author example harness
         run: |
           mkdir -p dist/samples
@@ -137,6 +150,7 @@ jobs:
     timeout-minutes: 15
     environment: production
     permissions:
+      actions: read
       contents: write
       packages: write
       attestations: read
@@ -146,9 +160,11 @@ jobs:
           ref: ${{ needs.validate.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Recheck policy, pin, and Release availability
+      - name: Recheck policy, candidate, and Release availability
         env:
           GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SOURCE: ${{ needs.validate.outputs.source }}
+          IMAGE: ${{ needs.validate.outputs.image }}
         run: bash .github/scripts/validate_release.sh --publish-check
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -158,25 +174,23 @@ jobs:
       - name: Verify release ZIPs
         env:
           VERSION: ${{ needs.validate.outputs.version }}
+          CANDIDATE_SOURCE: ${{ needs.validate.outputs.source }}
+          IMAGE: ${{ needs.validate.outputs.image }}
         run: |
           (cd dist && sha256sum --strict --check checksums-sha256.txt)
+          expected=$(mktemp -d)
+          python3 -m scripts.validate_release_candidate --write-locks "$expected"
           unzip -p "dist/wire-plugin-v${VERSION}.zip" wire/skills/wire-workflow/tools-image.json \
-            | cmp - plugins/wire/skills/wire-workflow/tools-image.json
+            | cmp - "$expected/plugins/wire/skills/wire-workflow/tools-image.json"
       - name: Promote the verified candidate
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ needs.validate.outputs.image }}
-          CANDIDATE: ${{ needs.validate.outputs.candidate }}
         run: |
           digest=${IMAGE##*@}
           inspect() {
             docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}'
           }
-          test "$(inspect "$CANDIDATE")" = "$digest"
-          source=${CANDIDATE##*:}
-          gh attestation verify "oci://$IMAGE" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml" \
-            --source-digest "${source%-tools}"
           printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           package=${IMAGE%@*}
           docker buildx imagetools create --prefer-index=false \

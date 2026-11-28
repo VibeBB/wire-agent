@@ -164,49 +164,37 @@ Runtime policy surfaces that the plugin declares but the host executes:
   locally with the new version. This updates the plugin manifest, package,
   skill frontmatter, and lockfile. Open a PR for the version changes and
   merge it after the required checks and any required reviews.
-- Wait for the **Publish wire images** workflow on the bumped `main` and
-  merge its digest-lock PR before tagging. Confirm the candidate matches the
-  release inputs and that both lock files are present in the tagged commit.
-  From a verified `main` commit, push an unsigned `vX.Y.Z` tag matching
-  the version files. The repository may advance after the lock merge, but
-  image inputs must not change between the candidate build and the tag.
-- `release.yml` validates the tag, lock, and `production` settings before
-  running the verification, install smoke, and packaging jobs. Production
-  must have required reviewers, no administrator bypass, and only the
-  `v*` deployment tag policy. After approval, the workflow revalidates the
-  pin and ZIPs, promotes the pinned digest to the version tag and `:latest`,
-  and publishes the GitHub Release automatically. Tag releases in version
-  order; the workflow refuses to publish a tag older than another stable
-  tag rather than roll back `:latest`.
+- From a verified `main` commit, push an unsigned `vX.Y.Z` tag matching
+  the version files. No digest-lock PR is needed.
+- The tag workflow resolves the exact public SHA-tagged tools candidate or
+  an ancestor with identical image inputs. A candidate must carry
+  provenance from **Publish wire images** on `main`, issued after its
+  gates. If publication is still running, wait for it and use **Re-run
+  failed jobs**. If no eligible candidate exists, investigate the image
+  publish on `main`; the release does not fall back to `:latest`.
+- `release.yml` checks the tag, candidate provenance, and `production`
+  settings before verification, install smoke, and packaging. It writes
+  the verified digest into the plugin ZIP and uses it to build the sample
+  ZIP. Production must have reviewers, no administrator bypass, and only
+  the `v*` deployment tag policy. After approval, the workflow rechecks
+  the candidate and ZIPs, promotes the same digest, and publishes the
+  GitHub Release. Tag releases in version order: an older tag cannot roll
+  back `:latest`.
 - An existing GitHub Release blocks publication before GHCR promotion.
   If an interrupted run left an unpublished draft for the tag, delete the
   draft (even if it has partial assets), keep the tag, and choose **Re-run
   failed jobs**. If already published, do not change it or rerun the publish
   job: verify the assets and checksums, and publish a new patch if needed.
-- Docker image digests live in `docker/image-digests.json` and are written
-  only by the `publish-wire-images.yml` workflow; do not commit
-  placeholder entries. The same entry ships inside the plugin at
-  `plugins/wire/skills/wire-workflow/tools-image.json` (rewritten by the
-  same workflow) so an installed plugin resolves the pinned tools image
-  without the extension cache — `wire_launcher.py` checks
-  `<plugin>/tools-image.json`, then `<plugin>/skills/*/tools-image.json`,
-  then `docker/image-digests.json`.
-- `publish-wire-images.yml` builds and publishes `ghcr.io/<owner>/wire-tools`
-  on `workflow_dispatch` and on pushes to main that touch `docker/**`,
-  `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
-  project metadata, the publisher workflow, or the lock-update script
-  (excluding `docker/image-digests.json`, the plugin pin, and
-  `docker/README.md`), then opens the digest-lock pull request. Only the
-  public `<sha>-tools` tag is written; stable tags are not promoted here.
-  It attests the published image and records the attestation URL in both
-  lock entries (ADR-0008). Its checkout keeps `persist-credentials: true`
-  because the job pushes the lock-update branch. It accepts a `dry_run`
-  dispatch input that rehearses the publish: the tools image builds into
-  the local daemon and the Trivy gates, SBOM chain, measurements, and
-  smoke checks still run against it, but nothing is pushed, attested,
-  locked, or dispatched, and no SARIF reaches
-  code scanning. The run summary lists every skipped step.
-- `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
+- The release writes a fresh candidate lock into its build checkout and
+  the plugin ZIP. Source installs and the scheduled locked-image checks
+  still use the checked-in development pins. Install from the release ZIP
+  to use the tools digest selected for that version.
+- `publish-wire-images.yml` builds the public
+  `ghcr.io/vibebb/wire-tools:<sha>-tools` candidate on main image-input
+  changes and on manual dispatch from `main`. It does not push stable tags
+  or open a PR. Its PR and `dry_run` rehearsals run the build, Trivy,
+  SBOM, and smoke checks locally without publishing or attesting.
+- `locked-image-check.yml` (main pushes, weekly, and manual dispatch)
   validates the image lock, prewarms the pinned tools image through
   `wire_launcher.py`, runs `doctor` and the shipped authoring example, and
   verifies available provenance and SBOM attestations. Existing pins without
@@ -216,9 +204,7 @@ Runtime policy surfaces that the plugin declares but the host executes:
 ## CI
 
 - `ci.yml` runs on pushes to main, pull requests, merge groups,
-  `workflow_call`, and `workflow_dispatch`; see "Digest-lock PR
-  verification" for how the publisher triggers checks on the lock-update
-  branch. Jobs are verify
+  `workflow_call`, and `workflow_dispatch`. Jobs are verify
   (Python 3.12/3.13), plugin-load
   against the pinned SDK, and a container smoke check when the tools image
   changes. The e2e and dockerfile-lint jobs are gated on the `changes`
@@ -281,13 +267,16 @@ Three layers were adopted after a comparative evaluation of Lynis,
   CRITICAL/HIGH fixable vulnerabilities, secrets, and misconfiguration —
   a full JSON report first (always produced, even when the gate fails),
   then the gated SARIF scan (`exit-code 1`) uploaded to code scanning
-  (`category: trivy-wire-tools`). The digest-lock PR is opened only after
-  every gate passes; only the separate, approved tag release can promote
+  (`category: trivy-wire-tools`). The publisher attests provenance after
+  the gates pass; only the separate, approved tag release can promote
   that digest to a version tag and `:latest`. The action is SHA-pinned and
   `version:` is explicit — the
   March 2026 Trivy supply-chain compromise made both non-negotiable.
-- **Weekly audit** (`container-audit.yml`, Mondays 03:17 UTC): pulls the
-  pinned digest from `docker/image-digests.json`, re-scans with a fresh
+- **Weekly audit** (`container-audit.yml`, Mondays 03:17 UTC): resolves the
+  promoted `:latest` alias to a digest and verifies its build provenance
+  from the main-branch image publisher. It fails if the alias or provenance
+  is missing rather than falling back to the development lock. The audit
+  pulls and scans that immutable digest with a fresh
   vulnerability DB (new CVEs against the frozen image), runs the Docker
   CIS compliance report, runs an informational in-image Lynis 3.1.7
   audit (cloned at tag `3.1.7` then checked out detached at the pinned
@@ -369,30 +358,11 @@ workflows stay byte-identical to the family canon and are not modified
 locally). It observes network egress without blocking requests; per-run
 insights are available in the GitHub Actions job summary.
 
-## Digest-lock PR verification
+## Candidate image verification
 
-The publisher polls the authoritative required-check set for up to 15 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge.
-
-Check triggers on the lock branch are pull_request-primary: token-created
-`bot/update-image-digests-*` pull requests do fire `pull_request` runs
-in this repository, so the publisher polls `gh run list --event
-pull_request` for ~3 minutes (`PUBLISH_PIN_PR_RUN_WAIT_ATTEMPTS` ×
-`PUBLISH_PIN_PR_RUN_WAIT_SECONDS`) and then re-checks, per workflow,
-whether a pull_request run already covers the pin PR's head SHA before
-falling back to explicit `workflow_dispatch` of `ci.yml` and
-`workflow-lint.yml` — a dispatch of a run already covering the head is a
-duplicate and is skipped. On a dispatch `422 No ref found` the script
-re-checks the PR state: `MERGED`/`CLOSED` means the create→dispatch race
-resolved itself and is tolerated. After a successful merge the publisher
-(and the 6-hourly `digest-lock-sweep.yml` — which also backfills merges
-that landed via armed auto-merge after the publisher exited, since a
-token merge does not fire push workflows) dispatches `ci.yml`,
-`locked-image-check.yml`, and `workflow-lint.yml` on main for post-merge
-verification. `locked-image-check.yml` additionally runs on pull requests
-that touch `docker/image-digests.json` or the plugin tools pin, so its
-schema validation, attestation verification, image pull, smoke, and the
-candidate SHA-tag check all gate the pin PR itself. `:latest` can legitimately
-point at the previous release while a new candidate is pinned.
+The candidate's public SHA tag is only a locator. Release verifies its
+digest, source commit, and publisher workflow provenance before trusting it.
+Candidate publication never updates the checked-in development pins.
 
 SPDX generation prefers the GHCR registry source, writes temporary data under
 the runner's temporary directory, and disables file metadata. The publisher
@@ -431,15 +401,15 @@ intentional for the solo-maintainer bot-merge workflow and are recorded
 here so audits do not re-flag them:
 
 - Branch protection does not require approving reviews, code owners, or
-  "apply to administrators": automated merges of digest-lock and Devin PRs
+  "apply to administrators": automated merges of Devin PRs
   rely on the required checks, so required approvers would
   only add friction to a pipeline that already gates on the required-check
   set. OpenSSF Scorecard reports this as Branch-Protection 3 and
   Code-Review 0; that is the recorded trade-off, not an oversight.
 - The Dependency graph must stay enabled for `dependency-review.yml` to
   evaluate pull requests.
-- Before the first production release, check that the digest-lock PR can be opened,
-  the GHCR package grants this repository write access, and repository
+- Before the first production release, check that the GHCR package grants
+  this repository write access and repository
   artifact retention allows the release artifacts' 35-day retention.
   Only a version tag can trigger the build and install-smoke release path.
 

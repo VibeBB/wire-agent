@@ -5,13 +5,10 @@ on:
     - cron: "17 3 * * 1"
   push:
     branches: [main]
-    # Re-run the audit as soon as any of its inputs change instead of
-    # waiting up to a week for the cron; image-digests merges arrive via
-    # human pushes (bot merges dispatch this workflow explicitly).
+    # Re-run the audit on policy changes without waiting for the weekly cron.
     paths:
       - ".github/workflows/container-audit.yml"
       - ".trivyignore"
-      - "docker/image-digests.json"
       - "docker/lynis-container.prf"
       - "scripts/container_hardening_report.py"
   workflow_dispatch:
@@ -35,8 +32,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      # Pulls the pinned image from ghcr.io.
+      # Pulls the promoted image and verifies its stored build provenance.
       packages: read
+      attestations: read
       # Uploads the Trivy SARIF scan to code scanning.
       security-events: write
       # Creates, edits, and closes the "Container hardening report" issue.
@@ -54,29 +52,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Resolve and pull pinned image
+      - name: Resolve and verify the promoted tools image
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          ref=$(python3 - <<'PY'
-          import json
-          import re
-          import sys
-
-          data = json.load(open("docker/image-digests.json", encoding="utf-8"))
-          if not isinstance(data, dict):
-              sys.exit("image lock must be a JSON object")
-          entry = data.get("wire_tools")
-          if not isinstance(entry, dict):
-              sys.exit("image lock must contain a wire_tools object")
-          image = entry.get("image")
-          digest = entry.get("digest")
-          if image != "ghcr.io/vibebb/wire-tools":
-              sys.exit("wire_tools image does not match ghcr.io/vibebb/wire-tools")
-          if not isinstance(digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
-              sys.exit("wire_tools digest must be a sha256 digest")
-          print(f"{image}@{digest}")
-          PY
-          )
+          package=ghcr.io/vibebb/wire-tools
+          digest=$(docker buildx imagetools inspect "$package:latest" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ && "$digest" != "sha256:$(printf '%064d' 0)" ]]
+          ref="$package@$digest"
+          gh attestation verify "oci://$ref" --repo VibeBB/wire-agent \
+            --signer-workflow VibeBB/wire-agent/.github/workflows/publish-wire-images.yml \
+            --source-ref refs/heads/main --deny-self-hosted-runners
           echo "PINNED_IMAGE=$ref" >> "$GITHUB_ENV"
           retry() {
             local attempt
