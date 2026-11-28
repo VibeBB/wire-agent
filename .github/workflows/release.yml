@@ -117,6 +117,8 @@ jobs:
           CANDIDATE_SOURCE: ${{ needs.validate.outputs.source }}
           IMAGE: ${{ needs.validate.outputs.image }}
         run: python3 -m scripts.validate_release_candidate --write-locks .
+      - name: Smoke-test draw.io export on the verified candidate
+        run: python3 scripts/run_in_locked_image.py -- python3 scripts/check_drawio_export.py
       - name: Author example harness
         run: |
           mkdir -p dist/samples

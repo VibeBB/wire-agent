@@ -172,6 +172,17 @@ def test_release_promotion_is_tag_only_and_production_gated() -> None:
     assert "--draft" not in commands[release]
 
 
+def test_release_smoke_uses_the_staged_candidate_lock() -> None:
+    build = _load("release.yml")["jobs"]["build"]
+    commands = [step.get("run") or "" for step in build["steps"]]
+    lock = next(i for i, run in enumerate(commands) if "--write-locks" in run)
+    export = next(i for i, run in enumerate(commands) if "check_drawio_export.py" in run)
+    authoring = next(i for i, run in enumerate(commands) if "scripts/e2e_authoring.py" in run)
+    assert lock < export < authoring
+    assert "scripts/run_in_locked_image.py" in commands[export]
+    assert "scripts/run_in_locked_image.py" in commands[authoring]
+
+
 def test_publish_dispatch_is_limited_to_main_or_pr() -> None:
     data = _load("publish-wire-images.yml")
     job: dict[Any, Any] = data["jobs"]["publish"]
