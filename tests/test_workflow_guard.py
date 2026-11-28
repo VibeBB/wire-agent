@@ -2,8 +2,7 @@
 
 The defects it caught — a dead smoke-upload step whose hashFiles() could
 never see $RUNNER_TEMP, an imagetools invocation without --tag, a
-promote-by-tag that ran before the SARIF gate, and a pin-PR dispatch that
-duplicated pull_request runs — are all mechanically checkable, so they get
+promote-by-tag that ran before the SARIF gate — are mechanically checkable, so they get
 regression tests here instead of another audit.
 """
 
@@ -18,7 +17,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 WATCHER = "main-ci-failure-issue.yml"
-POST_MERGE_WORKFLOWS = {"ci.yml", "locked-image-check.yml", "workflow-lint.yml"}
 # Byte-identical across the family (check_shared_workflows.py); local
 # invariants cannot tighten them.
 SHARED_CANON = {
@@ -144,10 +142,13 @@ def test_candidate_workflow_never_promotes_latest() -> None:
             assert ":latest" not in tags, "build-push must push immutable tags only"
     assert all("imagetools create" not in (step.get("run") or "") for step in steps)
     gate = next(i for i, s in enumerate(steps) if s.get("name") == "Scan tools image (Trivy SARIF)")
-    lock = next(
-        i for i, s in enumerate(steps) if s.get("name") == "Update digest lock and merge PR"
+    attest = next(
+        i for i, s in enumerate(steps) if s.get("name") == "Attest tools image provenance"
     )
-    assert gate < lock, "only a gated candidate may be pinned"
+    smoke = next(i for i, s in enumerate(steps) if s.get("name") == "Verify published tools smoke")
+    assert gate < smoke < attest, "only a gated candidate may receive provenance"
+    assert all("gh pr " not in (step.get("run") or "") for step in steps)
+    assert "pull-requests" not in data["jobs"]["publish"]["permissions"]
 
 
 def test_release_promotion_is_tag_only_and_production_gated() -> None:
@@ -219,20 +220,6 @@ def test_every_upload_sarif_step_is_gated_by_hashfiles() -> None:
                 "upload-sarif without a hashFiles guard fails the run "
                 "when the scan produced no SARIF"
             )
-
-
-def test_pin_pr_post_merge_workflow_list_matches_the_publisher() -> None:
-    publish = (WORKFLOWS / "publish-wire-images.yml").read_text(encoding="utf-8")
-    sweep = (WORKFLOWS / "digest-lock-sweep.yml").read_text(encoding="utf-8")
-    helper = (ROOT / "scripts/publish_image_pin_pr.sh").read_text(encoding="utf-8")
-    sweep_script = (ROOT / "scripts/digest_lock_sweep.sh").read_text(encoding="utf-8")
-    for workflow in POST_MERGE_WORKFLOWS:
-        assert workflow in publish, f"publish does not dispatch {workflow} post-merge"
-        assert workflow in sweep, f"sweep does not dispatch {workflow} post-merge"
-    assert "ci.yml workflow-lint.yml" in helper, (
-        "the pin-PR dispatch set must cover ci.yml and workflow-lint.yml"
-    )
-    assert "SWEEP_POST_MERGE_WORKFLOWS" in sweep_script
 
 
 def test_locked_image_check_gates_pull_requests_on_the_lock_paths() -> None:

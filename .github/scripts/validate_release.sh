@@ -43,4 +43,4 @@ if [[ "${1:-}" == --publish-check ]]; then
   ' >/dev/null || fail "Cannot confirm there is no existing Release for $GITHUB_REF_NAME"
 fi
 
-python3 -m scripts.validate_release_candidate
+python3 -m scripts.validate_release_candidate "$@"

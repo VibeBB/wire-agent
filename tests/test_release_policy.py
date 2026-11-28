@@ -46,11 +46,12 @@ def tagged(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     _git(work, "init", "-b", "main")
     _git(work, "add", "-A")
     _git(work, "commit", "-m", "initial")
+    source = _git(work, "rev-parse", "HEAD")
     bare = tmp_path / "origin.git"
     _git(tmp_path, "init", "--bare", str(bare))
     _git(work, "remote", "add", "origin", str(bare))
     (work / "docker").mkdir()
-    entry = {"tag": f"{_git(work, 'rev-parse', 'HEAD')}-tools", "image": PACKAGE, "digest": DIGEST}
+    entry = {"tag": f"{source}-tools", "image": PACKAGE, "digest": DIGEST}
     (work / PIN).write_text(json.dumps(entry), encoding="utf-8")
     (work / LOCK).write_text(json.dumps({"wire_tools": entry}), encoding="utf-8")
     _git(work, "add", LOCK, PIN)
@@ -65,16 +66,36 @@ def tagged(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     gh.write_text(
         """#!/usr/bin/env bash
 set -eu
+attest="attestation verify oci://$IMAGE --repo VibeBB/wire-agent"
+attest+=" --signer-workflow VibeBB/wire-agent/.github/workflows/publish-wire-images.yml"
+attest+=" --signer-digest $STUB_SOURCE --source-digest $STUB_SOURCE"
+attest+=" --source-ref refs/heads/main --deny-self-hosted-runners"
 case "$*" in
   'api --paginate --slurp '*deployment-branch-policies*) printf '%s\n' "$POLICIES" ;;
   'api --paginate --slurp '*'/releases?'*) printf '%s\n' "$RELEASES" ;;
   'api '*'/environments/production') printf '%s\n' "$ENVIRONMENT" ;;
+  "$attest")
+    exit "${STUB_ATTEST_STATUS:-0}" ;;
   *) exit 1 ;;
 esac
 """,
         encoding="utf-8",
     )
     gh.chmod(0o755)
+    docker = bin_dir / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -eu
+candidate="ghcr.io/vibebb/wire-tools:$STUB_SOURCE-tools"
+if [[ "$*" == "buildx imagetools inspect $candidate --format {{.Manifest.Digest}}" ]]; then
+  printf '%s\n' "$STUB_DIGEST"
+else
+  exit 1
+fi
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
     env = {
         key: value
         for key, value in os.environ.items()
@@ -83,6 +104,10 @@ esac
     env.update(
         PATH=f"{bin_dir}:{env['PATH']}",
         GH_TOKEN="stub",
+        CANDIDATE_SOURCE=source,
+        IMAGE=f"{PACKAGE}@{DIGEST}",
+        STUB_SOURCE=source,
+        STUB_DIGEST=DIGEST,
         GITHUB_REPOSITORY="VibeBB/wire-agent",
         GITHUB_REF_NAME=TAG,
         GITHUB_REF=f"refs/tags/{TAG}",
@@ -125,6 +150,60 @@ def test_valid_unsigned_tag(tagged: tuple[Path, dict[str, str]], annotated: bool
     result = run(work, env, "--publish-check")
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"image={PACKAGE}@{DIGEST}" in Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
+
+
+def test_resolves_unchanged_ancestor_without_using_committed_pin(
+    tagged: tuple[Path, dict[str, str]],
+) -> None:
+    work, env = tagged
+    (work / PIN).write_text("{}", encoding="utf-8")
+    result = run(work, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"source={env['STUB_SOURCE']}" in Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
+
+
+def test_resolves_exact_candidate(tagged: tuple[Path, dict[str, str]]) -> None:
+    work, env = tagged
+    result = run(work, env | {"STUB_SOURCE": env["GITHUB_SHA"]})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"source={env['GITHUB_SHA']}" in Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"STUB_DIGEST": "sha256:" + "b" * 64}, "digest changed"),
+        ({"STUB_ATTEST_STATUS": "1"}, "Cannot validate release candidate"),
+    ],
+)
+def test_publish_rejects_changed_or_unattested_digest(
+    tagged: tuple[Path, dict[str, str]], change: dict[str, str], message: str
+) -> None:
+    work, env = tagged
+    result = run(work, env | change, "--publish-check")
+    assert result.returncode != 0
+    assert message in result.stdout
+
+
+def test_staged_locks_keep_the_verified_candidate(
+    tagged: tuple[Path, dict[str, str]],
+) -> None:
+    work, env = tagged
+    stage = work / "staging"
+    result = subprocess.run(
+        ["python3", "-m", "scripts.validate_release_candidate", "--write-locks", str(stage)],
+        cwd=work,
+        env=env,
+        check=False,
+        capture_output=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    plugin = json.loads((stage / PIN).read_text(encoding="utf-8"))
+    assert json.loads((stage / LOCK).read_text(encoding="utf-8")) == {"wire_tools": plugin}
+    assert plugin["image"] == PACKAGE
+    assert plugin["digest"] == DIGEST
+    assert plugin["tag"] == f"{env['STUB_SOURCE']}-tools"
 
 
 @pytest.mark.parametrize(
@@ -170,7 +249,6 @@ def test_remote_main_ancestry(tagged: tuple[Path, dict[str, str]]) -> None:
     ("path", "data", "message"),
     [
         ("src/changed.py", "# changed image input", "candidate image inputs differ"),
-        (PIN, "{}", "repository and plugin image pins must agree"),
         ("uv.lock", 'name = "wire-agent"\nversion = "1.2.4"\n', "release version files"),
     ],
 )
@@ -185,7 +263,7 @@ def test_changed_release_inputs(
     _git(work, "commit", "-m", "modify a release input")
     _git(work, "push", "origin", "main")
     move_tag(work, env)
-    result = run(work, env)
+    result = run(work, env, "--publish-check")
     assert result.returncode != 0
     assert message in result.stdout
 

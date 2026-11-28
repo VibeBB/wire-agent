@@ -163,29 +163,15 @@ changes go on separate PRs based on main.
 
 ## CI/CD
 
-Digest-lock PRs use `scripts/publish_image_pin_pr.sh`: checks on the lock
-branch are pull_request-primary — the publisher polls for
-`pull_request`-triggered runs for ~3 minutes and only falls back to
-dispatching `ci.yml` and `workflow-lint.yml` when none appear. It then
-polls the authoritative required-check set for up to 15 minutes. Non-required
-failures do not block publishing; a concluded required-check failure or a PR
-closed without merge fails the job. A PR merged externally triggers the
-existing post-merge main workflows. If required checks are still pending at
-the deadline, the publisher arms squash auto-merge with branch deletion and
-exits successfully.
-
 Run `uv run python scripts/bump_version.py X.Y.Z` locally and open a PR for
-the version changes. Merge it and the matching digest-lock PR before pushing
-an unsigned version tag. `release.yml` validates the tag and pin, and
-publishes only after `production` approval.
+the version changes. Merge it before pushing an unsigned version tag.
+`release.yml` verifies the public GHCR SHA candidate for the tagged commit
+or an ancestor with identical image inputs. The release ZIP contains the
+verified digest, and promotion still requires `production` approval.
 
-`publish-wire-images.yml` accepts a `dry_run` dispatch input that rehearses
-the publish: the image builds into the local daemon (`push: false`,
-`load: true`) and the Trivy gates, SBOM chain, measurements, and smoke
-checks still run against the local tag, but nothing is pushed,
-no attestation is stored, the digest-lock PR is not
-opened, no post-merge workflow is dispatched, and no SARIF reaches code
-scanning.
+`publish-wire-images.yml` builds and gates public SHA-tagged candidates
+without opening a lock PR. Its `dry_run` dispatch rehearses the build and
+gates locally without pushing, attesting, or uploading SARIF.
 
 SPDX SBOM generation prefers registry pulls (the local daemon under
 `dry_run`), uses runner temporary storage, and disables file metadata. The

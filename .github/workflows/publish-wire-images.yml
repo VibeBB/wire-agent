@@ -15,13 +15,9 @@ on:
       - "scripts/measure_image_tools.py"
       - "scripts/print_locked_image.py"
       - "scripts/pull_locked_image.py"
-      - "scripts/update_image_digest_lock.py"
       - ".github/workflows/publish-wire-images.yml"
-      - "scripts/publish_image_pin_pr.sh"
       - "scripts/package_level_sbom.py"
       - "!docker/image-digests.json"
-      # The plugin pin is written by this workflow itself; exclude it so a
-      # merged pin PR does not trigger another publish.
       - "!plugins/wire/skills/wire-workflow/tools-image.json"
       - "!docker/README.md"
   pull_request:
@@ -39,19 +35,15 @@ on:
       - "scripts/measure_image_tools.py"
       - "scripts/print_locked_image.py"
       - "scripts/pull_locked_image.py"
-      - "scripts/update_image_digest_lock.py"
       - ".github/workflows/publish-wire-images.yml"
-      - "scripts/publish_image_pin_pr.sh"
       - "scripts/package_level_sbom.py"
       - "!docker/image-digests.json"
-      # The plugin pin is written by this workflow itself; exclude it so a
-      # merged pin PR does not trigger another publish.
       - "!plugins/wire/skills/wire-workflow/tools-image.json"
       - "!docker/README.md"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Rehearse the publish: build and gate the image locally, but skip the registry push, attestations, SARIF upload, the digest-lock PR, and post-merge dispatches"
+        description: "Rehearse the publish locally without a registry push, attestations, or SARIF upload"
         required: false
         default: false
         type: boolean
@@ -72,14 +64,9 @@ jobs:
     # runs are the dry-run rehearsal — every irreversible step is gated off.
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
     permissions:
-      # Approves action_required pull_request runs on the lock branch.
-      actions: write
-      # Pushes the bot digest-lock branch.
-      contents: write
+      contents: read
       # Pushes the wire-tools image to ghcr.io.
       packages: write
-      # Opens and auto-merges the digest-lock pull request.
-      pull-requests: write
       id-token: write # OIDC for build-provenance attestation
       attestations: write # stores the attestation
       artifact-metadata: write # creates the attestation storage record
@@ -91,7 +78,7 @@ jobs:
           disable-telemetry: true
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: true
+          persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.14"
@@ -159,18 +146,6 @@ jobs:
             TOOLS_TAG="${GITHUB_SHA}-tools"
           fi
           printf 'TOOLS_REF=%s\nTOOLS_DIGEST=%s\nTOOLS_TAG=%s\n' "$TOOLS_REF" "${TOOLS_DIGEST:-${TOOLS_REF##*@}}" "$TOOLS_TAG" >> "$GITHUB_ENV"
-      # Attestation only needs the pushed digest: run it as a background
-      # step overlapping every post-build leg and join it before the
-      # digest-lock update that reads its attestation-url output.
-      - name: Attest tools image provenance
-        id: attest
-        if: (inputs.dry_run != true && github.event_name != 'pull_request')
-        background: true
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-name: ghcr.io/vibebb/wire-tools
-          subject-digest: ${{ steps.tools.outputs.digest }}
-          push-to-registry: true
       # Independent post-build legs run as a parallel group; the implicit
       # wait at the group end still lands the full JSON scan before the
       # SARIF gate, so the diagnostic report exists even when the gate
@@ -353,8 +328,6 @@ jobs:
             ${{ runner.temp }}/wire-smoke/**/design-report.json
             ${{ runner.temp }}/wire-smoke/**/design-report.md
           if-no-files-found: ignore
-      - name: Wait for provenance attestation
-        wait: attest
       - name: Record published image summary
         run: |
           {
@@ -365,83 +338,6 @@ jobs:
             echo "- **tools tag**: \`$TOOLS_TAG\`"
             echo "- **workflow run**: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Update digest lock and merge PR
-        # dry_run stops at the summary: no lock PR, no post-merge dispatches.
-        if: (inputs.dry_run != true && github.event_name != 'pull_request')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
-          SBOM_ATTESTATION_URL: ${{ steps.attest_sbom.outputs.attestation-url }}
-        run: |
-          set -euo pipefail
-          retry() {
-            # Transient GitHub API/server errors (HTTP 5xx, TLS resets,
-            # truncated responses) should not hard-fail a multi-minute
-            # publish: retry gh/git calls with backoff before giving up.
-            local attempt
-            for attempt in 1 2 3 4 5; do
-              "$@" && return 0
-              sleep $((attempt * 10))
-            done
-            return 1
-          }
-          published_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          workflow_run="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          # The lock branch starts from the current main tip, not from the published
-          # source commit, so the PR stays mergeable when main moved during the build.
-          git fetch -q origin main
-          base_sha=$(git rev-parse origin/main)
-          branch="bot/update-image-digests-${TOOLS_DIGEST#sha256:}"
-          branch="${branch:0:70}"
-          git switch -q -c "$branch" "$base_sha"
-          uv run python scripts/update_image_digest_lock.py --lock docker/image-digests.json \
-            --entry wire_tools --image "ghcr.io/${IMAGE_OWNER}/wire-tools" \
-            --tag "$TOOLS_TAG" --digest "$TOOLS_DIGEST" --published-at "$published_at" \
-            --attestation "$ATTESTATION_URL" \
-            --sbom-attestation "$SBOM_ATTESTATION_URL" \
-            --workflow-run "$workflow_run" --dockerfile docker/wire-tools.Dockerfile \
-            --tools-json "$RUNNER_TEMP/wire-tools.json"
-          # Ship the same pin inside the plugin so an installed plugin can
-          # resolve the tools image without the extension cache (the
-          # launcher reads <plugin>/skills/*/tools-image.json first).
-          python3 - <<'PY'
-          import json
-
-          entry = json.load(open("docker/image-digests.json"))["wire_tools"]
-          pin = "plugins/wire/skills/wire-workflow/tools-image.json"
-          with open(pin, "w", encoding="utf-8") as out:
-              json.dump(entry, out, indent=2)
-              out.write("\n")
-          PY
-          # status --porcelain (not diff --quiet) so a still-untracked lock
-          # file on the very first publish is detected as a change too.
-          if [ -z "$(git status --porcelain -- docker/image-digests.json plugins/wire/skills/wire-workflow/tools-image.json)" ]; then
-            echo "Image digest lock is unchanged; no pull request is needed."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docker/image-digests.json plugins/wire/skills/wire-workflow/tools-image.json
-          git commit -m "Update wire image digest lock"
-          retry git push --set-upstream origin "$branch"
-          body=$(printf '%s\n' \
-            "The publish workflow updated the wire image digest lock." \
-            "" \
-            "tools: ${TOOLS_REF}" \
-            "workflow run: ${workflow_run}")
-          # A stale bot PR from an earlier publish is superseded by this
-          # run's digest: close it and delete its branch so it cannot
-          # linger for manual review.
-          for old_pr in $(retry gh pr list --repo "$GITHUB_REPOSITORY" --state open \
-            --json number,headRefName --jq '.[] | select(.headRefName | startswith("bot/update")) | .number' || true); do
-            retry gh pr close "$old_pr" --repo "$GITHUB_REPOSITORY" \
-              --comment "Superseded by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-              --delete-branch || true
-          done
-          pr_url=$(retry gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
-            --title "Update wire image digest lock" --body "$body")
-          echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
-          bash scripts/publish_image_pin_pr.sh "$pr_url" "$branch" "" "ci.yml locked-image-check.yml workflow-lint.yml"
       - name: Upload Trivy SARIF
         # A rehearsal must not file code-scanning alerts.
         if: always() && (inputs.dry_run != true && github.event_name != 'pull_request') && hashFiles('trivy-image.sarif') != ''
@@ -449,6 +345,13 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-wire-tools
+      - name: Attest tools image provenance
+        if: (inputs.dry_run != true && github.event_name != 'pull_request')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/vibebb/wire-tools
+          subject-digest: ${{ steps.tools.outputs.digest }}
+          push-to-registry: true
       - name: Note dry-run skips
         if: (inputs.dry_run == true || github.event_name == 'pull_request')
         run: |
@@ -459,5 +362,4 @@ jobs:
             echo "- registry push of the tools image tag"
             echo "- SARIF upload to code scanning"
             echo "- provenance and SBOM attestations"
-            echo "- digest-lock pull request and post-merge dispatches"
           } >> "$GITHUB_STEP_SUMMARY"
