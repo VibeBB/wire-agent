@@ -66,31 +66,8 @@ def verify_source(root: Path, sha: str, source: str) -> None:
         raise ValueError("candidate image inputs differ from the tagged commit")
 
 
-def validate(
-    root: Path, tag: str, expected_source: str | None = None, expected_image: str | None = None
-) -> dict[str, str]:
-    tagged_version = version_tuple(tag)
-    version = current_version(root)
-    uv = UV_LOCK_RE.search((root / UV_LOCK).read_text(encoding="utf-8"))
-    if tagged_version is None or tag != f"v{version}" or uv is None or uv[2] != version:
-        raise ValueError("tag does not match the release version files")
-    tags = git(root, "tag", "--list", "v*").splitlines()
-    if any(value > tagged_version for other in tags if (value := version_tuple(other))):
-        raise ValueError("a newer stable tag exists; refusing to roll back :latest")
-
-    sha = git(root, "rev-parse", "HEAD")
-    source = expected_source if expected_source is not None else sha
-    verify_source(root, sha, source)
-    try:
-        digest = inspect(root, source)
-    except subprocess.CalledProcessError:
-        if expected_source is not None:
-            raise
-        source = git(root, "log", "--first-parent", "-1", "--format=%H", sha, "--", *INPUTS)
-        if source == sha:
-            raise
-        verify_source(root, sha, source)
-        digest = inspect(root, source)
+def verify_candidate(root: Path, source: str, expected_image: str | None = None) -> str:
+    digest = inspect(root, source)
     if not DIGEST_RE.fullmatch(digest) or digest == f"sha256:{'0' * 64}":
         raise ValueError("invalid wire image digest")
     image = f"{PACKAGE}@{digest}"
@@ -117,6 +94,39 @@ def validate(
         cwd=root,
         check=True,
     )
+    return image
+
+
+def resolve_candidate(root: Path, sha: str) -> tuple[str, str]:
+    for source in git(root, "rev-list", "--first-parent", sha).splitlines():
+        if git(root, "diff", "--no-ext-diff", "--name-only", source, sha, "--", *INPUTS):
+            break
+        try:
+            return source, verify_candidate(root, source)
+        except (ValueError, subprocess.CalledProcessError) as exc:
+            print(f"Candidate {source} could not be verified: {exc}", file=sys.stderr)
+    raise ValueError("no provenance-verified candidate found with unchanged image inputs")
+
+
+def validate(
+    root: Path, tag: str, expected_source: str | None = None, expected_image: str | None = None
+) -> dict[str, str]:
+    tagged_version = version_tuple(tag)
+    version = current_version(root)
+    uv = UV_LOCK_RE.search((root / UV_LOCK).read_text(encoding="utf-8"))
+    if tagged_version is None or tag != f"v{version}" or uv is None or uv[2] != version:
+        raise ValueError("tag does not match the release version files")
+    tags = git(root, "tag", "--list", "v*").splitlines()
+    if any(value > tagged_version for other in tags if (value := version_tuple(other))):
+        raise ValueError("a newer stable tag exists; refusing to roll back :latest")
+
+    sha = git(root, "rev-parse", "HEAD")
+    if expected_source is None:
+        source, image = resolve_candidate(root, sha)
+    else:
+        source = expected_source
+        verify_source(root, sha, source)
+        image = verify_candidate(root, source, expected_image)
     return {
         "sha": sha,
         "version": version,

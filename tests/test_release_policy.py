@@ -87,7 +87,9 @@ esac
         """#!/usr/bin/env bash
 set -eu
 candidate="ghcr.io/vibebb/wire-tools:$STUB_SOURCE-tools"
-if [[ "$*" == "buildx imagetools inspect $candidate --format {{.Manifest.Digest}}" ]]; then
+unattested="ghcr.io/vibebb/wire-tools:${STUB_UNATTESTED_SOURCE:-}-tools"
+if [[ "$*" == "buildx imagetools inspect $candidate --format {{.Manifest.Digest}}" ||
+      "$*" == "buildx imagetools inspect $unattested --format {{.Manifest.Digest}}" ]]; then
   printf '%s\n' "$STUB_DIGEST"
 else
   exit 1
@@ -167,6 +169,32 @@ def test_resolves_exact_candidate(tagged: tuple[Path, dict[str, str]]) -> None:
     result = run(work, env | {"STUB_SOURCE": env["GITHUB_SHA"]})
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"source={env['GITHUB_SHA']}" in Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
+
+
+def test_unattested_exact_image_falls_back_to_attested_intermediate_ancestor(
+    tagged: tuple[Path, dict[str, str]],
+) -> None:
+    work, env = tagged
+    intermediate = env["GITHUB_SHA"]
+    _git(work, "commit", "--allow-empty", "-m", "docs only")
+    _git(work, "push", "origin", "main")
+    move_tag(work, env)
+    result = run(
+        work, env | {"STUB_SOURCE": intermediate, "STUB_UNATTESTED_SOURCE": env["GITHUB_SHA"]}
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"Candidate {env['GITHUB_SHA']} could not be verified" in result.stderr
+    assert f"source={intermediate}" in Path(env["GITHUB_OUTPUT"]).read_text(encoding="utf-8")
+
+
+def test_no_provenance_verified_candidate_fails_closed(
+    tagged: tuple[Path, dict[str, str]],
+) -> None:
+    work, env = tagged
+    result = run(work, env | {"STUB_ATTEST_STATUS": "1"})
+    assert result.returncode != 0
+    assert "no provenance-verified candidate found with unchanged image inputs" in result.stdout
+    assert not Path(env["GITHUB_OUTPUT"]).exists()
 
 
 @pytest.mark.parametrize(
