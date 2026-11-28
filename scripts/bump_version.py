@@ -121,8 +121,8 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root)
     try:
         current = current_version(root)
-        requested = args.version or args.set_version
-        if requested:
+        requested = args.version if args.version is not None else args.set_version
+        if requested is not None:
             new = requested.lstrip("v")
             if not SEMVER_RE.fullmatch(new):
                 raise BumpError(f"--set '{new}' is not X.Y.Z")

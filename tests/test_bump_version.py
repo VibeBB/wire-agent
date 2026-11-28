@@ -109,6 +109,15 @@ def test_set_rejects_leading_zeroes(tmp_path: Path, version: str) -> None:
     assert _versions(root) == ["0.1.0"] * 7
 
 
+@pytest.mark.parametrize("option", [(), ("--set",)])
+def test_set_rejects_empty(tmp_path: Path, option: tuple[str, ...]) -> None:
+    root = _make_repo(tmp_path)
+    proc = _run(*option, "", "--root", str(root))
+    assert proc.returncode == 1
+    assert "is not X.Y.Z" in proc.stderr
+    assert _versions(root) == ["0.1.0"] * 7
+
+
 def test_set_rejects_lower(tmp_path: Path) -> None:
     root = _make_repo(tmp_path)
     proc = _run("--set", "0.1.0", "--root", str(root))
