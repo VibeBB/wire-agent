@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from test_release_bump import REPO_ROOT, _git, make_release_repo  # pyright: ignore[reportPrivateUsage]
+from test_bump_version import REPO_ROOT, _make_repo  # pyright: ignore[reportPrivateUsage]
 
 PIN = "plugins/wire/skills/wire-workflow/tools-image.json"
 LOCK = "docker/image-digests.json"
@@ -16,10 +17,38 @@ PACKAGE = "ghcr.io/vibebb/wire-tools"
 TAG = "v1.2.3"
 
 
+def _git(repo: Path, *args: str) -> str:
+    proc = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return proc.stdout.strip()
+
+
 @pytest.fixture
 def tagged(tmp_path: Path) -> tuple[Path, dict[str, str]]:
-    work, _, env, _ = make_release_repo(tmp_path)
+    work = _make_repo(tmp_path / "work", TAG[1:])
+    (work / "scripts").mkdir()
+    shutil.copy(REPO_ROOT / "scripts/bump_version.py", work / "scripts")
     shutil.copy(REPO_ROOT / "scripts/validate_release_candidate.py", work / "scripts")
+    _git(work, "init", "-b", "main")
+    _git(work, "add", "-A")
+    _git(work, "commit", "-m", "initial")
+    bare = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", str(bare))
+    _git(work, "remote", "add", "origin", str(bare))
     (work / "docker").mkdir()
     entry = {"tag": f"{_git(work, 'rev-parse', 'HEAD')}-tools", "image": PACKAGE, "digest": DIGEST}
     (work / PIN).write_text(json.dumps(entry), encoding="utf-8")
@@ -30,7 +59,9 @@ def tagged(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     _git(work, "-c", "tag.gpgSign=false", "tag", TAG)
     event = work / "event.json"
     event.write_text('{"deleted":false}', encoding="utf-8")
-    gh = Path(env["PATH"].split(":")[0]) / "gh"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    gh = bin_dir / "gh"
     gh.write_text(
         """#!/usr/bin/env bash
 set -eu
@@ -43,7 +74,16 @@ esac
 """,
         encoding="utf-8",
     )
+    gh.chmod(0o755)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "BASH_ENV" and not key.startswith("BASH_FUNC_gh")
+    }
     env.update(
+        PATH=f"{bin_dir}:{env['PATH']}",
+        GH_TOKEN="stub",
+        GITHUB_REPOSITORY="VibeBB/wire-agent",
         GITHUB_REF_NAME=TAG,
         GITHUB_REF=f"refs/tags/{TAG}",
         GITHUB_SHA=_git(work, "rev-parse", "HEAD"),

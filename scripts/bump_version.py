@@ -106,6 +106,7 @@ def _apply(root: Path, old: str, new: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("version", nargs="?", metavar="X.Y.Z")
     group.add_argument("--bump", choices=["patch", "minor", "major"])
     group.add_argument("--set", dest="set_version", metavar="X.Y.Z")
     parser.add_argument("--dry-run", action="store_true")
@@ -120,8 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root)
     try:
         current = current_version(root)
-        if args.set_version:
-            new = args.set_version.lstrip("v")
+        requested = args.version if args.version is not None else args.set_version
+        if requested is not None:
+            new = requested.lstrip("v")
             if not SEMVER_RE.fullmatch(new):
                 raise BumpError(f"--set '{new}' is not X.Y.Z")
             if not _gt(new, current):

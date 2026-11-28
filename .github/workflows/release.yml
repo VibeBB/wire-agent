@@ -10,7 +10,6 @@ on:
       - ".github/workflows/publish-wire-images.yml"
       - ".github/workflows/locked-image-check.yml"
       - "scripts/*release*.py"
-      - "scripts/release_bump.sh"
       - "tests/test_release*.py"
 
 permissions:
@@ -32,8 +31,8 @@ jobs:
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.14"
-      - run: shellcheck .github/scripts/validate_release.sh scripts/release_bump.sh
-      - run: uv run --locked pytest -n 0 tests/test_release_policy.py tests/test_release_bump.py
+      - run: shellcheck .github/scripts/validate_release.sh
+      - run: uv run --locked pytest -n 0 tests/test_release_policy.py tests/test_bump_version.py
 
   validate:
     if: github.event_name == 'push'
