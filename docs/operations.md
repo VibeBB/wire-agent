@@ -156,12 +156,10 @@ Runtime policy surfaces that the plugin declares but the host executes:
 
 ## Releases
 
-- Versions follow semver; `plugin.json`, `pyproject.toml`, and the skill
-  version strings are bumped together by `scripts/bump_version.py`.
-- Run **Release bump PR** on `main`. Its `dry_run` option checks version
-  arithmetic and tag availability only. A live run opens a bump PR; it
-  neither pushes to `main` nor merges, tags, or publishes. Approve any
-  held PR workflow runs and merge the bump PR after the required checks.
+- On a branch from `main`, run `uv run python scripts/bump_version.py X.Y.Z`
+  locally with the new version. This updates the plugin manifest, package,
+  skill frontmatter, and lockfile. Open a PR for the version changes and
+  merge it after the required checks and any required reviews.
 - Wait for the **Publish wire images** workflow on the bumped `main` and
   merge its digest-lock PR before tagging. Confirm the candidate matches the
   release inputs and that both lock files are present in the tagged commit.
@@ -429,18 +427,17 @@ intentional for the solo-maintainer bot-merge workflow and are recorded
 here so audits do not re-flag them:
 
 - Branch protection does not require approving reviews, code owners, or
-  "apply to administrators": every merge is performed by automation
-  (digest-lock, version-bump, and Devin PRs), so required approvers would
+  "apply to administrators": automated merges of digest-lock and Devin PRs
+  rely on the required checks, so required approvers would
   only add friction to a pipeline that already gates on the required-check
   set. OpenSSF Scorecard reports this as Branch-Protection 3 and
   Code-Review 0; that is the recorded trade-off, not an oversight.
 - The Dependency graph must stay enabled for `dependency-review.yml` to
   evaluate pull requests.
-- Before the first production release, check that Actions can open bump PRs,
+- Before the first production release, check that the digest-lock PR can be opened,
   the GHCR package grants this repository write access, and repository
   artifact retention allows the release artifacts' 35-day retention.
-  Rehearse the bump calculation with **Release bump PR** and `dry_run=true`;
-  only a version tag can trigger the build and install-smoke release path.
+  Only a version tag can trigger the build and install-smoke release path.
 
 ## Dependency update sweep procedure
 

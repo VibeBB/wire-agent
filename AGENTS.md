@@ -174,14 +174,10 @@ existing post-merge main workflows. If required checks are still pending at
 the deadline, the publisher arms squash auto-merge with branch deletion and
 exits successfully.
 
-The release bump-version state machine lives in `scripts/release_bump.sh`
-(the workflow step is a thin wrapper) and is covered by
-`tests/test_release_bump.py`, which exercises it against a stubbed `gh` and
-local git remotes. `release-bump.yml` opens a PR only; its `dry_run` input
-checks the next version and tag availability without writing. Merge the
-bump PR and the matching digest-lock PR before pushing an unsigned version
-tag. `release.yml` validates the tag and pin, and publishes only after
-`production` approval.
+Run `uv run python scripts/bump_version.py X.Y.Z` locally and open a PR for
+the version changes. Merge it and the matching digest-lock PR before pushing
+an unsigned version tag. `release.yml` validates the tag and pin, and
+publishes only after `production` approval.
 
 `publish-wire-images.yml` accepts a `dry_run` dispatch input that rehearses
 the publish: the image builds into the local daemon (`push: false`,
