@@ -3,6 +3,7 @@
 #
 # A package version is an orphan when ALL of these hold:
 #   - it carries a tag matching ^[0-9a-f]{40}-tools$ (a publish-time sha tag)
+#   - it carries no other kind of tag (deletion removes the entire version)
 #   - it is older than GHCR_PRUNE_MIN_AGE_DAYS (default: 14 days)
 #   - its digest is not the digest pinned in the image lock file
 #   - it has no stored build-provenance attestation (a gated, attested
@@ -57,16 +58,23 @@ kept=0
 while IFS=$'\t' read -r id digest created_at tags_csv; do
   [ -n "$id" ] || continue
   sha_tag=""
+  curated=false
   IFS=',' read -ra tags <<< "$tags_csv"
   for tag in "${tags[@]}"; do
     if [[ "$tag" =~ ^[0-9a-f]{40}-tools$ ]]; then
       sha_tag=$tag
-      break
+    else
+      curated=true
     fi
   done
   # Only publish-time <sha>-tools tags are candidates; latest and other
   # curated tags are never touched.
   [ -n "$sha_tag" ] || continue
+  if [ "$curated" = true ]; then
+    summary "keep $sha_tag (shares a version with a curated tag)"
+    kept=$((kept + 1))
+    continue
+  fi
   if [ "$digest" = "$lock_digest" ]; then
     summary "keep $sha_tag (pinned by $LOCK_FILE)"
     kept=$((kept + 1))

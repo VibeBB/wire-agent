@@ -1,0 +1,59 @@
+name: Release bump PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump kind"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      version:
+        description: "Explicit X.Y.Z override; leave empty to bump"
+        required: false
+        type: string
+      dry_run:
+        description: "Check the next version without writing any files or opening a PR"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-bump
+  cancel-in-progress: false
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # pushes the bump branch only
+      pull-requests: write # opens the bump PR
+    steps:
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+          disable-telemetry: true
+      - name: Require main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          test "$REF" = "refs/heads/main"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bump version files
+        env:
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: credential.helper
+          GIT_CONFIG_VALUE_0: "!gh auth git-credential"
+        run: bash scripts/release_bump.sh

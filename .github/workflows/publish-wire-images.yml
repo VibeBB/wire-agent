@@ -51,7 +51,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Rehearse the publish: build and gate the image locally, but skip the registry push, :latest promotion, attestations, SARIF upload, the digest-lock PR, and post-merge dispatches"
+        description: "Rehearse the publish: build and gate the image locally, but skip the registry push, attestations, SARIF upload, the digest-lock PR, and post-merge dispatches"
         required: false
         default: false
         type: boolean
@@ -129,9 +129,7 @@ jobs:
           # below; nothing reaches the registry.
           push: ${{ (inputs.dry_run != true && github.event_name != 'pull_request') }}
           load: ${{ (inputs.dry_run == true || github.event_name == 'pull_request') }}
-          # Only the immutable per-sha tag is pushed at build time; the
-          # mutable :latest tag is promoted after every gate below passes,
-          # so a failed scan never serves a new :latest.
+          # Only the per-SHA candidate is pushed here.
           tags: |
             ghcr.io/${{ env.IMAGE_OWNER }}/wire-tools:${{ github.sha }}-tools
           cache-from: type=gha
@@ -367,16 +365,6 @@ jobs:
             echo "- **tools tag**: \`$TOOLS_TAG\`"
             echo "- **workflow run**: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Promote :latest
-        # Every gate above passed: point the mutable tag at the attested
-        # digest. imagetools create copies the manifest server-side — no
-        # re-push — so the provenance and SBOM attestations keep
-        # referencing the same digest.
-        if: (inputs.dry_run != true && github.event_name != 'pull_request')
-        run: |
-          docker buildx imagetools create \
-            --tag "ghcr.io/${IMAGE_OWNER}/wire-tools:latest" \
-            "$TOOLS_REF"
       - name: Update digest lock and merge PR
         # dry_run stops at the summary: no lock PR, no post-merge dispatches.
         if: (inputs.dry_run != true && github.event_name != 'pull_request')
@@ -471,6 +459,5 @@ jobs:
             echo "- registry push of the tools image tag"
             echo "- SARIF upload to code scanning"
             echo "- provenance and SBOM attestations"
-            echo "- :latest promotion"
             echo "- digest-lock pull request and post-merge dispatches"
           } >> "$GITHUB_STEP_SUMMARY"

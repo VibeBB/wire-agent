@@ -177,15 +177,17 @@ exits successfully.
 The release bump-version state machine lives in `scripts/release_bump.sh`
 (the workflow step is a thin wrapper) and is covered by
 `tests/test_release_bump.py`, which exercises it against a stubbed `gh` and
-local git remotes. `release.yml`'s `dry_run` input rehearses the release:
-version arithmetic and tag checks run and downstream jobs still execute,
-but nothing is committed, pushed, tagged, or released.
+local git remotes. `release-bump.yml` opens a PR only; its `dry_run` input
+checks the next version and tag availability without writing. Merge the
+bump PR and the matching digest-lock PR before pushing an unsigned version
+tag. `release.yml` validates the tag and pin, and publishes only after
+`production` approval.
 
 `publish-wire-images.yml` accepts a `dry_run` dispatch input that rehearses
 the publish: the image builds into the local daemon (`push: false`,
 `load: true`) and the Trivy gates, SBOM chain, measurements, and smoke
-checks still run against the local tag, but nothing is pushed, `:latest`
-is not promoted, no attestation is stored, the digest-lock PR is not
+checks still run against the local tag, but nothing is pushed,
+no attestation is stored, the digest-lock PR is not
 opened, no post-merge workflow is dispatched, and no SARIF reaches code
 scanning.
 

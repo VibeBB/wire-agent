@@ -5,3 +5,4 @@ __pycache__
 out/
 docs/
 tests/
+plugins/wire/skills/wire-workflow/tools-image.json

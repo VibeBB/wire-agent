@@ -14,7 +14,7 @@ on:
       - "Locked image check"
       - "PR branch cleanup"
       - "Publish wire images"
-      - "Release"
+      - "Release bump PR"
       - "Scorecard"
       - "Workflow lint"
       - "Mutation probe"

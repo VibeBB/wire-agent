@@ -1,82 +1,68 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: "Version bump kind"
-        required: false
-        default: patch
-        type: choice
-        options: [patch, minor, major]
-      version:
-        description: "Explicit X.Y.Z override; leave empty to bump"
-        required: false
-        type: string
-      dry_run:
-        description: "Rehearse the release: validate version arithmetic and run the downstream verify/install-smoke/build jobs against HEAD without committing, pushing, tagging, or releasing"
-        required: false
-        default: false
-        type: boolean
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/scripts/validate_release.sh"
+      - ".github/workflows/release*.yml"
+      - ".github/workflows/publish-wire-images.yml"
+      - ".github/workflows/locked-image-check.yml"
+      - "scripts/*release*.py"
+      - "scripts/release_bump.sh"
+      - "tests/test_release*.py"
 
 permissions:
   contents: read
 
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  bump-version:
+  test-policy:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
-    # Covers the slow path: direct-push rejection → bump PR + dispatched
-    # checks + merge wait.
-    timeout-minutes: 45
-    permissions:
-      # Approves action_required runs on the version-bump branch.
-      actions: write
-      # Pushes the version bump, directly or via a bot branch.
-      contents: write
-      # Opens and auto-merges the version-bump pull request.
-      pull-requests: write
-    outputs:
-      version: ${{ steps.bump.outputs.version }}
-      tag: ${{ steps.bump.outputs.tag }}
-      sha: ${{ steps.bump.outputs.sha }}
+    timeout-minutes: 10
     steps:
-      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          egress-policy: audit
-          disable-telemetry: true
-      - name: Require main
-        env:
-          REF: ${{ github.ref }}
-        run: |
-          test "$REF" = "refs/heads/main"
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: "3.14"
+      - run: shellcheck .github/scripts/validate_release.sh scripts/release_bump.sh
+      - run: uv run --locked pytest -n 0 tests/test_release_policy.py tests/test_release_bump.py
+
+  validate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      version: ${{ steps.release.outputs.version }}
+      candidate: ${{ steps.release.outputs.candidate }}
+      image: ${{ steps.release.outputs.image }}
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          persist-credentials: true
-      - name: Bump version files
-        id: bump
+          persist-credentials: false
+      - name: Verify unsigned tag, version, and image lock
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          BUMP: ${{ inputs.bump }}
-          SET_VERSION: ${{ inputs.version }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        # The release state machine lives in scripts/release_bump.sh so the
-        # dry_run rehearsal path is exercisable under pytest (stubbed gh,
-        # local git remotes — see tests/test_release_bump.py).
-        run: bash scripts/release_bump.sh
+        run: bash .github/scripts/validate_release.sh
 
   verify:
-    needs: bump-version
+    needs: validate
     uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository] same-repo reuse
     with:
-      ref: ${{ needs.bump-version.outputs.sha }}
+      ref: ${{ needs.validate.outputs.sha }}
 
   install-smoke:
-    needs: bump-version
+    needs: validate
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
@@ -86,7 +72,7 @@ jobs:
           disable-telemetry: true
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.bump-version.outputs.sha }}
+          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
@@ -96,21 +82,17 @@ jobs:
         run: uv sync --locked --group sdk-check
       - name: Smoke-test remote install
         env:
-          REF: ${{ needs.bump-version.outputs.sha }}
+          REF: ${{ needs.validate.outputs.sha }}
         run: >
           uv run --group sdk-check python scripts/smoke_install_plugin.py
           --repo VibeBB/wire-agent --ref "$REF" --repo-path plugins/wire
 
-  release:
-    needs: [bump-version, verify, install-smoke]
+  build:
+    needs: [validate, verify, install-smoke]
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    permissions:
-      # Creates the GitHub release and its tag.
-      contents: write
     env:
-      VERSION: ${{ needs.bump-version.outputs.version }}
-      SHA: ${{ needs.bump-version.outputs.sha }}
+      VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
@@ -118,7 +100,7 @@ jobs:
           disable-telemetry: true
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.bump-version.outputs.sha }}
+          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
@@ -139,23 +121,72 @@ jobs:
         run: |
           (cd plugins && zip -r "../dist/wire-plugin-v${VERSION}.zip" wire)
           zip -r "dist/wire-samples-v${VERSION}.zip" dist/samples
-      - name: Note dry-run release skip
-        if: ${{ inputs.dry_run }}
+          (cd dist && sha256sum wire-*.zip > checksums-sha256.txt)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wire-release-${{ github.run_id }}
+          path: |
+            dist/wire-*.zip
+            dist/checksums-sha256.txt
+          if-no-files-found: error
+          retention-days: 35
+          overwrite: true
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: write
+      packages: write
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Recheck policy, pin, and Release availability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/validate_release.sh --publish-check
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wire-release-${{ github.run_id }}
+          path: dist
+          digest-mismatch: error
+      - name: Verify release ZIPs
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          echo "dry-run: skipped creating release v${VERSION} at ${SHA}"
-      - name: Create release and tag
-        if: ${{ !inputs.dry_run }}
+          (cd dist && sha256sum --strict --check checksums-sha256.txt)
+          unzip -p "dist/wire-plugin-v${VERSION}.zip" wire/skills/wire-workflow/tools-image.json \
+            | cmp - plugins/wire/skills/wire-workflow/tools-image.json
+      - name: Promote the verified candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.validate.outputs.image }}
+          CANDIDATE: ${{ needs.validate.outputs.candidate }}
+        run: |
+          digest=${IMAGE##*@}
+          inspect() {
+            docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}'
+          }
+          test "$(inspect "$CANDIDATE")" = "$digest"
+          source=${CANDIDATE##*:}
+          gh attestation verify "oci://$IMAGE" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-wire-images.yml" \
+            --source-digest "${source%-tools}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          package=${IMAGE%@*}
+          docker buildx imagetools create --prefer-index=false \
+            --tag "$package:$GITHUB_REF_NAME" --tag "$package:latest" "$IMAGE"
+          test "$(inspect "$package:$GITHUB_REF_NAME")" = "$digest"
+          test "$(inspect "$package:latest")" = "$digest"
+      - name: Publish GitHub Release for the existing tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          retry() {
-            local attempt
-            for attempt in 1 2 3 4 5; do
-              "$@" && return 0
-              sleep $((attempt * 10))
-            done
-            return 1
-          }
-          retry gh release create "v${VERSION}" --target "$SHA" \
-            --title "wire v${VERSION}" --generate-notes dist/*.zip
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+            --title "wire $GITHUB_REF_NAME" dist/wire-*.zip dist/checksums-sha256.txt

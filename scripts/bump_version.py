@@ -71,6 +71,10 @@ def _parse(version: str) -> tuple[int, int, int]:
     return int(m.group(1)), int(m.group(2)), int(m.group(3))
 
 
+def current_version(root: Path) -> str:
+    return _check_consistent(_read_versions(root))
+
+
 def _bumped(current: str, kind: str) -> str:
     major, minor, patch = _parse(current)
     if kind == "major":
@@ -115,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root = Path(args.root)
     try:
-        current = _check_consistent(_read_versions(root))
+        current = current_version(root)
         if args.set_version:
             new = args.set_version.lstrip("v")
             if not SEMVER_RE.match(new):

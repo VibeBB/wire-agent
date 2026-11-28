@@ -134,7 +134,7 @@ def test_container_audit_resolves_the_lock_by_explicit_key() -> None:
     assert 'sys.exit("wire_tools image does not match ghcr.io/vibebb/wire-tools")' in text
 
 
-def test_publish_never_pushes_latest_before_the_trivy_gate() -> None:
+def test_candidate_workflow_never_promotes_latest() -> None:
     data = _load("publish-wire-images.yml")
     steps = _flatten_steps(data["jobs"]["publish"]["steps"])
     for step in steps:
@@ -142,16 +142,33 @@ def test_publish_never_pushes_latest_before_the_trivy_gate() -> None:
             with_block: dict[Any, Any] = step.get("with") or {}
             tags: str = with_block.get("tags") or ""
             assert ":latest" not in tags, "build-push must push immutable tags only"
-    promote = [s for s in steps if s.get("name") == "Promote :latest"]
-    assert promote, "publish must promote :latest explicitly after the gates"
-    assert "imagetools create" in promote[0]["run"]
-    assert "--tag" in promote[0]["run"], (
-        "imagetools create requires --tag for the target; a bare positional "
-        "tag re-tags the source instead"
-    )
+    assert all("imagetools create" not in (step.get("run") or "") for step in steps)
     gate = next(i for i, s in enumerate(steps) if s.get("name") == "Scan tools image (Trivy SARIF)")
-    after = next(i for i, s in enumerate(steps) if s.get("name") == "Promote :latest")
-    assert gate < after, ":latest must be promoted only after the Trivy gate"
+    lock = next(
+        i for i, s in enumerate(steps) if s.get("name") == "Update digest lock and merge PR"
+    )
+    assert gate < lock, "only a gated candidate may be pinned"
+
+
+def test_release_promotion_is_tag_only_and_production_gated() -> None:
+    data = _load("release.yml")
+    triggers = _on(data)
+    assert triggers["push"] == {"tags": ["v*"]}
+    assert "workflow_dispatch" not in triggers
+    jobs = data["jobs"]
+    assert jobs["validate"]["if"] == "github.event_name == 'push'"
+    publish = jobs["publish"]
+    assert publish["environment"] == "production"
+    assert set(publish["needs"]) == {"validate", "build"}
+    steps = _flatten_steps(publish["steps"])
+    commands = [step.get("run") or "" for step in steps]
+    guard = next(i for i, run in enumerate(commands) if "--publish-check" in run)
+    promote = next(i for i, run in enumerate(commands) if "imagetools create" in run)
+    release = next(i for i, run in enumerate(commands) if "gh release create" in run)
+    assert guard < promote < release
+    assert '--tag "$package:$GITHUB_REF_NAME" --tag "$package:latest"' in commands[promote]
+    assert "--verify-tag" in commands[release]
+    assert "--draft" not in commands[release]
 
 
 def test_publish_dispatch_is_limited_to_main_or_pr() -> None:
