@@ -9,10 +9,9 @@ import subprocess
 from pathlib import Path
 from typing import cast
 
-from scripts.bump_version import UV_LOCK, UV_LOCK_RE, BumpError, current_version
+from scripts.bump_version import SEMVER_RE, UV_LOCK, UV_LOCK_RE, BumpError, current_version
 
 PACKAGE = "ghcr.io/vibebb/wire-tools"
-TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 INPUTS = (
     ".dockerignore",
     "docker/wire-tools.Dockerfile",
@@ -31,7 +30,7 @@ def git(root: Path, *args: str) -> str:
 
 
 def version_tuple(tag: str) -> tuple[int, ...] | None:
-    match = TAG.fullmatch(tag)
+    match = SEMVER_RE.fullmatch(tag[1:]) if tag.startswith("v") else None
     return tuple(map(int, match.groups())) if match else None
 
 

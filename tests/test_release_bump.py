@@ -236,6 +236,22 @@ def test_set_version_greater_commits(
     assert _git(work, "log", "-1", "--format=%s") == "Release v2.0.0: update version files"
 
 
+@pytest.mark.parametrize("override", ["01.2.4", "1.03.0", "v1.2.04"])
+def test_set_version_rejects_leading_zeroes(
+    release_repo: tuple[Path, Path, dict[str, str], Path], override: str
+) -> None:
+    work, bare, env, calls = release_repo
+    head = _git(work, "rev-parse", "HEAD")
+
+    result = run_bump(work, env | {"SET_VERSION": override})
+
+    assert result.returncode != 0
+    assert "is not X.Y.Z" in result.stderr
+    assert _git(work, "rev-parse", "HEAD") == head
+    assert _git(bare, "branch", "--list", "bot/*") == ""
+    assert not calls.exists()
+
+
 def test_release_workflow_delegates_bump_to_script() -> None:
     workflow = (REPO_ROOT / ".github/workflows/release-bump.yml").read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")
