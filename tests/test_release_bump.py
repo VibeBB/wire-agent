@@ -204,6 +204,8 @@ def test_real_bump_pushes_only_bot_branch(
     assert len(commands) == 2
     assert commands[0].startswith("pr list ")
     assert commands[1].startswith(f"pr create --repo {REPOSITORY} --base main --head {branch}")
+    assert "then the matching digest-lock PR" in commands[1]
+    assert "v1.2.4 from the verified main commit containing that lock" in commands[1]
     assert f"version-bump PR: {PR_URL}" in summary(env)
 
 

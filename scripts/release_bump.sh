@@ -52,5 +52,5 @@ case "$status" in
 esac
 pr_url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
   --title "Release v$version: update version files" \
-  --body "Merge after the required checks, then create and push v$version from the verified main commit.")
+  --body "After the required checks, merge this bump PR and then the matching digest-lock PR. Create and push the unsigned tag v$version from the verified main commit containing that lock.")
 echo "version-bump PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
