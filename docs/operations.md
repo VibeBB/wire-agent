@@ -156,6 +156,10 @@ Runtime policy surfaces that the plugin declares but the host executes:
 
 ## Releases
 
+- Run `git ls-remote --exit-code --tags origin refs/tags/vX.Y.Z` with the
+  intended version. Continue only if it finds no tag (exit status 2).
+  If the tag exists, choose another version; if the lookup fails, resolve
+  the error before proceeding.
 - On a branch from `main`, run `uv run python scripts/bump_version.py X.Y.Z`
   locally with the new version. This updates the plugin manifest, package,
   skill frontmatter, and lockfile. Open a PR for the version changes and
