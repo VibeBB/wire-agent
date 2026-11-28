@@ -124,12 +124,19 @@ def test_container_audit_cis_aggregation_walks_nested_results_and_fails_loud() -
     assert 'sys.exit("Docker CIS scan produced no results")' in script
 
 
-def test_container_audit_resolves_the_lock_by_explicit_key() -> None:
-    text = (WORKFLOWS / "container-audit.yml").read_text(encoding="utf-8")
-    # sorted(d)[0] silently tracks whatever key sorts first.
-    assert "sorted(d)[0]" not in text
-    assert 'data.get("wire_tools")' in text
-    assert 'sys.exit("wire_tools image does not match ghcr.io/vibebb/wire-tools")' in text
+def test_container_audit_verifies_and_pulls_the_promoted_digest() -> None:
+    audit = _load("container-audit.yml")["jobs"]["audit"]
+    assert audit["permissions"]["attestations"] == "read"
+    step = next(
+        s for s in audit["steps"] if s.get("name") == "Resolve and verify the promoted tools image"
+    )
+    script = step["run"]
+    assert "package=ghcr.io/vibebb/wire-tools" in script
+    assert 'inspect "$package:latest"' in script
+    assert 'ref="$package@$digest"' in script
+    assert "--signer-workflow VibeBB/wire-agent/.github/workflows/publish-wire-images.yml" in script
+    assert "--source-ref refs/heads/main" in script
+    assert script.index('gh attestation verify "oci://$ref"') < script.index('docker pull "$ref"')
 
 
 def test_candidate_workflow_never_promotes_latest() -> None:

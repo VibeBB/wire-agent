@@ -272,8 +272,11 @@ Three layers were adopted after a comparative evaluation of Lynis,
   that digest to a version tag and `:latest`. The action is SHA-pinned and
   `version:` is explicit — the
   March 2026 Trivy supply-chain compromise made both non-negotiable.
-- **Weekly audit** (`container-audit.yml`, Mondays 03:17 UTC): pulls the
-  pinned digest from `docker/image-digests.json`, re-scans with a fresh
+- **Weekly audit** (`container-audit.yml`, Mondays 03:17 UTC): resolves the
+  promoted `:latest` alias to a digest and verifies its build provenance
+  from the main-branch image publisher. It fails if the alias or provenance
+  is missing rather than falling back to the development lock. The audit
+  pulls and scans that immutable digest with a fresh
   vulnerability DB (new CVEs against the frozen image), runs the Docker
   CIS compliance report, runs an informational in-image Lynis 3.1.7
   audit (cloned at tag `3.1.7` then checked out detached at the pinned
