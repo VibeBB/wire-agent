@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+SEMVER_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 VERSION_FILES = [
     "plugins/wire/.plugin/plugin.json",
@@ -59,16 +59,20 @@ def _check_consistent(versions: dict[str, str]) -> str:
     if mismatch:
         details = "; ".join(f"{rel}={v}" for rel, v in versions.items())
         raise BumpError(f"version mismatch across files: {details}")
-    if not SEMVER_RE.match(current):
+    if not SEMVER_RE.fullmatch(current):
         raise BumpError(f"current version '{current}' is not X.Y.Z")
     return current
 
 
 def _parse(version: str) -> tuple[int, int, int]:
-    m = SEMVER_RE.match(version)
+    m = SEMVER_RE.fullmatch(version)
     if m is None:
         raise BumpError(f"version '{version}' is not X.Y.Z")
     return int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+
+def current_version(root: Path) -> str:
+    return _check_consistent(_read_versions(root))
 
 
 def _bumped(current: str, kind: str) -> str:
@@ -115,10 +119,10 @@ def main(argv: list[str] | None = None) -> int:
 
     root = Path(args.root)
     try:
-        current = _check_consistent(_read_versions(root))
+        current = current_version(root)
         if args.set_version:
             new = args.set_version.lstrip("v")
-            if not SEMVER_RE.match(new):
+            if not SEMVER_RE.fullmatch(new):
                 raise BumpError(f"--set '{new}' is not X.Y.Z")
             if not _gt(new, current):
                 raise BumpError(f"--set '{new}' must be greater than current '{current}'")

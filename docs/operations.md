@@ -158,17 +158,29 @@ Runtime policy surfaces that the plugin declares but the host executes:
 
 - Versions follow semver; `plugin.json`, `pyproject.toml`, and the skill
   version strings are bumped together by `scripts/bump_version.py`.
-- `.github/workflows/release.yml` is `workflow_dispatch` only. Its
-  `dry_run` input rehearses a release without writing anything: the
-  bump job computes the would-be version with
-  `bump_version.py --dry-run`, checks the tag is free, emits HEAD as the
-  release SHA, and the downstream verify/install-smoke/build jobs still
-  run against it while tag and release creation are skipped. The
-  bump-version state machine — version resolution, tag check, direct
-  push, and the self-approving + dispatched-checks + auto-merge
-  fallback PR — lives in `scripts/release_bump.sh` (the workflow step
-  is a thin wrapper) and is covered by `tests/test_release_bump.py`
-  (stubbed `gh`, local git remotes).
+- Run **Release bump PR** on `main`. Its `dry_run` option checks version
+  arithmetic and tag availability only. A live run opens a bump PR; it
+  neither pushes to `main` nor merges, tags, or publishes. Approve any
+  held PR workflow runs and merge the bump PR after the required checks.
+- Wait for the **Publish wire images** workflow on the bumped `main` and
+  merge its digest-lock PR before tagging. Confirm the candidate matches the
+  release inputs and that both lock files are present in the tagged commit.
+  From a verified `main` commit, push an unsigned `vX.Y.Z` tag matching
+  the version files. The repository may advance after the lock merge, but
+  image inputs must not change between the candidate build and the tag.
+- `release.yml` validates the tag, lock, and `production` settings before
+  running the verification, install smoke, and packaging jobs. Production
+  must have required reviewers, no administrator bypass, and only the
+  `v*` deployment tag policy. After approval, the workflow revalidates the
+  pin and ZIPs, promotes the pinned digest to the version tag and `:latest`,
+  and publishes the GitHub Release automatically. Tag releases in version
+  order; the workflow refuses to publish a tag older than another stable
+  tag rather than roll back `:latest`.
+- An existing GitHub Release blocks publication before GHCR promotion.
+  If an interrupted run left an unpublished draft for the tag, delete the
+  draft (even if it has partial assets), keep the tag, and choose **Re-run
+  failed jobs**. If already published, do not change it or rerun the publish
+  job: verify the assets and checksums, and publish a new patch if needed.
 - Docker image digests live in `docker/image-digests.json` and are written
   only by the `publish-wire-images.yml` workflow; do not commit
   placeholder entries. The same entry ships inside the plugin at
@@ -182,14 +194,15 @@ Runtime policy surfaces that the plugin declares but the host executes:
   `.dockerignore`, `src/**`, `plugins/wire/**`, `examples/**`, or the
   project metadata, the publisher workflow, or the lock-update script
   (excluding `docker/image-digests.json`, the plugin pin, and
-  `docker/README.md`), then opens and merges the digest-lock pull request.
+  `docker/README.md`), then opens the digest-lock pull request. Only the
+  public `<sha>-tools` tag is written; stable tags are not promoted here.
   It attests the published image and records the attestation URL in both
   lock entries (ADR-0008). Its checkout keeps `persist-credentials: true`
   because the job pushes the lock-update branch. It accepts a `dry_run`
   dispatch input that rehearses the publish: the tools image builds into
   the local daemon and the Trivy gates, SBOM chain, measurements, and
-  smoke checks still run against it, but nothing is pushed, promoted
-  (`:latest`), attested, locked, or dispatched, and no SARIF reaches
+  smoke checks still run against it, but nothing is pushed, attested,
+  locked, or dispatched, and no SARIF reaches
   code scanning. The run summary lists every skipped step.
 - `locked-image-check.yml` (main pushes, weekly, and post-publish dispatch)
   validates the image lock, prewarms the pinned tools image through
@@ -266,10 +279,10 @@ Three layers were adopted after a comparative evaluation of Lynis,
   CRITICAL/HIGH fixable vulnerabilities, secrets, and misconfiguration —
   a full JSON report first (always produced, even when the gate fails),
   then the gated SARIF scan (`exit-code 1`) uploaded to code scanning
-  (`category: trivy-wire-tools`). Only after every gate passes does the
-  `Promote :latest` step retag the digest to `:latest` via
-  `docker buildx imagetools create`, so a failing image never serves
-  `:latest`. The action is SHA-pinned and `version:` is explicit — the
+  (`category: trivy-wire-tools`). The digest-lock PR is opened only after
+  every gate passes; only the separate, approved tag release can promote
+  that digest to a version tag and `:latest`. The action is SHA-pinned and
+  `version:` is explicit — the
   March 2026 Trivy supply-chain compromise made both non-negotiable.
 - **Weekly audit** (`container-audit.yml`, Mondays 03:17 UTC): pulls the
   pinned digest from `docker/image-digests.json`, re-scans with a fresh
@@ -376,7 +389,8 @@ token merge does not fire push workflows) dispatches `ci.yml`,
 verification. `locked-image-check.yml` additionally runs on pull requests
 that touch `docker/image-digests.json` or the plugin tools pin, so its
 schema validation, attestation verification, image pull, smoke, and the
-`:latest`-vs-locked-digest drift assertion all gate the pin PR itself.
+candidate SHA-tag check all gate the pin PR itself. `:latest` can legitimately
+point at the previous release while a new candidate is pinned.
 
 SPDX generation prefers the GHCR registry source, writes temporary data under
 the runner's temporary directory, and disables file metadata. The publisher
@@ -422,9 +436,11 @@ here so audits do not re-flag them:
   Code-Review 0; that is the recorded trade-off, not an oversight.
 - The Dependency graph must stay enabled for `dependency-review.yml` to
   evaluate pull requests.
-- `release.yml` is dispatch-only; run it once with `dry_run=true` before
-  the first real release to rehearse bump, verify, and install-smoke
-  without creating a GitHub release.
+- Before the first production release, check that Actions can open bump PRs,
+  the GHCR package grants this repository write access, and repository
+  artifact retention allows the release artifacts' 35-day retention.
+  Rehearse the bump calculation with **Release bump PR** and `dry_run=true`;
+  only a version tag can trigger the build and install-smoke release path.
 
 ## Dependency update sweep procedure
 
